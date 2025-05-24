@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -75,6 +76,7 @@ export default function ConfigurationPage() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [isQrCodeModalOpen, setIsQrCodeModalOpen] = useState(false);
   const [qrCodeDataUri, setQrCodeDataUri] = useState<string | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
 
   const mapWebhookStatus = useCallback((webhookStatus?: string): InstanceStatus => {
@@ -288,26 +290,27 @@ export default function ConfigurationPage() {
     }
   }
 
-  const handleDeleteInstance = async () => {
-    console.log("handleDeleteInstance Fired. Current isLoading state:", isLoading);
+  const handleDeleteInstanceClick = () => {
+    console.log("handleDeleteInstanceClick Fired. Current isLoading state:", isLoading);
     console.log("User:", user);
     console.log("WhatsApp Instance:", whatsAppInstance);
 
     if (!user || !whatsAppInstance) {
-      console.log("Exiting handleDeleteInstance: User or WhatsApp instance is missing.");
+      console.log("Exiting handleDeleteInstanceClick: User or WhatsApp instance is missing.");
       toast({ variant: "destructive", title: "Error", description: "No hay instancia para eliminar o no estás autenticado." });
       return;
     }
     
-    console.log("Proceeding to confirmation dialog.");
-    const confirmed = window.confirm("¿Estás seguro de que quieres eliminar esta instancia de Qyvoo? Esta acción no se puede deshacer y eliminará tu conexión.");
-    if (!confirmed) {
-      console.log("Eliminación de instancia cancelada por el usuario.");
-      return;
-    }
+    console.log("Opening delete confirmation dialog.");
+    setIsDeleteDialogOpen(true);
+  };
 
-    console.log("User confirmed deletion. Setting isLoading to true.");
+  const confirmDeleteInstance = async () => {
+    console.log("confirmDeleteInstance Fired.");
+    if (!user || !whatsAppInstance) return; // Should already be checked by handleDeleteInstanceClick
+
     setIsLoading(true);
+    setIsDeleteDialogOpen(false);
 
     const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
     const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
@@ -351,13 +354,14 @@ export default function ConfigurationPage() {
       toast({ title: "Instancia Eliminada", description: "La instancia de Qyvoo ha sido eliminada de tu configuración." });
 
     } catch (error: any)      {
-      console.error("Error in handleDeleteInstance:", error);
+      console.error("Error in confirmDeleteInstance:", error);
       toast({ variant: "destructive", title: "Error al eliminar", description: `No se pudo eliminar la instancia completamente: ${error.message}` });
     } finally {
-      console.log("handleDeleteInstance finished. Setting isLoading to false.");
+      console.log("confirmDeleteInstance finished. Setting isLoading to false.");
       setIsLoading(false);
     }
   };
+
 
   const handleConnectInstance = async () => {
     if (!user || !whatsAppInstance) return;
@@ -399,8 +403,8 @@ export default function ConfigurationPage() {
       };
       
       const instanceToUpdate = { ...whatsAppInstance, ...newInstanceData };
-      setWhatsAppInstance(instanceToUpdate);
-      await setDoc(doc(db, 'instances', user.uid), instanceToUpdate , { merge: true });
+      setWhatsAppInstance(instanceToUpdate); // Update local state
+      await setDoc(doc(db, 'instances', user.uid), instanceToUpdate , { merge: true }); // Update Firestore
       
       toast({ title: "Código QR Generado", description: "Escanea el código QR para conectar tu instancia." });
 
@@ -615,7 +619,7 @@ export default function ConfigurationPage() {
                     <RefreshCw className={`mr-2 h-4 w-4 ${isLoading && whatsAppInstance ? 'animate-spin' : ''}`} />
                     {isLoading && whatsAppInstance ? "Refrescando..." : "Refrescar Estado"}
                   </Button>
-                  <Button variant="destructive" onClick={handleDeleteInstance} disabled={isLoading}>
+                  <Button variant="destructive" onClick={handleDeleteInstanceClick} disabled={isLoading}>
                      {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
                     {isLoading ? "Eliminando..." : "Eliminar"}
                   </Button>
@@ -656,6 +660,25 @@ export default function ConfigurationPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Estás absolutamente seguro?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. Esto eliminará permanentemente tu instancia de Qyvoo
+              y sus datos de nuestros servidores, así como de tu configuración en esta aplicación.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setIsDeleteDialogOpen(false)} disabled={isLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteInstance} disabled={isLoading}>
+              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
 
       <Card>
         <CardHeader>
