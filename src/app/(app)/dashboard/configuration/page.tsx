@@ -118,12 +118,14 @@ export default function ConfigurationPage() {
 
       if (!response.ok) {
         const errorBody = Array.isArray(responseDataArray) && responseDataArray.length > 0 ? responseDataArray[0] : responseDataArray;
-        const errorMessage = errorBody?.message || errorBody?.error?.message || `Error del servidor: ${response.status}`;
+        const errorMessage = errorBody?.message || errorBody?.error?.message || `Error del servidor Qyvoo: ${response.status}`;
         throw new Error(errorMessage);
       }
       
       if (!Array.isArray(responseDataArray) || responseDataArray.length === 0 || !responseDataArray[0].success || !Array.isArray(responseDataArray[0].data) || responseDataArray[0].data.length === 0) {
         const errorDetail = responseDataArray[0]?.data?.[0]?.message || responseDataArray[0]?.data?.message || responseDataArray[0]?.error || "Formato de datos de instancia incorrecto o no exitoso.";
+        
+        // Si el error indica que la instancia no se encontró en n8n, la eliminamos también de Firestore.
         if (errorDetail.toLowerCase().includes('instance not found') || errorDetail.toLowerCase().includes('not found')) {
           await deleteDoc(doc(db, 'instances', user.uid));
           setWhatsAppInstance(null);
@@ -152,8 +154,6 @@ export default function ConfigurationPage() {
       return true;
     } catch (error: any) {
       if (showToast) toast({ variant: "destructive", title: "Error al refrescar", description: error.message });
-      // Si hay un error al refrescar, no necesariamente eliminamos la instancia de la UI, 
-      // podría ser un problema temporal de red. Mantenemos la info existente.
       return false;
     } finally {
       setIsLoading(false);
@@ -239,7 +239,7 @@ export default function ConfigurationPage() {
 
       if (!response.ok) {
         const errorBody = Array.isArray(responseBodyArray) && responseBodyArray.length > 0 ? responseBodyArray[0] : responseBodyArray;
-        const errorMessage = errorBody?.message || errorBody?.error?.message || `Error del servidor: ${response.status}`;
+        const errorMessage = errorBody?.message || errorBody?.error?.message || `Error del servidor Qyvoo: ${response.status}`;
         throw new Error(errorMessage);
       }
       
@@ -264,7 +264,7 @@ export default function ConfigurationPage() {
         phoneNumber: values.phoneNumber, 
         status: qrCodeFromCreate ? 'Pendiente' : mapWebhookStatus(instanceData.status), 
         apiKey: hashData || '********************-****-****-************', 
-        qrCodeUrl: qrCodeFromCreate,
+        qrCodeUrl: qrCodeFromCreate || null,
         connectionWebhookUrl: webhookData.data.connectionWebhookUrl || instanceData.connectionWebhookUrl || null,
         _count: { Message: 0, Contact: 0, Chat: 0 }, 
         userId: user.uid,
@@ -290,9 +290,12 @@ export default function ConfigurationPage() {
   }
 
   const handleDeleteInstance = async () => {
-    if (!user || !whatsAppInstance) return;
+    if (!user || !whatsAppInstance) {
+      toast({ variant: "destructive", title: "Error", description: "No hay instancia para eliminar o no estás autenticado." });
+      return;
+    }
     
-    const confirmed = window.confirm("¿Estás seguro de que quieres eliminar esta instancia? Esta acción no se puede deshacer.");
+    const confirmed = window.confirm("¿Estás seguro de que quieres eliminar esta instancia de Qyvoo? Esta acción no se puede deshacer y eliminará tu conexión.");
     if (!confirmed) return;
 
     setIsLoading(true);
@@ -305,6 +308,7 @@ export default function ConfigurationPage() {
     const webhookUrl = `${baseWebhookUrl}?action=delete_instance`;
     
     try {
+      // 1. Llamar al webhook para eliminar la instancia en n8n/Qyvoo
       const response = await fetch(webhookUrl, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -312,20 +316,29 @@ export default function ConfigurationPage() {
       });
 
       if (!response.ok) {
-        let errorMessage = `Error del servidor Qyvoo: ${response.status}`;
+        let errorMessage = `Error del servidor Qyvoo al eliminar: ${response.status}`;
         try {
             const errorBody = await response.json();
+            // Asumimos que el error puede venir en un array o directamente
             const detailedError = Array.isArray(errorBody) && errorBody.length > 0 ? errorBody[0] : errorBody;
-            errorMessage = detailedError?.message || detailedError?.error?.message || errorMessage;
-        } catch (e) { /* Ignore parsing error, use status code */ }
-        throw new Error(errorMessage);
+            errorMessage = detailedError?.message || detailedError?.error?.message || detailedError?.data?.message || errorMessage;
+        } catch (e) { /* Ignorar error de parseo, usar el mensaje de estado HTTP */ }
+        // Permitir continuar con la eliminación en Firebase si el error es "instance not found"
+        if (!(errorMessage.toLowerCase().includes('instance not found') || errorMessage.toLowerCase().includes('not found'))) {
+          throw new Error(errorMessage);
+        }
+        toast({ variant: "default", title: "Aviso", description: "La instancia no se encontró en Qyvoo, se procederá a eliminar de la configuración local." });
       }
 
+      // 2. Si el webhook fue exitoso (o la instancia no existía en Qyvoo), eliminar de Firebase
       await deleteDoc(doc(db, 'instances', user.uid));
+      
+      // 3. Actualizar la UI
       setWhatsAppInstance(null);
-      toast({ title: "Instancia Eliminada", description: "La instancia de Qyvoo ha sido eliminada." });
+      toast({ title: "Instancia Eliminada", description: "La instancia de Qyvoo ha sido eliminada de tu configuración." });
+
     } catch (error: any)      {
-      toast({ variant: "destructive", title: "Error al eliminar", description: `No se pudo eliminar la instancia: ${error.message}` });
+      toast({ variant: "destructive", title: "Error al eliminar", description: `No se pudo eliminar la instancia completamente: ${error.message}` });
     } finally {
       setIsLoading(false);
     }
@@ -352,7 +365,7 @@ export default function ConfigurationPage() {
 
       if (!response.ok) {
         const errorBody = Array.isArray(responseDataArray) && responseDataArray.length > 0 ? responseDataArray[0] : responseDataArray;
-        const errorMessage = errorBody?.message || errorBody?.error?.message || `Error del servidor: ${response.status}`;
+        const errorMessage = errorBody?.message || errorBody?.error?.message || `Error del servidor Qyvoo: ${response.status}`;
         throw new Error(errorMessage);
       }
 
@@ -366,14 +379,13 @@ export default function ConfigurationPage() {
       setIsQrCodeModalOpen(true);
 
       const newInstanceData: Partial<WhatsAppInstance> = {
-        qrCodeUrl: qrBase64, // Guardamos el QR en base64 por si es necesario mostrarlo sin modal
+        qrCodeUrl: qrBase64, 
         status: 'Pendiente',
       };
-
-      setWhatsAppInstance(prev => prev ? ({ ...prev, ...newInstanceData }) : null);
-      if (whatsAppInstance) { // Ensure whatsAppInstance is not null before spreading
-        await setDoc(doc(db, 'instances', user.uid), { ...whatsAppInstance, ...newInstanceData }, { merge: true });
-      }
+      
+      const instanceToUpdate = { ...whatsAppInstance, ...newInstanceData };
+      setWhatsAppInstance(instanceToUpdate);
+      await setDoc(doc(db, 'instances', user.uid), instanceToUpdate , { merge: true });
       
       toast({ title: "Código QR Generado", description: "Escanea el código QR para conectar tu instancia." });
 
@@ -715,6 +727,4 @@ export default function ConfigurationPage() {
     </div>
   );
 }
-    
-
     
