@@ -16,7 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { useState, useEffect } from 'react';
-import { Copy, Eye, MessageSquareText, Settings2, Trash2, Users, PlusCircle, ExternalLink } from 'lucide-react';
+import { Copy, Eye, EyeOff, MessageSquareText, Settings2, Trash2, Users, PlusCircle, ExternalLink } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
@@ -52,11 +52,9 @@ export default function ConfigurationPage() {
   const [showApiKey, setShowApiKey] = useState(false);
 
 
-  // Simulate loading existing instance for a user (in a real app, fetch this from Firestore)
+  // Simular carga de instancia existente para un usuario
   useEffect(() => {
-    // Placeholder: check if user already has an instance stored locally or fetch from backend
-    // For demo, we'll assume no instance initially
-    // Example of loading:
+    // Para demostración, podrías usar localStorage, pero en una app real, usa Firestore.
     // const storedInstance = localStorage.getItem(`qyvooInstance_${user?.uid}`);
     // if (storedInstance) {
     //   setWhatsAppInstance(JSON.parse(storedInstance));
@@ -85,12 +83,12 @@ export default function ConfigurationPage() {
     if (!webhookStatus) return 'Pendiente';
     switch (webhookStatus.toLowerCase()) {
       case 'open':
-      case 'connected': // Assuming 'connected' might be a status
+      case 'connected':
         return 'Conectado';
       case 'close':
       case 'connecting':
         return 'Pendiente';
-      case 'disconnected': // Assuming 'disconnected' might be a status
+      case 'disconnected':
         return 'Desconectado';
       default:
         return 'Pendiente';
@@ -104,7 +102,13 @@ export default function ConfigurationPage() {
     }
     setIsLoading(true);
 
-    const webhookUrl = `https://n8n.vemontech.com/webhook/evolution?action=create_instance`;
+    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK === 'true';
+    
+    const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
+    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/evolution';
+
+    const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
+    const webhookUrl = `${baseWebhookUrl}?action=create_instance`;
 
     try {
       const response = await fetch(webhookUrl, {
@@ -126,7 +130,6 @@ export default function ConfigurationPage() {
         throw new Error(errorMessage);
       }
       
-      // Handle array response from webhook
       const webhookData = Array.isArray(responseBody) && responseBody.length > 0 ? responseBody[0] : responseBody;
 
       if (!webhookData || !webhookData.success || !webhookData.data || !webhookData.data.instance) {
@@ -137,17 +140,17 @@ export default function ConfigurationPage() {
       const hashData = webhookData.data.hash;
 
       const newInstance: WhatsAppInstance = {
-        id: instanceData.instanceId || values.phoneNumber, // Use instanceId from webhook
-        name: values.instanceName, // Keep the name from the form
-        phoneNumber: values.phoneNumber,
+        id: instanceData.instanceId || instanceData.instanceName, // Usar instanceId si está disponible
+        name: instanceData.instanceName, // Usar nombre de instancia del webhook
+        phoneNumber: values.phoneNumber, // Mantener número de teléfono del formulario
         status: mapWebhookStatus(instanceData.status), 
-        apiKey: hashData || '********************-****-****-************', // Use hash as API Key
-        qrCodeUrl: webhookData.data.qrCodeUrl, // Keep if webhook might provide it later
-        connectionWebhookUrl: webhookData.data.connectionWebhookUrl, // Keep if webhook might provide it later
+        apiKey: hashData || '********************-****-****-************', 
+        qrCodeUrl: instanceData.qrCodeUrl || webhookData.data.qrCodeUrl, // Intentar obtener qrCodeUrl de varias ubicaciones
+        connectionWebhookUrl: instanceData.connectionWebhookUrl || webhookData.data.connectionWebhookUrl,
       };
       
       setWhatsAppInstance(newInstance);
-      // localStorage.setItem(`qyvooInstance_${user.uid}`, JSON.stringify(newInstance)); // Persist for demo
+      // localStorage.setItem(`qyvooInstance_${user.uid}`, JSON.stringify(newInstance)); // Persistir para demo
 
       toast({ title: "Instancia Solicitada", description: "Tu instancia de Qyvoo ha sido solicitada." });
       setIsAddInstanceDialogOpen(false);
@@ -162,11 +165,9 @@ export default function ConfigurationPage() {
   const handleDeleteInstance = async () => {
     if (!user || !whatsAppInstance) return;
     setIsLoading(true);
-    // Example delete webhook:
-    // const webhookUrl = `https://n8n.vemontech.com/webhook/evolution?action=delete_instance&instanceId=${whatsAppInstance.id}`;
-    // For demo, we'll just remove it from state
+    // const webhookUrl = `COMENTADO_URL_BORRADO?action=delete_instance&instanceId=${whatsAppInstance.id}`;
     try {
-      // await fetch(webhookUrl, { method: 'POST' }); 
+      // await fetch(webhookUrl, { method: 'POST' }); // En una app real, llamarías a un webhook para eliminar
       setWhatsAppInstance(null);
       // localStorage.removeItem(`qyvooInstance_${user.uid}`);
       toast({ title: "Instancia Eliminada", description: "La instancia de Qyvoo ha sido eliminada (simulado)." });
@@ -285,7 +286,7 @@ export default function ConfigurationPage() {
                       <Copy className="h-4 w-4" />
                     </Button>
                     <Button variant="ghost" size="icon" onClick={() => setShowApiKey(!showApiKey)}>
-                      {showApiKey ? <Eye className="h-4 w-4" /> : <Eye className="h-4 w-4" />} {/* Icono no cambia, considera EyeOff */}
+                      {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                   </div>
                 </div>
@@ -337,10 +338,15 @@ export default function ConfigurationPage() {
 
               </CardContent>
               <CardFooter className="flex justify-between items-center">
-                <Badge variant={whatsAppInstance.status === 'Conectado' ? 'default' : 'secondary'} className={
-                    whatsAppInstance.status === 'Conectado' ? 'bg-green-500 text-primary-foreground' : // Cambiado a text-primary-foreground para mejor contraste
-                    whatsAppInstance.status === 'Pendiente' ? 'bg-yellow-400 text-black' : // text-black está bien aquí
-                    'bg-red-500 text-primary-foreground' // Cambiado a text-primary-foreground
+                 <Badge variant={
+                    whatsAppInstance.status === 'Conectado' ? 'default' : 
+                    whatsAppInstance.status === 'Pendiente' ? 'secondary' : 
+                    'destructive' // Usar 'destructive' para 'Desconectado'
+                  } 
+                  className={
+                    whatsAppInstance.status === 'Conectado' ? 'bg-green-500 text-primary-foreground' :
+                    whatsAppInstance.status === 'Pendiente' ? 'bg-yellow-400 text-black' :
+                    'bg-red-500 text-destructive-foreground' // Usar text-destructive-foreground para 'Desconectado'
                 }>
                   {whatsAppInstance.status}
                 </Badge>
