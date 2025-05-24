@@ -16,11 +16,11 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { useState, useEffect, useCallback } from 'react';
-import { Copy, Eye, EyeOff, MessageSquareText, Settings2, Trash2, Users, PlusCircle, ExternalLink, RefreshCw, ListChecks, Loader2 } from 'lucide-react';
+import { Copy, Eye, EyeOff, MessageSquareText, Settings2, Trash2, Users, PlusCircle, ExternalLink, RefreshCw, ListChecks, Loader2, QrCode } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { db } from '@/lib/firebase'; // Import Firestore instance
-import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore'; // Import Firestore functions
+import { db } from '@/lib/firebase'; 
+import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore'; 
 
 const phoneRegex = new RegExp(
   /^([+]?[\s0-9]+)?(\d{3}|[(]?[0-9]+[)])?([-]?[\s]?[0-9])+$/
@@ -42,13 +42,13 @@ interface WhatsAppInstanceCount {
 }
 
 interface WhatsAppInstance {
-  id: string; // Qyvoo Instance ID
-  name: string; // Instance Name
+  id: string; 
+  name: string; 
   phoneNumber: string;
   apiKey?: string;
   status: InstanceStatus;
-  qrCodeUrl?: string | null;
-  connectionWebhookUrl?: string | null;
+  qrCodeUrl?: string | null; 
+  connectionWebhookUrl?: string | null; 
   _count?: WhatsAppInstanceCount;
   userId: string;
   userEmail: string | null;
@@ -59,8 +59,8 @@ interface RefreshedInstanceInfo {
   name: string; 
   connectionStatus: string; 
   token?: string; 
-  qrCodeUrl?: string | null; // Explicitly allow null
-  connectionWebhookUrl?: string | null; // Explicitly allow null
+  qrCodeUrl?: string | null;
+  connectionWebhookUrl?: string | null;
   _count?: WhatsAppInstanceCount;
 }
 
@@ -70,9 +70,11 @@ export default function ConfigurationPage() {
   const { toast } = useToast();
   const [isAddInstanceDialogOpen, setIsAddInstanceDialogOpen] = useState(false);
   const [whatsAppInstance, setWhatsAppInstance] = useState<WhatsAppInstance | null>(null);
-  const [isLoading, setIsLoading] = useState(false); // For create/delete/refresh actions
-  const [isPageLoading, setIsPageLoading] = useState(true); // For initial page load and instance fetch
+  const [isLoading, setIsLoading] = useState(false); 
+  const [isPageLoading, setIsPageLoading] = useState(true); 
   const [showApiKey, setShowApiKey] = useState(false);
+  const [isQrCodeModalOpen, setIsQrCodeModalOpen] = useState(false);
+  const [qrCodeDataUri, setQrCodeDataUri] = useState<string | null>(null);
 
 
   const mapWebhookStatus = useCallback((webhookStatus?: string): InstanceStatus => {
@@ -82,7 +84,7 @@ export default function ConfigurationPage() {
       case 'connected':
         return 'Conectado';
       case 'close':
-      case 'connecting': // "connecting" should ideally be a distinct state, but for now maps to Pendiente
+      case 'connecting': 
         return 'Pendiente';
       case 'disconnected':
         return 'Desconectado';
@@ -119,10 +121,9 @@ export default function ConfigurationPage() {
         const errorMessage = errorBody?.message || errorBody?.error?.message || `Error del servidor: ${response.status}`;
         throw new Error(errorMessage);
       }
-
+      
       if (!Array.isArray(responseDataArray) || responseDataArray.length === 0 || !responseDataArray[0].success || !Array.isArray(responseDataArray[0].data) || responseDataArray[0].data.length === 0) {
         const errorDetail = responseDataArray[0]?.data?.[0]?.message || responseDataArray[0]?.data?.message || responseDataArray[0]?.error || "Formato de datos de instancia incorrecto o no exitoso.";
-        // If instance not found on Qyvoo, delete from Firebase
         if (errorDetail.toLowerCase().includes('instance not found') || errorDetail.toLowerCase().includes('not found')) {
           await deleteDoc(doc(db, 'instances', user.uid));
           setWhatsAppInstance(null);
@@ -144,13 +145,15 @@ export default function ConfigurationPage() {
       
       const fullyUpdatedInstance = { ...instanceToRefresh, ...updatedInstanceData };
       
-      await setDoc(doc(db, 'instances', user.uid), fullyUpdatedInstance);
+      await setDoc(doc(db, 'instances', user.uid), fullyUpdatedInstance, { merge: true });
       setWhatsAppInstance(fullyUpdatedInstance);
 
       if (showToast) toast({ title: "Estado Actualizado", description: "El estado de la instancia de Qyvoo ha sido actualizado." });
       return true;
     } catch (error: any) {
       if (showToast) toast({ variant: "destructive", title: "Error al refrescar", description: error.message });
+      // Si hay un error al refrescar, no necesariamente eliminamos la instancia de la UI, 
+      // podría ser un problema temporal de red. Mantenemos la info existente.
       return false;
     } finally {
       setIsLoading(false);
@@ -252,14 +255,16 @@ export default function ConfigurationPage() {
 
       const instanceData = webhookData.data.instance;
       const hashData = webhookData.data.hash;
+      const qrCodeFromCreate = webhookData.data.qrCodeUrl || instanceData.qrCodeUrl || null;
+
 
       const newInstance: WhatsAppInstance = {
         id: instanceData.instanceId || instanceData.instanceName, 
         name: instanceData.instanceName, 
         phoneNumber: values.phoneNumber, 
-        status: mapWebhookStatus(instanceData.status), 
+        status: qrCodeFromCreate ? 'Pendiente' : mapWebhookStatus(instanceData.status), 
         apiKey: hashData || '********************-****-****-************', 
-        qrCodeUrl: webhookData.data.qrCodeUrl || instanceData.qrCodeUrl || null,
+        qrCodeUrl: qrCodeFromCreate,
         connectionWebhookUrl: webhookData.data.connectionWebhookUrl || instanceData.connectionWebhookUrl || null,
         _count: { Message: 0, Contact: 0, Chat: 0 }, 
         userId: user.uid,
@@ -268,6 +273,11 @@ export default function ConfigurationPage() {
       
       await setDoc(doc(db, 'instances', user.uid), newInstance);
       setWhatsAppInstance(newInstance);
+      
+      if (qrCodeFromCreate) {
+        setQrCodeDataUri(qrCodeFromCreate);
+        setIsQrCodeModalOpen(true);
+      }
 
       toast({ title: "Instancia Solicitada", description: "Tu instancia de Qyvoo ha sido solicitada." });
       setIsAddInstanceDialogOpen(false);
@@ -320,6 +330,60 @@ export default function ConfigurationPage() {
       setIsLoading(false);
     }
   };
+
+  const handleConnectInstance = async () => {
+    if (!user || !whatsAppInstance) return;
+    setIsLoading(true);
+
+    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
+    const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
+    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/evolution';
+    
+    const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
+    const webhookUrl = `${baseWebhookUrl}?action=connect_instance`;
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceName: whatsAppInstance.name, userId: user.uid }),
+      });
+      const responseDataArray = await response.json();
+
+      if (!response.ok) {
+        const errorBody = Array.isArray(responseDataArray) && responseDataArray.length > 0 ? responseDataArray[0] : responseDataArray;
+        const errorMessage = errorBody?.message || errorBody?.error?.message || `Error del servidor: ${response.status}`;
+        throw new Error(errorMessage);
+      }
+
+      if (!Array.isArray(responseDataArray) || responseDataArray.length === 0 || !responseDataArray[0].success || !responseDataArray[0].data?.base64) {
+        const errorDetail = responseDataArray[0]?.data?.message || responseDataArray[0]?.error || "Respuesta del webhook inválida o código QR no encontrado.";
+        throw new Error(errorDetail);
+      }
+      
+      const qrBase64 = responseDataArray[0].data.base64;
+      setQrCodeDataUri(qrBase64);
+      setIsQrCodeModalOpen(true);
+
+      const newInstanceData: Partial<WhatsAppInstance> = {
+        qrCodeUrl: qrBase64, // Guardamos el QR en base64 por si es necesario mostrarlo sin modal
+        status: 'Pendiente',
+      };
+
+      setWhatsAppInstance(prev => prev ? ({ ...prev, ...newInstanceData }) : null);
+      if (whatsAppInstance) { // Ensure whatsAppInstance is not null before spreading
+        await setDoc(doc(db, 'instances', user.uid), { ...whatsAppInstance, ...newInstanceData }, { merge: true });
+      }
+      
+      toast({ title: "Código QR Generado", description: "Escanea el código QR para conectar tu instancia." });
+
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error al Conectar", description: error.message });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
 
   const handleRefreshWrapper = async () => {
     if (!whatsAppInstance) return;
@@ -423,7 +487,7 @@ export default function ConfigurationPage() {
             <Card className="shadow-lg">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-lg font-semibold">{whatsAppInstance.name}</CardTitle>
-                <Button variant="ghost" size="icon" onClick={() => alert("Funcionalidad de ajustes de instancia pendiente.")}>
+                <Button variant="ghost" size="icon" onClick={() => toast({ title: "Próximamente", description: "Funcionalidad de ajustes de instancia pendiente."})}>
                   <Settings2 className="h-5 w-5" />
                 </Button>
               </CardHeader>
@@ -460,10 +524,10 @@ export default function ConfigurationPage() {
                   </div>
                 </div>
 
-                {whatsAppInstance.qrCodeUrl && whatsAppInstance.status === 'Pendiente' && (
+                {whatsAppInstance.qrCodeUrl && (whatsAppInstance.status === 'Pendiente' || whatsAppInstance.status === 'Desconectado') && (
                   <div className="mt-4 p-4 border rounded-md bg-accent/10 text-center">
                     <p className="text-sm text-accent-foreground mb-2">Escanea este código QR con WhatsApp en tu teléfono para conectar la instancia.</p>
-                    <img src={whatsAppInstance.qrCodeUrl} alt="QR Code para conectar WhatsApp" className="mx-auto mb-2 max-w-xs" data-ai-hint="qr code"/>
+                    <img src={whatsAppInstance.qrCodeUrl.startsWith('data:image') ? whatsAppInstance.qrCodeUrl : `data:image/png;base64,${whatsAppInstance.qrCodeUrl}`} alt="QR Code para conectar WhatsApp" className="mx-auto mb-2 max-w-xs" data-ai-hint="qr code"/>
                     {whatsAppInstance.connectionWebhookUrl && (
                        <Button variant="outline" size="sm" asChild>
                         <a href={whatsAppInstance.connectionWebhookUrl} target="_blank" rel="noopener noreferrer">
@@ -514,6 +578,12 @@ export default function ConfigurationPage() {
                   {whatsAppInstance.status}
                 </Badge>
                 <div className="flex space-x-2">
+                  {whatsAppInstance && (whatsAppInstance.status === 'Pendiente' || whatsAppInstance.status === 'Desconectado') && (
+                    <Button variant="outline" onClick={handleConnectInstance} disabled={isLoading}>
+                      <QrCode className="mr-2 h-4 w-4" />
+                      Conectar / Generar QR
+                    </Button>
+                  )}
                   <Button variant="outline" onClick={handleRefreshWrapper} disabled={isLoading}>
                     <RefreshCw className={`mr-2 h-4 w-4 ${isLoading && whatsAppInstance ? 'animate-spin' : ''}`} />
                     {isLoading && whatsAppInstance ? "Refrescando..." : "Refrescar Estado"}
@@ -533,6 +603,32 @@ export default function ConfigurationPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={isQrCodeModalOpen} onOpenChange={setIsQrCodeModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Escanea el Código QR</DialogTitle>
+            <DialogDescription>
+              Usa WhatsApp en tu teléfono para escanear este código y conectar tu instancia. El estado se actualizará automáticamente.
+            </DialogDescription>
+          </DialogHeader>
+          {qrCodeDataUri ? (
+            <div className="flex justify-center">
+              <img src={qrCodeDataUri} alt="Código QR de WhatsApp" className="mx-auto max-w-xs" data-ai-hint="qr code" />
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-40">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="ml-2">Generando código QR...</p>
+            </div>
+          )}
+          <DialogFooter className="sm:justify-center">
+            <Button type="button" variant="secondary" onClick={() => setIsQrCodeModalOpen(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>
