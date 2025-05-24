@@ -27,7 +27,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Home, Settings, BarChart2, LogOut, UserCircle, PanelLeft } from 'lucide-react';
+import { Home, Settings, BarChart2, LogOut, UserCircle } from 'lucide-react';
 
 interface NavItem {
   href: string;
@@ -36,9 +36,9 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: Home },
-  { href: '/dashboard/configuration', label: 'Configuration', icon: Settings },
-  { href: '/dashboard/reports', label: 'Reports', icon: BarChart2 },
+  { href: '/dashboard', label: 'Panel de Control', icon: Home },
+  { href: '/dashboard/configuration', label: 'Configuración', icon: Settings },
+  { href: '/dashboard/reports', label: 'Reportes', icon: BarChart2 },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -59,8 +59,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Sidebar collapsible="icon">
         <SidebarHeader className="p-4 flex flex-col items-center group-data-[collapsible=icon]:items-center">
            <Link href="/dashboard" className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
-            <EvolveLinkLogo className="h-8 w-8 text-primary" />
-            <span className="text-xl font-semibold text-primary group-data-[collapsible=icon]:hidden">EvolveLink</span>
+            <EvolveLinkLogo className="h-8 w-auto text-primary" />
+            <span className="text-xl font-semibold text-primary group-data-[collapsible=icon]:hidden">Qyvoo</span>
           </Link>
         </SidebarHeader>
         <SidebarContent>
@@ -90,7 +90,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-4">
              <SidebarTrigger className="md:hidden" /> {/* Mobile trigger */}
              <h1 className="text-xl font-semibold text-foreground">
-                {navItems.find(item => pathname.startsWith(item.href))?.label || 'Dashboard'}
+                {navItems.find(item => pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href)))?.label || 'Panel de Control'}
              </h1>
           </div>
           {user && (
@@ -116,16 +116,16 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>
                   <UserCircle className="mr-2 h-4 w-4" />
-                  Profile
+                  Perfil
                 </DropdownMenuItem>
                 <DropdownMenuItem>
                   <Settings className="mr-2 h-4 w-4" />
-                  Settings
+                  Ajustes
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={logoutUser} className="cursor-pointer">
                   <LogOut className="mr-2 h-4 w-4" />
-                  Log out
+                  Cerrar Sesión
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

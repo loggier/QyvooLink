@@ -4,8 +4,8 @@ import { AuthLayout } from '@/components/auth/auth-layout';
 export default function LoginPage() {
   return (
     <AuthLayout
-      title="Sign In to EvolveLink"
-      description="Enter your credentials to access your account."
+      title="Iniciar Sesión en Qyvoo"
+      description="Ingresa tus credenciales para acceder a tu cuenta."
     >
       <LoginForm />
     </AuthLayout>

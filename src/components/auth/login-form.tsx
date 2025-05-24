@@ -20,8 +20,8 @@ import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
 const loginSchema = z.object({
-  email: z.string().email({ message: "Invalid email address." }),
-  password: z.string().min(1, { message: "Password is required." }),
+  email: z.string().email({ message: "Dirección de correo electrónico inválida." }),
+  password: z.string().min(1, { message: "La contraseña es obligatoria." }),
 });
 
 export type LoginFormData = z.infer<typeof loginSchema>;
@@ -44,15 +44,15 @@ export function LoginForm() {
     try {
       await loginUser(values);
       toast({
-        title: "Login Successful",
-        description: "Welcome back to EvolveLink!",
+        title: "Inicio de Sesión Exitoso",
+        description: "¡Bienvenido de nuevo a Qyvoo!",
       });
       // Redirect is handled by AuthContext
     } catch (error: any) {
       toast({
         variant: "destructive",
-        title: "Login Failed",
-        description: error.message || "Invalid email or password. Please try again.",
+        title: "Falló el Inicio de Sesión",
+        description: error.message || "Correo electrónico o contraseña inválidos. Por favor, inténtalo de nuevo.",
       });
     } finally {
       setIsLoading(false);
@@ -67,9 +67,9 @@ export function LoginForm() {
           name="email"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email</FormLabel>
+              <FormLabel>Correo Electrónico</FormLabel>
               <FormControl>
-                <Input type="email" placeholder="you@example.com" {...field} />
+                <Input type="email" placeholder="tu@ejemplo.com" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -80,7 +80,7 @@ export function LoginForm() {
           name="password"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Password</FormLabel>
+              <FormLabel>Contraseña</FormLabel>
               <FormControl>
                 <Input type="password" placeholder="••••••••" {...field} />
               </FormControl>
@@ -90,12 +90,12 @@ export function LoginForm() {
         />
         <Button type="submit" className="w-full" disabled={isLoading}>
            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Sign In
+          Iniciar Sesión
         </Button>
         <p className="text-center text-sm text-muted-foreground">
-          Don&apos;t have an account?{' '}
+          ¿No tienes una cuenta?{' '}
           <Link href="/register" className="font-medium text-primary hover:underline">
-            Sign up
+            Regístrate
           </Link>
         </p>
       </form>

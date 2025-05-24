@@ -15,8 +15,8 @@ export function AuthLayout({ children, title, description }: AuthLayoutProps) {
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center text-center">
-          <Link href="/" aria-label="EvolveLink Home">
-            <EvolveLinkLogo className="h-12 w-12 text-primary mb-4" />
+          <Link href="/" aria-label="Qyvoo Home">
+            <EvolveLinkLogo className="h-12 w-auto text-primary mb-4" />
           </Link>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">{title}</h1>
           {description && <p className="mt-2 text-muted-foreground">{description}</p>}

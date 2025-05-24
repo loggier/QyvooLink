@@ -5,30 +5,30 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLe
 import { Bar, Pie, Cell, ResponsiveContainer, BarChart as RechartsBarChart, PieChart as RechartsPieChart } from "recharts";
 
 const messageStatsData = [
-  { type: "Sent", count: 1250, fill: "var(--color-sent)" },
-  { type: "Received", count: 980, fill: "var(--color-received)" },
-  { type: "Failed", count: 30, fill: "var(--color-failed)" },
-  { type: "Automated", count: 600, fill: "var(--color-automated)" },
+  { type: "Enviados", count: 1250, fill: "var(--color-sent)" },
+  { type: "Recibidos", count: 980, fill: "var(--color-received)" },
+  { type: "Fallidos", count: 30, fill: "var(--color-failed)" },
+  { type: "Automatizados", count: 600, fill: "var(--color-automated)" },
 ];
 
 const chartConfigMessages = {
   count: {
-    label: "Messages",
+    label: "Mensajes",
   },
   sent: {
-    label: "Sent",
+    label: "Enviados",
     color: "hsl(var(--chart-1))",
   },
   received: {
-    label: "Received",
+    label: "Recibidos",
     color: "hsl(var(--chart-2))",
   },
   failed: {
-    label: "Failed",
+    label: "Fallidos",
     color: "hsl(var(--destructive))",
   },
   automated: {
-    label: "Automated",
+    label: "Automatizados",
     color: "hsl(var(--chart-4))",
   },
 } satisfies import("@/components/ui/chart").ChartConfig;
@@ -45,38 +45,38 @@ const userActivityData = [
 
 const chartConfigUsers = {
   activeUsers: {
-    label: "Active Users",
+    label: "Usuarios Activos",
     color: "hsl(var(--chart-1))",
   },
   newUsers: {
-    label: "New Users",
+    label: "Nuevos Usuarios",
     color: "hsl(var(--chart-2))",
   },
 } satisfies import("@/components/ui/chart").ChartConfig;
 
 
 const popularAutomations = [
-  { name: "Welcome Message", triggers: 580, successRate: "98%" },
-  { name: "Support FAQ Bot", triggers: 320, successRate: "92%" },
-  { name: "Out of Office Reply", triggers: 210, successRate: "100%" },
-  { name: "Product Info Bot", triggers: 150, successRate: "85%" },
+  { name: "Mensaje de Bienvenida", triggers: 580, successRate: "98%" },
+  { name: "Bot de Preguntas Frecuentes de Soporte", triggers: 320, successRate: "92%" },
+  { name: "Respuesta de Fuera de Oficina", triggers: 210, successRate: "100%" },
+  { name: "Bot de Información de Producto", triggers: 150, successRate: "85%" },
 ];
 
 export default function ReportsPage() {
   return (
     <div className="space-y-8">
        <div>
-        <h2 className="text-3xl font-bold tracking-tight text-foreground">Reports & Analytics</h2>
+        <h2 className="text-3xl font-bold tracking-tight text-foreground">Reportes y Analíticas</h2>
         <p className="text-muted-foreground">
-          View detailed reports for user actions and configurations within your WhatsApp Evolution setup.
+          Ver reportes detallados de acciones de usuario y configuraciones en tu instalación de WhatsApp Evolution.
         </p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Message Statistics</CardTitle>
-            <CardDescription>Overview of messages sent, received, and automated.</CardDescription>
+            <CardTitle>Estadísticas de Mensajes</CardTitle>
+            <CardDescription>Resumen de mensajes enviados, recibidos y automatizados.</CardDescription>
           </CardHeader>
           <CardContent>
             <ChartContainer config={chartConfigMessages} className="mx-auto aspect-square max-h-[300px]">
@@ -101,8 +101,8 @@ export default function ReportsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>User Activity Over Time</CardTitle>
-            <CardDescription>Daily active and new users.</CardDescription>
+            <CardTitle>Actividad de Usuarios a lo Largo del Tiempo</CardTitle>
+            <CardDescription>Usuarios activos y nuevos diariamente.</CardDescription>
           </CardHeader>
           <CardContent>
             <ChartContainer config={chartConfigUsers} className="h-[300px] w-full">
@@ -122,16 +122,16 @@ export default function ReportsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Popular Automations</CardTitle>
-          <CardDescription>Performance of your automated responses.</CardDescription>
+          <CardTitle>Automatizaciones Populares</CardTitle>
+          <CardDescription>Rendimiento de tus respuestas automáticas.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Automation Name</TableHead>
-                <TableHead className="text-right">Triggers</TableHead>
-                <TableHead className="text-right">Success Rate</TableHead>
+                <TableHead>Nombre de Automatización</TableHead>
+                <TableHead className="text-right">Activaciones</TableHead>
+                <TableHead className="text-right">Tasa de Éxito</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

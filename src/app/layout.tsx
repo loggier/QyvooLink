@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'EvolveLink - WhatsApp Evolution Management',
-  description: 'Manage your WhatsApp Evolution instance with EvolveLink.',
+  title: 'Qyvoo - Gestión de Evolución de WhatsApp',
+  description: 'Gestiona tu instancia de WhatsApp Evolution con Qyvoo.',
 };
 
 export default function RootLayout({
@@ -25,7 +25,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="es">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <AuthProvider>
           {children}

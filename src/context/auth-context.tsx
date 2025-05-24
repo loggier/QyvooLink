@@ -78,9 +78,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         router.push('/dashboard');
         return userCredential;
       }
-    } catch (error) {
-      console.error("Registration error:", error);
-      throw error;
+    } catch (error: any) {
+      console.error("Error de registro:", error);
+      let errorMessage = "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.";
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = "Este correo electrónico ya está en uso. Por favor, intenta con otro.";
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = "La contraseña es demasiado débil. Por favor, elige una más segura.";
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = "El formato del correo electrónico no es válido.";
+      } else if (error.code === 'auth/configuration-not-found') {
+        errorMessage = "Error de configuración de autenticación. Contacta al administrador.";
+      }
+      // Firebase provides localized messages sometimes, but we override for consistency
+      throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -102,9 +113,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         router.push('/dashboard');
         return userCredential;
       }
-    } catch (error) {
-      console.error("Login error:", error);
-      throw error;
+    } catch (error: any) {
+      console.error("Error de inicio de sesión:", error);
+      let errorMessage = "Correo electrónico o contraseña inválidos. Por favor, inténtalo de nuevo.";
+       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        errorMessage = "Correo electrónico o contraseña incorrectos.";
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = "El formato del correo electrónico no es válido.";
+      } else if (error.code === 'auth/configuration-not-found') {
+        errorMessage = "Error de configuración de autenticación. Contacta al administrador.";
+      }
+      throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -117,7 +136,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(null);
       router.push('/login');
     } catch (error) {
-      console.error("Logout error:", error);
+      console.error("Error al cerrar sesión:", error);
       throw error;
     } finally {
       setLoading(false);
@@ -134,7 +153,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error('useAuth debe usarse dentro de un AuthProvider');
   }
   return context;
 };

@@ -4,8 +4,8 @@ import { AuthLayout } from '@/components/auth/auth-layout';
 export default function RegisterPage() {
   return (
     <AuthLayout
-      title="Create your EvolveLink Account"
-      description="Fill in the details below to get started."
+      title="Crea tu Cuenta en Qyvoo"
+      description="Completa los detalles a continuación para comenzar."
     >
       <RegisterForm />
     </AuthLayout>
