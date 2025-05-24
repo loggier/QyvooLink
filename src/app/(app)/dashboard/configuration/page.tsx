@@ -1,7 +1,7 @@
 
 "use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,13 +31,15 @@ const addInstanceSchema = z.object({
 
 type AddInstanceFormData = z.infer<typeof addInstanceSchema>;
 
+type InstanceStatus = 'Conectado' | 'Desconectado' | 'Pendiente';
+
 interface WhatsAppInstance {
-  id: string; // Could be phoneNumber or a generated ID
+  id: string; 
   name: string;
   phoneNumber: string;
-  apiKey?: string; // Placeholder for now
-  status: 'Conectado' | 'Desconectado' | 'Pendiente';
-  qrCodeUrl?: string; // URL for QR code if needed for connection
+  apiKey?: string; 
+  status: InstanceStatus;
+  qrCodeUrl?: string; 
   connectionWebhookUrl?: string;
 }
 
@@ -79,6 +81,22 @@ export default function ConfigurationPage() {
     }
   }, [user, form]);
 
+  const mapWebhookStatus = (webhookStatus?: string): InstanceStatus => {
+    if (!webhookStatus) return 'Pendiente';
+    switch (webhookStatus.toLowerCase()) {
+      case 'open':
+      case 'connected': // Assuming 'connected' might be a status
+        return 'Conectado';
+      case 'close':
+      case 'connecting':
+        return 'Pendiente';
+      case 'disconnected': // Assuming 'disconnected' might be a status
+        return 'Desconectado';
+      default:
+        return 'Pendiente';
+    }
+  };
+
   async function onSubmitAddInstance(values: AddInstanceFormData) {
     if (!user) {
       toast({ variant: "destructive", title: "Error", description: "Debes estar autenticado." });
@@ -97,33 +115,41 @@ export default function ConfigurationPage() {
         body: JSON.stringify({
           instanceName: values.instanceName,
           phoneNumber: values.phoneNumber,
-          userId: user.uid, // Important for backend to associate with user
-          // Add any other necessary parameters for your webhook
+          userId: user.uid, 
         }),
       });
 
+      const responseBody = await response.json();
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: "Error desconocido del webhook." }));
-        throw new Error(errorData.message || `Error del servidor: ${response.status}`);
+        const errorMessage = responseBody?.message || responseBody?.error?.message || `Error del servidor: ${response.status}`;
+        throw new Error(errorMessage);
+      }
+      
+      // Handle array response from webhook
+      const webhookData = Array.isArray(responseBody) && responseBody.length > 0 ? responseBody[0] : responseBody;
+
+      if (!webhookData || !webhookData.success || !webhookData.data || !webhookData.data.instance) {
+        throw new Error("Respuesta inesperada del webhook al crear la instancia.");
       }
 
-      // Assuming webhook responds with instance data or at least success
-      const responseData = await response.json(); // Adjust based on actual webhook response
+      const instanceData = webhookData.data.instance;
+      const hashData = webhookData.data.hash;
 
       const newInstance: WhatsAppInstance = {
-        id: responseData.instanceId || values.phoneNumber, // Use phone number as ID if not provided
-        name: values.instanceName,
+        id: instanceData.instanceId || values.phoneNumber, // Use instanceId from webhook
+        name: values.instanceName, // Keep the name from the form
         phoneNumber: values.phoneNumber,
-        status: 'Pendiente', // Initially pending, webhook might update this or provide QR
-        apiKey: responseData.apiKey || '********************-****-****-************', // Placeholder
-        qrCodeUrl: responseData.qrCodeUrl,
-        connectionWebhookUrl: responseData.connectionWebhookUrl, // URL for the instance's own webhook to show QR
+        status: mapWebhookStatus(instanceData.status), 
+        apiKey: hashData || '********************-****-****-************', // Use hash as API Key
+        qrCodeUrl: webhookData.data.qrCodeUrl, // Keep if webhook might provide it later
+        connectionWebhookUrl: webhookData.data.connectionWebhookUrl, // Keep if webhook might provide it later
       };
       
       setWhatsAppInstance(newInstance);
       // localStorage.setItem(`qyvooInstance_${user.uid}`, JSON.stringify(newInstance)); // Persist for demo
 
-      toast({ title: "Instancia Solicitada", description: "Tu instancia de Qyvoo ha sido solicitada. Escanea el QR si es necesario." });
+      toast({ title: "Instancia Solicitada", description: "Tu instancia de Qyvoo ha sido solicitada." });
       setIsAddInstanceDialogOpen(false);
       form.reset();
     } catch (error: any) {
@@ -136,21 +162,26 @@ export default function ConfigurationPage() {
   const handleDeleteInstance = async () => {
     if (!user || !whatsAppInstance) return;
     setIsLoading(true);
+    // Example delete webhook:
     // const webhookUrl = `https://n8n.vemontech.com/webhook/evolution?action=delete_instance&instanceId=${whatsAppInstance.id}`;
     // For demo, we'll just remove it from state
     try {
-      // await fetch(webhookUrl, { method: 'POST' }); // Or GET, depending on webhook
+      // await fetch(webhookUrl, { method: 'POST' }); 
       setWhatsAppInstance(null);
       // localStorage.removeItem(`qyvooInstance_${user.uid}`);
-      toast({ title: "Instancia Eliminada", description: "La instancia de Qyvoo ha sido eliminada." });
-    } catch (error: any) {
+      toast({ title: "Instancia Eliminada", description: "La instancia de Qyvoo ha sido eliminada (simulado)." });
+    } catch (error: any)      {
       toast({ variant: "destructive", title: "Error al eliminar", description: "No se pudo eliminar la instancia." });
     } finally {
       setIsLoading(false);
     }
   };
   
-  const copyToClipboard = (text: string) => {
+  const copyToClipboard = (text?: string) => {
+    if (!text) {
+      toast({ variant: "destructive", title: "Error", description: "No hay API Key para copiar." });
+      return;
+    }
     navigator.clipboard.writeText(text)
       .then(() => toast({ title: "Copiado", description: "API Key copiada al portapapeles." }))
       .catch(() => toast({ variant: "destructive", title: "Error", description: "No se pudo copiar la API Key." }));
@@ -241,7 +272,7 @@ export default function ConfigurationPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="qyvooApiKey">Qyvoo API Key</Label>
+                  <Label htmlFor="qyvooApiKey">Qyvoo API Key (Hash)</Label>
                   <div className="flex items-center space-x-2">
                     <Input
                       id="qyvooApiKey"
@@ -250,11 +281,11 @@ export default function ConfigurationPage() {
                       value={whatsAppInstance.apiKey || "No disponible"}
                       className="flex-grow"
                     />
-                    <Button variant="ghost" size="icon" onClick={() => copyToClipboard(whatsAppInstance.apiKey || "")} disabled={!whatsAppInstance.apiKey}>
+                    <Button variant="ghost" size="icon" onClick={() => copyToClipboard(whatsAppInstance.apiKey)} disabled={!whatsAppInstance.apiKey}>
                       <Copy className="h-4 w-4" />
                     </Button>
                     <Button variant="ghost" size="icon" onClick={() => setShowApiKey(!showApiKey)}>
-                      {showApiKey ? <Eye className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showApiKey ? <Eye className="h-4 w-4" /> : <Eye className="h-4 w-4" />} {/* Icono no cambia, considera EyeOff */}
                     </Button>
                   </div>
                 </div>
@@ -263,7 +294,7 @@ export default function ConfigurationPage() {
 
                 <div className="flex items-center space-x-4">
                   <Avatar className="h-16 w-16">
-                    <AvatarImage src={`https://ui-avatars.com/api/?name=${encodeURIComponent(whatsAppInstance.name)}&background=random&size=128`} alt={whatsAppInstance.name} data-ai-hint="business logo" />
+                    <AvatarImage src={`https://ui-avatars.com/api/?name=${encodeURIComponent(whatsAppInstance.name)}&background=random&size=128`} alt={whatsAppInstance.name} data-ai-hint="business logo"/>
                     <AvatarFallback>{whatsAppInstance.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                   </Avatar>
                   <div>
@@ -292,14 +323,14 @@ export default function ConfigurationPage() {
                     <Users className="h-5 w-5 text-muted-foreground" />
                     <div>
                       <p className="text-xs text-muted-foreground">Contactos</p>
-                      <p className="text-lg font-semibold">123</p> {/* Placeholder */}
+                      <p className="text-lg font-semibold">N/A</p> {/* Placeholder */}
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
                     <MessageSquareText className="h-5 w-5 text-muted-foreground" />
                     <div>
                       <p className="text-xs text-muted-foreground">Mensajes/mes</p>
-                      <p className="text-lg font-semibold">4,567</p> {/* Placeholder */}
+                      <p className="text-lg font-semibold">N/A</p> {/* Placeholder */}
                     </div>
                   </div>
                 </div>
@@ -307,9 +338,9 @@ export default function ConfigurationPage() {
               </CardContent>
               <CardFooter className="flex justify-between items-center">
                 <Badge variant={whatsAppInstance.status === 'Conectado' ? 'default' : 'secondary'} className={
-                    whatsAppInstance.status === 'Conectado' ? 'bg-green-500 text-white' :
-                    whatsAppInstance.status === 'Pendiente' ? 'bg-yellow-400 text-black' :
-                    'bg-red-500 text-white'
+                    whatsAppInstance.status === 'Conectado' ? 'bg-green-500 text-primary-foreground' : // Cambiado a text-primary-foreground para mejor contraste
+                    whatsAppInstance.status === 'Pendiente' ? 'bg-yellow-400 text-black' : // text-black está bien aquí
+                    'bg-red-500 text-primary-foreground' // Cambiado a text-primary-foreground
                 }>
                   {whatsAppInstance.status}
                 </Badge>
@@ -413,5 +444,6 @@ export default function ConfigurationPage() {
     </div>
   );
 }
+    
 
     
