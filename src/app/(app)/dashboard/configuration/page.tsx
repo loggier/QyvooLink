@@ -103,9 +103,9 @@ export default function ConfigurationPage() {
     }
     setIsLoading(true);
     
-    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
-    const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/qyvoo';
-    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/qyvoo';
+    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false'; // Defaults to true (use test) if env var is not 'false'
+    const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
+    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/evolution';
 
     const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
     const webhookUrl = `${baseWebhookUrl}?action=create_instance`;
@@ -140,13 +140,13 @@ export default function ConfigurationPage() {
       const hashData = webhookData.data.hash;
 
       const newInstance: WhatsAppInstance = {
-        id: instanceData.instanceId || instanceData.instanceName,
+        id: instanceData.instanceId || instanceData.instanceName, // Use instanceId, fallback to instanceName
         name: instanceData.instanceName, 
-        phoneNumber: values.phoneNumber, 
+        phoneNumber: values.phoneNumber, // Use the phone number from the form
         status: mapWebhookStatus(instanceData.status), 
-        apiKey: hashData || '********************-****-****-************', 
-        qrCodeUrl: instanceData.qrCodeUrl || webhookData.data.qrCodeUrl,
-        connectionWebhookUrl: instanceData.connectionWebhookUrl || webhookData.data.connectionWebhookUrl,
+        apiKey: hashData || '********************-****-****-************', // Use hash if available
+        qrCodeUrl: instanceData.qrCodeUrl || webhookData.data.qrCodeUrl, // Check both possible locations
+        connectionWebhookUrl: instanceData.connectionWebhookUrl || webhookData.data.connectionWebhookUrl, // Check both possible locations
       };
       
       setWhatsAppInstance(newInstance);
@@ -185,9 +185,9 @@ export default function ConfigurationPage() {
     }
     setIsRefreshing(true);
 
-    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
-    const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/qyvoo';
-    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/qyvoo';
+    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false'; // Defaults to true (use test) if env var is not 'false'
+    const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
+    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/evolution';
     
     const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
     const webhookUrl = `${baseWebhookUrl}?action=get_info_instance`;
@@ -199,8 +199,8 @@ export default function ConfigurationPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          instanceName: whatsAppInstance.name,
-          userId: user.uid, // Incluir userId por si el webhook lo necesita para autorización o contexto
+          instanceName: whatsAppInstance.name, // Send instanceName as requested
+          userId: user.uid, 
         }),
       });
 
@@ -220,6 +220,7 @@ export default function ConfigurationPage() {
       const instanceData = webhookData.data.instance;
       const hashData = webhookData.data.hash;
 
+      // Update only the relevant fields from the webhook response
       const updatedInstanceData: Partial<WhatsAppInstance> = {
         status: mapWebhookStatus(instanceData.status),
         apiKey: hashData || whatsAppInstance.apiKey, // Conservar el anterior si no viene uno nuevo
@@ -227,6 +228,7 @@ export default function ConfigurationPage() {
         connectionWebhookUrl: instanceData.connectionWebhookUrl || webhookData.data.connectionWebhookUrl, // Puede ser null
       };
       
+      // Merge with existing instance data to preserve id, name, phoneNumber
       setWhatsAppInstance(prev => prev ? { ...prev, ...updatedInstanceData } : null);
       // localStorage.setItem(`qyvooInstance_${user.uid}`, JSON.stringify(whatsAppInstance)); // Actualizar persistencia para demo
 
@@ -516,4 +518,6 @@ export default function ConfigurationPage() {
     </div>
   );
 }
+    
+
     
