@@ -42,7 +42,7 @@ interface WhatsAppInstanceCount {
 }
 
 interface WhatsAppInstance {
-  id: string; // Qyvoo/Evolution Instance ID
+  id: string; // Qyvoo Instance ID
   name: string; // Instance Name
   phoneNumber: string;
   apiKey?: string;
@@ -59,8 +59,8 @@ interface RefreshedInstanceInfo {
   name: string; 
   connectionStatus: string; 
   token?: string; 
-  qrCodeUrl?: string;
-  connectionWebhookUrl?: string;
+  qrCodeUrl?: string | null; // Explicitly allow null
+  connectionWebhookUrl?: string | null; // Explicitly allow null
   _count?: WhatsAppInstanceCount;
 }
 
@@ -72,6 +72,7 @@ export default function ConfigurationPage() {
   const [whatsAppInstance, setWhatsAppInstance] = useState<WhatsAppInstance | null>(null);
   const [isLoading, setIsLoading] = useState(false); // For create/delete/refresh actions
   const [isPageLoading, setIsPageLoading] = useState(true); // For initial page load and instance fetch
+  const [showApiKey, setShowApiKey] = useState(false);
 
 
   const mapWebhookStatus = useCallback((webhookStatus?: string): InstanceStatus => {
@@ -119,14 +120,8 @@ export default function ConfigurationPage() {
         throw new Error(errorMessage);
       }
 
-      if (!Array.isArray(responseDataArray) || responseDataArray.length === 0) {
-        throw new Error("Respuesta inesperada del webhook al refrescar: El formato no es un array o está vacío.");
-      }
-      
-      const refreshedWebhookInfoOuter = responseDataArray[0];
-
-      if (!refreshedWebhookInfoOuter || !refreshedWebhookInfoOuter.success || !Array.isArray(refreshedWebhookInfoOuter.data) || refreshedWebhookInfoOuter.data.length === 0) {
-        const errorDetail = refreshedWebhookInfoOuter.data?.[0]?.message || refreshedWebhookInfoOuter.data?.message || refreshedWebhookInfoOuter.error || "Formato de datos de instancia incorrecto o no exitoso.";
+      if (!Array.isArray(responseDataArray) || responseDataArray.length === 0 || !responseDataArray[0].success || !Array.isArray(responseDataArray[0].data) || responseDataArray[0].data.length === 0) {
+        const errorDetail = responseDataArray[0]?.data?.[0]?.message || responseDataArray[0]?.data?.message || responseDataArray[0]?.error || "Formato de datos de instancia incorrecto o no exitoso.";
         // If instance not found on Qyvoo, delete from Firebase
         if (errorDetail.toLowerCase().includes('instance not found') || errorDetail.toLowerCase().includes('not found')) {
           await deleteDoc(doc(db, 'instances', user.uid));
@@ -137,15 +132,14 @@ export default function ConfigurationPage() {
         throw new Error(`Respuesta del webhook no fue exitosa o datos de instancia no encontrados: ${errorDetail}`);
       }
 
-      const instanceInfo: RefreshedInstanceInfo = refreshedWebhookInfoOuter.data[0];
+      const instanceInfo: RefreshedInstanceInfo = responseDataArray[0].data[0];
 
       const updatedInstanceData: Partial<WhatsAppInstance> = {
-        status: mapWebhookStatus(instanceInfo.connectionStatus), // Use connectionStatus
+        status: mapWebhookStatus(instanceInfo.connectionStatus), 
         apiKey: instanceInfo.token || instanceToRefresh.apiKey, 
         qrCodeUrl: instanceInfo.qrCodeUrl || null, 
         connectionWebhookUrl: instanceInfo.connectionWebhookUrl || null,
         _count: instanceInfo._count || instanceToRefresh._count,
-        // id, name, phoneNumber, userId, userEmail are preserved from instanceToRefresh
       };
       
       const fullyUpdatedInstance = { ...instanceToRefresh, ...updatedInstanceData };
@@ -174,8 +168,8 @@ export default function ConfigurationPage() {
 
           if (instanceDocSnap.exists()) {
             const instanceDataFromDb = instanceDocSnap.data() as WhatsAppInstance;
-            setWhatsAppInstance(instanceDataFromDb); // Set local state first
-            await fetchAndUpdateInstanceInfo(instanceDataFromDb, false); // Then refresh from API, no toast on initial success
+            setWhatsAppInstance(instanceDataFromDb); 
+            await fetchAndUpdateInstanceInfo(instanceDataFromDb, false); 
           } else {
             setWhatsAppInstance(null);
           }
@@ -187,7 +181,7 @@ export default function ConfigurationPage() {
           setIsPageLoading(false);
         }
       } else {
-        setIsPageLoading(false); // No user, so not loading
+        setIsPageLoading(false); 
         setWhatsAppInstance(null);
       }
     };
@@ -204,7 +198,7 @@ export default function ConfigurationPage() {
   });
 
    useEffect(() => {
-    if (user && !form.getValues("instanceName")) { // Only reset if instanceName is not already set (e.g. by user typing)
+    if (user && !form.getValues("instanceName")) { 
       form.reset({
         instanceName: user.username || user.fullName || "",
         phoneNumber: "",
@@ -233,7 +227,7 @@ export default function ConfigurationPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           instanceName: values.instanceName,
-          phoneNumber: values.phoneNumber, // Ensure phone number is sent if API needs it
+          phoneNumber: values.phoneNumber, 
           userId: user.uid, 
         }),
       });
@@ -262,12 +256,12 @@ export default function ConfigurationPage() {
       const newInstance: WhatsAppInstance = {
         id: instanceData.instanceId || instanceData.instanceName, 
         name: instanceData.instanceName, 
-        phoneNumber: values.phoneNumber, // Store the phone number entered by the user
+        phoneNumber: values.phoneNumber, 
         status: mapWebhookStatus(instanceData.status), 
         apiKey: hashData || '********************-****-****-************', 
-        qrCodeUrl: webhookData.data.qrCodeUrl || instanceData.qrCodeUrl, // Check both locations
-        connectionWebhookUrl: webhookData.data.connectionWebhookUrl || instanceData.connectionWebhookUrl,
-        _count: { Message: 0, Contact: 0, Chat: 0 }, // Initialize counts
+        qrCodeUrl: webhookData.data.qrCodeUrl || instanceData.qrCodeUrl || null,
+        connectionWebhookUrl: webhookData.data.connectionWebhookUrl || instanceData.connectionWebhookUrl || null,
+        _count: { Message: 0, Contact: 0, Chat: 0 }, 
         userId: user.uid,
         userEmail: user.email,
       };
@@ -288,7 +282,6 @@ export default function ConfigurationPage() {
   const handleDeleteInstance = async () => {
     if (!user || !whatsAppInstance) return;
     
-    // Confirmation Dialog (optional but recommended)
     const confirmed = window.confirm("¿Estás seguro de que quieres eliminar esta instancia? Esta acción no se puede deshacer.");
     if (!confirmed) return;
 
@@ -309,7 +302,6 @@ export default function ConfigurationPage() {
       });
 
       if (!response.ok) {
-        // Try to parse error from Qyvoo
         let errorMessage = `Error del servidor Qyvoo: ${response.status}`;
         try {
             const errorBody = await response.json();
@@ -318,7 +310,6 @@ export default function ConfigurationPage() {
         } catch (e) { /* Ignore parsing error, use status code */ }
         throw new Error(errorMessage);
       }
-      // Optional: Check response from Qyvoo if it indicates success explicitly
 
       await deleteDoc(doc(db, 'instances', user.uid));
       setWhatsAppInstance(null);
@@ -517,15 +508,15 @@ export default function ConfigurationPage() {
                   } 
                   className={
                     whatsAppInstance.status === 'Conectado' ? 'bg-green-500 text-primary-foreground' :
-                    whatsAppInstance.status === 'Pendiente' ? 'bg-yellow-400 text-black' : // Adjusted for better contrast
+                    whatsAppInstance.status === 'Pendiente' ? 'bg-yellow-400 text-black' : 
                     'bg-red-500 text-destructive-foreground'
                 }>
                   {whatsAppInstance.status}
                 </Badge>
                 <div className="flex space-x-2">
                   <Button variant="outline" onClick={handleRefreshWrapper} disabled={isLoading}>
-                    <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                    {isLoading ? "Refrescando..." : "Refrescar Estado"}
+                    <RefreshCw className={`mr-2 h-4 w-4 ${isLoading && whatsAppInstance ? 'animate-spin' : ''}`} />
+                    {isLoading && whatsAppInstance ? "Refrescando..." : "Refrescar Estado"}
                   </Button>
                   <Button variant="destructive" onClick={handleDeleteInstance} disabled={isLoading}>
                      {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
