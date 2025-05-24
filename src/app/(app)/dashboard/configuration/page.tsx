@@ -289,17 +289,24 @@ export default function ConfigurationPage() {
   }
 
   const handleDeleteInstance = async () => {
+    console.log("handleDeleteInstance Fired. Current isLoading state:", isLoading);
+    console.log("User:", user);
+    console.log("WhatsApp Instance:", whatsAppInstance);
+
     if (!user || !whatsAppInstance) {
+      console.log("Exiting handleDeleteInstance: User or WhatsApp instance is missing.");
       toast({ variant: "destructive", title: "Error", description: "No hay instancia para eliminar o no estás autenticado." });
       return;
     }
     
+    console.log("Proceeding to confirmation dialog.");
     const confirmed = window.confirm("¿Estás seguro de que quieres eliminar esta instancia de Qyvoo? Esta acción no se puede deshacer y eliminará tu conexión.");
     if (!confirmed) {
-      console.log("Eliminación de instancia cancelada por el usuario."); // Log para depuración
+      console.log("Eliminación de instancia cancelada por el usuario.");
       return;
     }
 
+    console.log("User confirmed deletion. Setting isLoading to true.");
     setIsLoading(true);
 
     const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
@@ -310,16 +317,19 @@ export default function ConfigurationPage() {
     const webhookUrl = `${baseWebhookUrl}?action=delete_instance`;
     
     try {
+      console.log("Calling delete_instance webhook:", webhookUrl);
       const response = await fetch(webhookUrl, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ instanceName: whatsAppInstance.name, userId: user.uid }) 
       });
+      console.log("Webhook response status:", response.status);
 
       if (!response.ok) {
         let errorMessage = `Error del servidor Qyvoo al eliminar: ${response.status}`;
         try {
             const errorBody = await response.json();
+            console.log("Webhook error body:", errorBody);
             const detailedError = Array.isArray(errorBody) && errorBody.length > 0 ? errorBody[0] : errorBody;
             errorMessage = detailedError?.message || detailedError?.error?.message || detailedError?.data?.message || errorMessage;
         } catch (e) { 
@@ -327,19 +337,24 @@ export default function ConfigurationPage() {
         }
         
         if (!(errorMessage.toLowerCase().includes('instance not found') || errorMessage.toLowerCase().includes('not found'))) {
+          console.error("Error from webhook delete_instance:", errorMessage);
           throw new Error(errorMessage);
         }
         toast({ variant: "default", title: "Aviso", description: "La instancia no se encontró en Qyvoo, se procederá a eliminar de la configuración local." });
+      } else {
+        console.log("Webhook delete_instance successful or instance not found (which is OK for deletion).");
       }
 
+      console.log("Deleting instance from Firestore for user:", user.uid);
       await deleteDoc(doc(db, 'instances', user.uid));
       setWhatsAppInstance(null);
       toast({ title: "Instancia Eliminada", description: "La instancia de Qyvoo ha sido eliminada de tu configuración." });
 
     } catch (error: any)      {
-      console.error("Error en handleDeleteInstance:", error);
+      console.error("Error in handleDeleteInstance:", error);
       toast({ variant: "destructive", title: "Error al eliminar", description: `No se pudo eliminar la instancia completamente: ${error.message}` });
     } finally {
+      console.log("handleDeleteInstance finished. Setting isLoading to false.");
       setIsLoading(false);
     }
   };
@@ -727,6 +742,5 @@ export default function ConfigurationPage() {
     </div>
   );
 }
-    
 
     
