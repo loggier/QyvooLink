@@ -16,7 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { useState, useEffect } from 'react';
-import { Copy, Eye, EyeOff, MessageSquareText, Settings2, Trash2, Users, PlusCircle, ExternalLink, RefreshCw } from 'lucide-react';
+import { Copy, Eye, EyeOff, MessageSquareText, Settings2, Trash2, Users, PlusCircle, ExternalLink, RefreshCw, ListChecks } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
@@ -33,25 +33,31 @@ type AddInstanceFormData = z.infer<typeof addInstanceSchema>;
 
 type InstanceStatus = 'Conectado' | 'Desconectado' | 'Pendiente';
 
-interface WhatsAppInstance {
-  id: string; 
-  name: string;
-  phoneNumber: string;
-  apiKey?: string; 
-  status: InstanceStatus;
-  qrCodeUrl?: string; 
-  connectionWebhookUrl?: string;
+interface WhatsAppInstanceCount {
+  Message: number;
+  Contact: number;
+  Chat: number;
 }
 
-// Define a type for the instance information coming from the refresh webhook
+interface WhatsAppInstance {
+  id: string;
+  name: string;
+  phoneNumber: string;
+  apiKey?: string;
+  status: InstanceStatus;
+  qrCodeUrl?: string | null;
+  connectionWebhookUrl?: string | null;
+  _count?: WhatsAppInstanceCount;
+}
+
 interface RefreshedInstanceInfo {
-  id: string; // Or instanceId, depending on what get_info_instance returns for this
-  name: string; // instanceName
-  connectionStatus: string; // e.g., "open", "close", "connecting"
-  token?: string; // This will be the apiKey
+  id: string; 
+  name: string; 
+  connectionStatus: string; 
+  token?: string; 
   qrCodeUrl?: string;
   connectionWebhookUrl?: string;
-  // Add other relevant fields from the refresh response if needed
+  _count?: WhatsAppInstanceCount;
 }
 
 
@@ -60,12 +66,11 @@ export default function ConfigurationPage() {
   const { toast } = useToast();
   const [isAddInstanceDialogOpen, setIsAddInstanceDialogOpen] = useState(false);
   const [whatsAppInstance, setWhatsAppInstance] = useState<WhatsAppInstance | null>(null);
-  const [isLoading, setIsLoading] = useState(false); // For add/delete operations
-  const [isRefreshing, setIsRefreshing] = useState(false); // For refresh operation
+  const [isLoading, setIsLoading] = useState(false); 
+  const [isRefreshing, setIsRefreshing] = useState(false); 
   const [showApiKey, setShowApiKey] = useState(false);
 
 
-  // Simular carga de instancia existente para un usuario
   useEffect(() => {
     // En una app real, esto cargaría desde Firestore o tu backend
     // const storedInstance = localStorage.getItem(`qyvooInstance_${user?.uid}`);
@@ -115,7 +120,7 @@ export default function ConfigurationPage() {
     }
     setIsLoading(true);
     
-    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false'; 
+    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
     const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
     const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/evolution';
 
@@ -135,17 +140,22 @@ export default function ConfigurationPage() {
         }),
       });
 
-      const responseBody = await response.json();
+      const responseBodyArray = await response.json();
 
       if (!response.ok) {
-        const errorMessage = responseBody?.message || responseBody?.error?.message || `Error del servidor: ${response.status}`;
+        const errorBody = Array.isArray(responseBodyArray) && responseBodyArray.length > 0 ? responseBodyArray[0] : responseBodyArray;
+        const errorMessage = errorBody?.message || errorBody?.error?.message || `Error del servidor: ${response.status}`;
         throw new Error(errorMessage);
       }
       
-      const webhookData = Array.isArray(responseBody) && responseBody.length > 0 ? responseBody[0] : responseBody;
+      if (!Array.isArray(responseBodyArray) || responseBodyArray.length === 0) {
+        throw new Error("Respuesta inesperada del webhook al crear la instancia (formato no es array o vacío).");
+      }
+      const webhookData = responseBodyArray[0];
+
 
       if (!webhookData || !webhookData.success || !webhookData.data || !webhookData.data.instance) {
-        throw new Error("Respuesta inesperada del webhook al crear la instancia.");
+        throw new Error("Respuesta inesperada del webhook al crear la instancia (datos incompletos).");
       }
 
       const instanceData = webhookData.data.instance;
@@ -159,6 +169,7 @@ export default function ConfigurationPage() {
         apiKey: hashData || '********************-****-****-************', 
         qrCodeUrl: instanceData.qrCodeUrl || webhookData.data.qrCodeUrl, 
         connectionWebhookUrl: instanceData.connectionWebhookUrl || webhookData.data.connectionWebhookUrl,
+        _count: { Message: 0, Contact: 0, Chat: 0 } // Initialize counts
       };
       
       setWhatsAppInstance(newInstance);
@@ -197,7 +208,7 @@ export default function ConfigurationPage() {
     }
     setIsRefreshing(true);
 
-    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false'; 
+    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
     const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
     const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/evolution';
     
@@ -228,20 +239,21 @@ export default function ConfigurationPage() {
         throw new Error("Respuesta inesperada del webhook: El formato no es un array o está vacío.");
       }
       
-      const refreshedWebhookInfo = responseDataArray[0];
+      const refreshedWebhookInfoOuter = responseDataArray[0];
 
-      if (!refreshedWebhookInfo || !refreshedWebhookInfo.success || !Array.isArray(refreshedWebhookInfo.data) || refreshedWebhookInfo.data.length === 0) {
-        const errorDetail = refreshedWebhookInfo.data?.[0]?.message || refreshedWebhookInfo.data?.message || refreshedWebhookInfo.error || "Formato de datos de instancia incorrecto o no exitoso.";
+      if (!refreshedWebhookInfoOuter || !refreshedWebhookInfoOuter.success || !Array.isArray(refreshedWebhookInfoOuter.data) || refreshedWebhookInfoOuter.data.length === 0) {
+        const errorDetail = refreshedWebhookInfoOuter.data?.[0]?.message || refreshedWebhookInfoOuter.data?.message || refreshedWebhookInfoOuter.error || "Formato de datos de instancia incorrecto o no exitoso.";
         throw new Error(`Respuesta del webhook no fue exitosa o datos de instancia no encontrados: ${errorDetail}`);
       }
 
-      const instanceInfo: RefreshedInstanceInfo = refreshedWebhookInfo.data[0];
+      const instanceInfo: RefreshedInstanceInfo = refreshedWebhookInfoOuter.data[0];
 
       const updatedInstanceData: Partial<WhatsAppInstance> = {
         status: mapWebhookStatus(instanceInfo.connectionStatus),
-        apiKey: instanceInfo.token || whatsAppInstance.apiKey, // Conservar el anterior si no viene uno nuevo
-        qrCodeUrl: instanceInfo.qrCodeUrl || null, // Si no viene, se limpia el QR
-        connectionWebhookUrl: instanceInfo.connectionWebhookUrl || null, // Si no viene, se limpia
+        apiKey: instanceInfo.token || whatsAppInstance.apiKey, 
+        qrCodeUrl: instanceInfo.qrCodeUrl || null, 
+        connectionWebhookUrl: instanceInfo.connectionWebhookUrl || null,
+        _count: instanceInfo._count || whatsAppInstance._count, // Update counts
       };
       
       setWhatsAppInstance(prev => prev ? { ...prev, ...updatedInstanceData } : null);
@@ -396,19 +408,26 @@ export default function ConfigurationPage() {
                   </div>
                 )}
                 
-                <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                   <div className="flex items-center space-x-2">
                     <Users className="h-5 w-5 text-muted-foreground" />
                     <div>
                       <p className="text-xs text-muted-foreground">Contactos</p>
-                      <p className="text-lg font-semibold">N/A</p> {/* Placeholder */}
+                      <p className="text-lg font-semibold">{whatsAppInstance._count?.Contact ?? 'N/A'}</p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
                     <MessageSquareText className="h-5 w-5 text-muted-foreground" />
                     <div>
-                      <p className="text-xs text-muted-foreground">Mensajes/mes</p>
-                      <p className="text-lg font-semibold">N/A</p> {/* Placeholder */}
+                      <p className="text-xs text-muted-foreground">Mensajes</p>
+                      <p className="text-lg font-semibold">{whatsAppInstance._count?.Message ?? 'N/A'}</p>
+                    </div>
+                  </div>
+                   <div className="flex items-center space-x-2">
+                    <ListChecks className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Chats</p>
+                      <p className="text-lg font-semibold">{whatsAppInstance._count?.Chat ?? 'N/A'}</p>
                     </div>
                   </div>
                 </div>
@@ -533,8 +552,4 @@ export default function ConfigurationPage() {
     </div>
   );
 }
-    
-
-    
-
     
