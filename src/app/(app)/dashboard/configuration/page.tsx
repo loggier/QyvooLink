@@ -102,7 +102,8 @@ export default function ConfigurationPage() {
     }
     setIsLoading(true);
 
-    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK === 'true';
+    // Default to test webhook unless NEXT_PUBLIC_USE_TEST_WEBHOOK is explicitly 'false'
+    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
     
     const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
     const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/evolution';
@@ -140,12 +141,12 @@ export default function ConfigurationPage() {
       const hashData = webhookData.data.hash;
 
       const newInstance: WhatsAppInstance = {
-        id: instanceData.instanceId || instanceData.instanceName, // Usar instanceId si está disponible
-        name: instanceData.instanceName, // Usar nombre de instancia del webhook
-        phoneNumber: values.phoneNumber, // Mantener número de teléfono del formulario
+        id: instanceData.instanceId || instanceData.instanceName,
+        name: instanceData.instanceName, 
+        phoneNumber: values.phoneNumber, 
         status: mapWebhookStatus(instanceData.status), 
         apiKey: hashData || '********************-****-****-************', 
-        qrCodeUrl: instanceData.qrCodeUrl || webhookData.data.qrCodeUrl, // Intentar obtener qrCodeUrl de varias ubicaciones
+        qrCodeUrl: instanceData.qrCodeUrl || webhookData.data.qrCodeUrl,
         connectionWebhookUrl: instanceData.connectionWebhookUrl || webhookData.data.connectionWebhookUrl,
       };
       
@@ -450,6 +451,8 @@ export default function ConfigurationPage() {
     </div>
   );
 }
+    
+
     
 
     
