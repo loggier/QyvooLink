@@ -16,7 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { useState, useEffect } from 'react';
-import { Copy, Eye, EyeOff, MessageSquareText, Settings2, Trash2, Users, PlusCircle, ExternalLink } from 'lucide-react';
+import { Copy, Eye, EyeOff, MessageSquareText, Settings2, Trash2, Users, PlusCircle, ExternalLink, RefreshCw } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
@@ -48,7 +48,8 @@ export default function ConfigurationPage() {
   const { toast } = useToast();
   const [isAddInstanceDialogOpen, setIsAddInstanceDialogOpen] = useState(false);
   const [whatsAppInstance, setWhatsAppInstance] = useState<WhatsAppInstance | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // For add/delete operations
+  const [isRefreshing, setIsRefreshing] = useState(false); // For refresh operation
   const [showApiKey, setShowApiKey] = useState(false);
 
 
@@ -101,12 +102,10 @@ export default function ConfigurationPage() {
       return;
     }
     setIsLoading(true);
-
-    // Default to test webhook unless NEXT_PUBLIC_USE_TEST_WEBHOOK is explicitly 'false'
-    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
     
-    const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
-    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/evolution';
+    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
+    const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/qyvoo';
+    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/qyvoo';
 
     const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
     const webhookUrl = `${baseWebhookUrl}?action=create_instance`;
@@ -178,6 +177,66 @@ export default function ConfigurationPage() {
       setIsLoading(false);
     }
   };
+
+  const handleRefreshInstance = async () => {
+    if (!user || !whatsAppInstance) {
+      toast({ variant: "destructive", title: "Error", description: "No hay instancia para refrescar o no estás autenticado." });
+      return;
+    }
+    setIsRefreshing(true);
+
+    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
+    const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/qyvoo';
+    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/qyvoo';
+    
+    const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
+    const webhookUrl = `${baseWebhookUrl}?action=get_info_instance`;
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          instanceName: whatsAppInstance.name,
+          userId: user.uid, // Incluir userId por si el webhook lo necesita para autorización o contexto
+        }),
+      });
+
+      const responseBody = await response.json();
+
+      if (!response.ok) {
+        const errorMessage = responseBody?.message || responseBody?.error?.message || `Error del servidor: ${response.status}`;
+        throw new Error(errorMessage);
+      }
+
+      const webhookData = Array.isArray(responseBody) && responseBody.length > 0 ? responseBody[0] : responseBody;
+
+      if (!webhookData || !webhookData.success || !webhookData.data || !webhookData.data.instance) {
+        throw new Error("Respuesta inesperada del webhook al refrescar la instancia.");
+      }
+
+      const instanceData = webhookData.data.instance;
+      const hashData = webhookData.data.hash;
+
+      const updatedInstanceData: Partial<WhatsAppInstance> = {
+        status: mapWebhookStatus(instanceData.status),
+        apiKey: hashData || whatsAppInstance.apiKey, // Conservar el anterior si no viene uno nuevo
+        qrCodeUrl: instanceData.qrCodeUrl || webhookData.data.qrCodeUrl, // Esto puede ser null si ya no es necesario
+        connectionWebhookUrl: instanceData.connectionWebhookUrl || webhookData.data.connectionWebhookUrl, // Puede ser null
+      };
+      
+      setWhatsAppInstance(prev => prev ? { ...prev, ...updatedInstanceData } : null);
+      // localStorage.setItem(`qyvooInstance_${user.uid}`, JSON.stringify(whatsAppInstance)); // Actualizar persistencia para demo
+
+      toast({ title: "Estado Actualizado", description: "El estado de la instancia de Qyvoo ha sido actualizado." });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error al refrescar", description: error.message });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
   
   const copyToClipboard = (text?: string) => {
     if (!text) {
@@ -207,7 +266,7 @@ export default function ConfigurationPage() {
             {!whatsAppInstance && (
               <Dialog open={isAddInstanceDialogOpen} onOpenChange={setIsAddInstanceDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button onClick={() => setIsAddInstanceDialogOpen(true)}>
+                  <Button onClick={() => setIsAddInstanceDialogOpen(true)} disabled={isLoading || isRefreshing}>
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Agregar Instancia
                   </Button>
@@ -342,19 +401,25 @@ export default function ConfigurationPage() {
                  <Badge variant={
                     whatsAppInstance.status === 'Conectado' ? 'default' : 
                     whatsAppInstance.status === 'Pendiente' ? 'secondary' : 
-                    'destructive' // Usar 'destructive' para 'Desconectado'
+                    'destructive'
                   } 
                   className={
                     whatsAppInstance.status === 'Conectado' ? 'bg-green-500 text-primary-foreground' :
                     whatsAppInstance.status === 'Pendiente' ? 'bg-yellow-400 text-black' :
-                    'bg-red-500 text-destructive-foreground' // Usar text-destructive-foreground para 'Desconectado'
+                    'bg-red-500 text-destructive-foreground'
                 }>
                   {whatsAppInstance.status}
                 </Badge>
-                <Button variant="destructive" onClick={handleDeleteInstance} disabled={isLoading}>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  {isLoading && whatsAppInstance ? "Eliminando..." : "Eliminar"}
-                </Button>
+                <div className="flex space-x-2">
+                  <Button variant="outline" onClick={handleRefreshInstance} disabled={isLoading || isRefreshing}>
+                    <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                    {isRefreshing ? "Refrescando..." : "Refrescar Estado"}
+                  </Button>
+                  <Button variant="destructive" onClick={handleDeleteInstance} disabled={isLoading || isRefreshing}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {isLoading && whatsAppInstance ? "Eliminando..." : "Eliminar"}
+                  </Button>
+                </div>
               </CardFooter>
             </Card>
           ) : (
@@ -451,8 +516,4 @@ export default function ConfigurationPage() {
     </div>
   );
 }
-    
-
-    
-
     
