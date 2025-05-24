@@ -15,10 +15,12 @@ import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/hooks/use-toast';
-import { useState, useEffect } from 'react';
-import { Copy, Eye, EyeOff, MessageSquareText, Settings2, Trash2, Users, PlusCircle, ExternalLink, RefreshCw, ListChecks } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Copy, Eye, EyeOff, MessageSquareText, Settings2, Trash2, Users, PlusCircle, ExternalLink, RefreshCw, ListChecks, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { db } from '@/lib/firebase'; // Import Firestore instance
+import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore'; // Import Firestore functions
 
 const phoneRegex = new RegExp(
   /^([+]?[\s0-9]+)?(\d{3}|[(]?[0-9]+[)])?([-]?[\s]?[0-9])+$/
@@ -40,14 +42,16 @@ interface WhatsAppInstanceCount {
 }
 
 interface WhatsAppInstance {
-  id: string;
-  name: string;
+  id: string; // Qyvoo/Evolution Instance ID
+  name: string; // Instance Name
   phoneNumber: string;
   apiKey?: string;
   status: InstanceStatus;
   qrCodeUrl?: string | null;
   connectionWebhookUrl?: string | null;
   _count?: WhatsAppInstanceCount;
+  userId: string;
+  userEmail: string | null;
 }
 
 interface RefreshedInstanceInfo {
@@ -66,30 +70,141 @@ export default function ConfigurationPage() {
   const { toast } = useToast();
   const [isAddInstanceDialogOpen, setIsAddInstanceDialogOpen] = useState(false);
   const [whatsAppInstance, setWhatsAppInstance] = useState<WhatsAppInstance | null>(null);
-  const [isLoading, setIsLoading] = useState(false); 
-  const [isRefreshing, setIsRefreshing] = useState(false); 
-  const [showApiKey, setShowApiKey] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // For create/delete/refresh actions
+  const [isPageLoading, setIsPageLoading] = useState(true); // For initial page load and instance fetch
+
+
+  const mapWebhookStatus = useCallback((webhookStatus?: string): InstanceStatus => {
+    if (!webhookStatus) return 'Pendiente';
+    switch (webhookStatus.toLowerCase()) {
+      case 'open':
+      case 'connected':
+        return 'Conectado';
+      case 'close':
+      case 'connecting': // "connecting" should ideally be a distinct state, but for now maps to Pendiente
+        return 'Pendiente';
+      case 'disconnected':
+        return 'Desconectado';
+      default:
+        return 'Pendiente';
+    }
+  }, []);
+
+  const fetchAndUpdateInstanceInfo = useCallback(async (instanceToRefresh: WhatsAppInstance, showToast = true) => {
+    if (!user) {
+      if (showToast) toast({ variant: "destructive", title: "Error", description: "Debes estar autenticado." });
+      return false;
+    }
+    setIsLoading(true);
+
+    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
+    const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
+    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/evolution';
+    
+    const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
+    const webhookUrl = `${baseWebhookUrl}?action=get_info_instance`;
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceName: instanceToRefresh.name, userId: user.uid }),
+      });
+
+      const responseDataArray = await response.json();
+
+      if (!response.ok) {
+        const errorBody = Array.isArray(responseDataArray) && responseDataArray.length > 0 ? responseDataArray[0] : responseDataArray;
+        const errorMessage = errorBody?.message || errorBody?.error?.message || `Error del servidor: ${response.status}`;
+        throw new Error(errorMessage);
+      }
+
+      if (!Array.isArray(responseDataArray) || responseDataArray.length === 0) {
+        throw new Error("Respuesta inesperada del webhook al refrescar: El formato no es un array o está vacío.");
+      }
+      
+      const refreshedWebhookInfoOuter = responseDataArray[0];
+
+      if (!refreshedWebhookInfoOuter || !refreshedWebhookInfoOuter.success || !Array.isArray(refreshedWebhookInfoOuter.data) || refreshedWebhookInfoOuter.data.length === 0) {
+        const errorDetail = refreshedWebhookInfoOuter.data?.[0]?.message || refreshedWebhookInfoOuter.data?.message || refreshedWebhookInfoOuter.error || "Formato de datos de instancia incorrecto o no exitoso.";
+        // If instance not found on Qyvoo, delete from Firebase
+        if (errorDetail.toLowerCase().includes('instance not found') || errorDetail.toLowerCase().includes('not found')) {
+          await deleteDoc(doc(db, 'instances', user.uid));
+          setWhatsAppInstance(null);
+          if (showToast) toast({ title: "Instancia no encontrada", description: "La instancia fue eliminada de Qyvoo y de tu configuración." });
+          return false;
+        }
+        throw new Error(`Respuesta del webhook no fue exitosa o datos de instancia no encontrados: ${errorDetail}`);
+      }
+
+      const instanceInfo: RefreshedInstanceInfo = refreshedWebhookInfoOuter.data[0];
+
+      const updatedInstanceData: Partial<WhatsAppInstance> = {
+        status: mapWebhookStatus(instanceInfo.connectionStatus), // Use connectionStatus
+        apiKey: instanceInfo.token || instanceToRefresh.apiKey, 
+        qrCodeUrl: instanceInfo.qrCodeUrl || null, 
+        connectionWebhookUrl: instanceInfo.connectionWebhookUrl || null,
+        _count: instanceInfo._count || instanceToRefresh._count,
+        // id, name, phoneNumber, userId, userEmail are preserved from instanceToRefresh
+      };
+      
+      const fullyUpdatedInstance = { ...instanceToRefresh, ...updatedInstanceData };
+      
+      await setDoc(doc(db, 'instances', user.uid), fullyUpdatedInstance);
+      setWhatsAppInstance(fullyUpdatedInstance);
+
+      if (showToast) toast({ title: "Estado Actualizado", description: "El estado de la instancia de Qyvoo ha sido actualizado." });
+      return true;
+    } catch (error: any) {
+      if (showToast) toast({ variant: "destructive", title: "Error al refrescar", description: error.message });
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user, toast, mapWebhookStatus]);
 
 
   useEffect(() => {
-    // En una app real, esto cargaría desde Firestore o tu backend
-    // const storedInstance = localStorage.getItem(`qyvooInstance_${user?.uid}`);
-    // if (storedInstance) {
-    //   setWhatsAppInstance(JSON.parse(storedInstance));
-    // }
-  }, [user?.uid]);
+    const loadInstance = async () => {
+      if (user) {
+        setIsPageLoading(true);
+        try {
+          const instanceDocRef = doc(db, 'instances', user.uid);
+          const instanceDocSnap = await getDoc(instanceDocRef);
+
+          if (instanceDocSnap.exists()) {
+            const instanceDataFromDb = instanceDocSnap.data() as WhatsAppInstance;
+            setWhatsAppInstance(instanceDataFromDb); // Set local state first
+            await fetchAndUpdateInstanceInfo(instanceDataFromDb, false); // Then refresh from API, no toast on initial success
+          } else {
+            setWhatsAppInstance(null);
+          }
+        } catch (error) {
+          console.error("Error cargando instancia desde Firestore:", error);
+          toast({ variant: "destructive", title: "Error", description: "No se pudo cargar la configuración de la instancia." });
+          setWhatsAppInstance(null);
+        } finally {
+          setIsPageLoading(false);
+        }
+      } else {
+        setIsPageLoading(false); // No user, so not loading
+        setWhatsAppInstance(null);
+      }
+    };
+    loadInstance();
+  }, [user, toast, fetchAndUpdateInstanceInfo]);
 
 
   const form = useForm<AddInstanceFormData>({
     resolver: zodResolver(addInstanceSchema),
     defaultValues: {
-      instanceName: user?.username || user?.fullName || "",
+      instanceName: "",
       phoneNumber: "",
     },
   });
 
    useEffect(() => {
-    if (user) {
+    if (user && !form.getValues("instanceName")) { // Only reset if instanceName is not already set (e.g. by user typing)
       form.reset({
         instanceName: user.username || user.fullName || "",
         phoneNumber: "",
@@ -97,21 +212,6 @@ export default function ConfigurationPage() {
     }
   }, [user, form]);
 
-  const mapWebhookStatus = (webhookStatus?: string): InstanceStatus => {
-    if (!webhookStatus) return 'Pendiente';
-    switch (webhookStatus.toLowerCase()) {
-      case 'open':
-      case 'connected':
-        return 'Conectado';
-      case 'close':
-      case 'connecting':
-        return 'Pendiente';
-      case 'disconnected':
-        return 'Desconectado';
-      default:
-        return 'Pendiente';
-    }
-  };
 
   async function onSubmitAddInstance(values: AddInstanceFormData) {
     if (!user) {
@@ -130,12 +230,10 @@ export default function ConfigurationPage() {
     try {
       const response = await fetch(webhookUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           instanceName: values.instanceName,
-          phoneNumber: values.phoneNumber,
+          phoneNumber: values.phoneNumber, // Ensure phone number is sent if API needs it
           userId: user.uid, 
         }),
       });
@@ -153,9 +251,9 @@ export default function ConfigurationPage() {
       }
       const webhookData = responseBodyArray[0];
 
-
       if (!webhookData || !webhookData.success || !webhookData.data || !webhookData.data.instance) {
-        throw new Error("Respuesta inesperada del webhook al crear la instancia (datos incompletos).");
+        const errorDetail = webhookData?.data?.message || webhookData?.error?.message || "Datos incompletos.";
+        throw new Error(`Respuesta inesperada del webhook al crear la instancia: ${errorDetail}`);
       }
 
       const instanceData = webhookData.data.instance;
@@ -164,20 +262,22 @@ export default function ConfigurationPage() {
       const newInstance: WhatsAppInstance = {
         id: instanceData.instanceId || instanceData.instanceName, 
         name: instanceData.instanceName, 
-        phoneNumber: values.phoneNumber, 
+        phoneNumber: values.phoneNumber, // Store the phone number entered by the user
         status: mapWebhookStatus(instanceData.status), 
         apiKey: hashData || '********************-****-****-************', 
-        qrCodeUrl: instanceData.qrCodeUrl || webhookData.data.qrCodeUrl, 
-        connectionWebhookUrl: instanceData.connectionWebhookUrl || webhookData.data.connectionWebhookUrl,
-        _count: { Message: 0, Contact: 0, Chat: 0 } // Initialize counts
+        qrCodeUrl: webhookData.data.qrCodeUrl || instanceData.qrCodeUrl, // Check both locations
+        connectionWebhookUrl: webhookData.data.connectionWebhookUrl || instanceData.connectionWebhookUrl,
+        _count: { Message: 0, Contact: 0, Chat: 0 }, // Initialize counts
+        userId: user.uid,
+        userEmail: user.email,
       };
       
+      await setDoc(doc(db, 'instances', user.uid), newInstance);
       setWhatsAppInstance(newInstance);
-      // localStorage.setItem(`qyvooInstance_${user.uid}`, JSON.stringify(newInstance)); 
 
       toast({ title: "Instancia Solicitada", description: "Tu instancia de Qyvoo ha sido solicitada." });
       setIsAddInstanceDialogOpen(false);
-      form.reset();
+      form.reset({ instanceName: user.username || user.fullName || "", phoneNumber: "" });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error al crear instancia", description: error.message });
     } finally {
@@ -187,85 +287,53 @@ export default function ConfigurationPage() {
 
   const handleDeleteInstance = async () => {
     if (!user || !whatsAppInstance) return;
-    setIsLoading(true);
-    // const webhookUrl = `URL_DE_ELIMINACION_REAL?action=delete_instance&instanceId=${whatsAppInstance.id}`;
-    try {
-      // await fetch(webhookUrl, { method: 'POST' }); 
-      setWhatsAppInstance(null);
-      // localStorage.removeItem(`qyvooInstance_${user.uid}`);
-      toast({ title: "Instancia Eliminada", description: "La instancia de Qyvoo ha sido eliminada (simulado)." });
-    } catch (error: any)      {
-      toast({ variant: "destructive", title: "Error al eliminar", description: "No se pudo eliminar la instancia." });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    
+    // Confirmation Dialog (optional but recommended)
+    const confirmed = window.confirm("¿Estás seguro de que quieres eliminar esta instancia? Esta acción no se puede deshacer.");
+    if (!confirmed) return;
 
-  const handleRefreshInstance = async () => {
-    if (!user || !whatsAppInstance) {
-      toast({ variant: "destructive", title: "Error", description: "No hay instancia para refrescar o no estás autenticado." });
-      return;
-    }
-    setIsRefreshing(true);
+    setIsLoading(true);
 
     const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
     const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
     const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/evolution';
     
     const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
-    const webhookUrl = `${baseWebhookUrl}?action=get_info_instance`;
-
+    const webhookUrl = `${baseWebhookUrl}?action=delete_instance`;
+    
     try {
-      const response = await fetch(webhookUrl, {
+      const response = await fetch(webhookUrl, { 
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          instanceName: whatsAppInstance.name, 
-          userId: user.uid, 
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceName: whatsAppInstance.name, userId: user.uid }) 
       });
 
-      const responseDataArray = await response.json();
-
       if (!response.ok) {
-        const errorBody = Array.isArray(responseDataArray) && responseDataArray.length > 0 ? responseDataArray[0] : responseDataArray;
-        const errorMessage = errorBody?.message || errorBody?.error?.message || `Error del servidor: ${response.status}`;
+        // Try to parse error from Qyvoo
+        let errorMessage = `Error del servidor Qyvoo: ${response.status}`;
+        try {
+            const errorBody = await response.json();
+            const detailedError = Array.isArray(errorBody) && errorBody.length > 0 ? errorBody[0] : errorBody;
+            errorMessage = detailedError?.message || detailedError?.error?.message || errorMessage;
+        } catch (e) { /* Ignore parsing error, use status code */ }
         throw new Error(errorMessage);
       }
+      // Optional: Check response from Qyvoo if it indicates success explicitly
 
-      if (!Array.isArray(responseDataArray) || responseDataArray.length === 0) {
-        throw new Error("Respuesta inesperada del webhook: El formato no es un array o está vacío.");
-      }
-      
-      const refreshedWebhookInfoOuter = responseDataArray[0];
-
-      if (!refreshedWebhookInfoOuter || !refreshedWebhookInfoOuter.success || !Array.isArray(refreshedWebhookInfoOuter.data) || refreshedWebhookInfoOuter.data.length === 0) {
-        const errorDetail = refreshedWebhookInfoOuter.data?.[0]?.message || refreshedWebhookInfoOuter.data?.message || refreshedWebhookInfoOuter.error || "Formato de datos de instancia incorrecto o no exitoso.";
-        throw new Error(`Respuesta del webhook no fue exitosa o datos de instancia no encontrados: ${errorDetail}`);
-      }
-
-      const instanceInfo: RefreshedInstanceInfo = refreshedWebhookInfoOuter.data[0];
-
-      const updatedInstanceData: Partial<WhatsAppInstance> = {
-        status: mapWebhookStatus(instanceInfo.connectionStatus),
-        apiKey: instanceInfo.token || whatsAppInstance.apiKey, 
-        qrCodeUrl: instanceInfo.qrCodeUrl || null, 
-        connectionWebhookUrl: instanceInfo.connectionWebhookUrl || null,
-        _count: instanceInfo._count || whatsAppInstance._count, // Update counts
-      };
-      
-      setWhatsAppInstance(prev => prev ? { ...prev, ...updatedInstanceData } : null);
-      // localStorage.setItem(`qyvooInstance_${user.uid}`, JSON.stringify({ ...whatsAppInstance, ...updatedInstanceData })); 
-
-      toast({ title: "Estado Actualizado", description: "El estado de la instancia de Qyvoo ha sido actualizado." });
-    } catch (error: any) {
-      toast({ variant: "destructive", title: "Error al refrescar", description: error.message });
+      await deleteDoc(doc(db, 'instances', user.uid));
+      setWhatsAppInstance(null);
+      toast({ title: "Instancia Eliminada", description: "La instancia de Qyvoo ha sido eliminada." });
+    } catch (error: any)      {
+      toast({ variant: "destructive", title: "Error al eliminar", description: `No se pudo eliminar la instancia: ${error.message}` });
     } finally {
-      setIsRefreshing(false);
+      setIsLoading(false);
     }
   };
+
+  const handleRefreshWrapper = async () => {
+    if (!whatsAppInstance) return;
+    await fetchAndUpdateInstanceInfo(whatsAppInstance, true);
+  }
   
   const copyToClipboard = (text?: string) => {
     if (!text) {
@@ -277,11 +345,19 @@ export default function ConfigurationPage() {
       .catch(() => toast({ variant: "destructive", title: "Error", description: "No se pudo copiar la API Key." }));
   };
 
+  if (isPageLoading) {
+    return (
+      <div className="flex min-h-[calc(100vh-150px)] items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-4 text-muted-foreground">Cargando configuración de instancia...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight text-foreground">Panel de Configuración</h2>
+        <h2 className="text-3xl font-bold tracking-tight text-foreground">Panel de Configuración Qyvoo</h2>
         <p className="text-muted-foreground">
           Gestiona la configuración de tu API Qyvoo, instancias de WhatsApp, horarios comerciales y mensajes.
         </p>
@@ -295,7 +371,7 @@ export default function ConfigurationPage() {
             {!whatsAppInstance && (
               <Dialog open={isAddInstanceDialogOpen} onOpenChange={setIsAddInstanceDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button onClick={() => setIsAddInstanceDialogOpen(true)} disabled={isLoading || isRefreshing}>
+                  <Button onClick={() => setIsAddInstanceDialogOpen(true)} disabled={isLoading}>
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Agregar Instancia
                   </Button>
@@ -340,7 +416,7 @@ export default function ConfigurationPage() {
                           Cancelar
                         </Button>
                         <Button type="submit" disabled={isLoading}>
-                          {isLoading ? "Agregando..." : "Agregar Instancia"}
+                          {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Agregar Instancia"}
                         </Button>
                       </DialogFooter>
                     </form>
@@ -441,19 +517,19 @@ export default function ConfigurationPage() {
                   } 
                   className={
                     whatsAppInstance.status === 'Conectado' ? 'bg-green-500 text-primary-foreground' :
-                    whatsAppInstance.status === 'Pendiente' ? 'bg-yellow-400 text-black' :
+                    whatsAppInstance.status === 'Pendiente' ? 'bg-yellow-400 text-black' : // Adjusted for better contrast
                     'bg-red-500 text-destructive-foreground'
                 }>
                   {whatsAppInstance.status}
                 </Badge>
                 <div className="flex space-x-2">
-                  <Button variant="outline" onClick={handleRefreshInstance} disabled={isLoading || isRefreshing}>
-                    <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                    {isRefreshing ? "Refrescando..." : "Refrescar Estado"}
+                  <Button variant="outline" onClick={handleRefreshWrapper} disabled={isLoading}>
+                    <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                    {isLoading ? "Refrescando..." : "Refrescar Estado"}
                   </Button>
-                  <Button variant="destructive" onClick={handleDeleteInstance} disabled={isLoading || isRefreshing}>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    {isLoading && whatsAppInstance ? "Eliminando..." : "Eliminar"}
+                  <Button variant="destructive" onClick={handleDeleteInstance} disabled={isLoading}>
+                     {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                    {isLoading ? "Eliminando..." : "Eliminar"}
                   </Button>
                 </div>
               </CardFooter>
@@ -552,4 +628,6 @@ export default function ConfigurationPage() {
     </div>
   );
 }
+    
+
     
