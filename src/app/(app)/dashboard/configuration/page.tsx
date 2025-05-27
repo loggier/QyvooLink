@@ -104,7 +104,7 @@ export default function ConfigurationPage() {
 
     const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false'; // Defaults to true if not 'false'
     const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
-    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/evolution';
+    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
     const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
     const webhookUrl = `${baseWebhookUrl}?action=get_info_instance`;
 
@@ -219,7 +219,7 @@ export default function ConfigurationPage() {
 
     const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false'; // Defaults to true if not 'false'
     const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
-    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/evolution';
+    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
     const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
     const webhookUrl = `${baseWebhookUrl}?action=create_instance`;
 
@@ -313,7 +313,7 @@ export default function ConfigurationPage() {
 
     const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
     const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
-    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/evolution';
+    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
     const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
     const webhookUrl = `${baseWebhookUrl}?action=delete_instance`;
     
@@ -367,7 +367,7 @@ export default function ConfigurationPage() {
 
     const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
     const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
-    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/evolution';
+    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
     const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
     const webhookUrl = `${baseWebhookUrl}?action=connect_instance`;
 

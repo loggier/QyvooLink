@@ -1,18 +1,26 @@
-
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, collection, query, where, getDocs, orderBy, Timestamp as FirestoreTimestamp } from 'firebase/firestore';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { 
+  doc, getDoc, 
+  collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, Timestamp as FirestoreTimestamp,
+  setDoc
+} from 'firebase/firestore';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EvolveLinkLogo } from '@/components/icons';
-import { Loader2, MessageCircle, AlertTriangle, Info, User } from 'lucide-react';
+import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Edit3, Save, XCircle, Building, MapPin, Mail, Phone, UserCheck } from 'lucide-react';
 import type { WhatsAppInstance } from '../configuration/page'; 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import Link from 'next/link'; // Added Link for configuration page
 
 interface ChatMessageDocument {
   chat_id: string;
@@ -20,13 +28,13 @@ interface ChatMessageDocument {
   instance: string;
   instanceId: string;
   mensaje: string;
-  timestamp: FirestoreTimestamp; // Firestore Timestamp
+  timestamp: FirestoreTimestamp; 
   to: string;
   user_name: 'User' | 'bot' | 'agente' | string;
 }
 
 interface ChatMessage extends ChatMessageDocument {
-  id: string; // Document ID from Firestore
+  id: string; 
 }
 
 interface ConversationSummary {
@@ -34,6 +42,15 @@ interface ConversationSummary {
   lastMessage: string;
   lastMessageTimestamp: Date;
   lastMessageSender: string;
+}
+
+interface ContactDetails {
+  id?: string; // chat_id
+  email?: string;
+  telefono?: string;
+  empresa?: string;
+  ubicacion?: string;
+  tipoCliente?: 'Prospecto' | 'Cliente' | 'Proveedor' | 'Otro';
 }
 
 export default function ChatPage() {
@@ -44,6 +61,26 @@ export default function ChatPage() {
   const [isLoadingInstance, setIsLoadingInstance] = useState(true);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [activeMessages, setActiveMessages] = useState<ChatMessage[]>([]);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [replyMessage, setReplyMessage] = useState("");
+
+  const [contactDetails, setContactDetails] = useState<ContactDetails | null>(null);
+  const [initialContactDetails, setInitialContactDetails] = useState<ContactDetails | null>(null);
+  const [isEditingContact, setIsEditingContact] = useState(false);
+  const [isLoadingContact, setIsLoadingContact] = useState(false);
+  const [isSavingContact, setIsSavingContact] = useState(false);
+
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [activeMessages]);
 
   // Fetch WhatsApp Instance
   useEffect(() => {
@@ -79,30 +116,19 @@ export default function ChatPage() {
 
   // Fetch Conversations if instance is connected
   useEffect(() => {
-    if (whatsAppInstance && whatsAppInstance.status === 'Conectado' && (whatsAppInstance.instanceId || whatsAppInstance.name)) {
+    if (whatsAppInstance && whatsAppInstance.status === 'Conectado' && (whatsAppInstance.id || whatsAppInstance.name)) {
       const fetchConversations = async () => {
         setIsLoadingChats(true);
         setError(null);
         try {
-          // This client-side grouping can be inefficient for large datasets.
-          // Consider using Cloud Functions to maintain a pre-aggregated 'conversations' collection.
-          let q;
-          const instanceIdentifier = whatsAppInstance.instanceId || whatsAppInstance.name;
+          const instanceIdentifier = whatsAppInstance.id || whatsAppInstance.name;
           
-          if (whatsAppInstance.instanceId) {
-             q = query(
-              collection(db, 'chat'),
-              where('instanceId', '==', instanceIdentifier),
-              orderBy('timestamp', 'desc')
-            );
-          } else { // Fallback to instance name if instanceId is not available (though it should be)
-             q = query(
-              collection(db, 'chat'),
-              where('instance', '==', instanceIdentifier),
-              orderBy('timestamp', 'desc')
-            );
-          }
-
+          const q = query(
+            collection(db, 'chat'),
+            where('instanceId', '==', instanceIdentifier),
+            orderBy('timestamp', 'desc')
+          );
+          
           const querySnapshot = await getDocs(q);
           const messages: ChatMessage[] = [];
           querySnapshot.forEach((doc) => {
@@ -111,23 +137,27 @@ export default function ChatPage() {
           
           const chatMap = new Map<string, ConversationSummary>();
           messages.forEach(msg => {
-            if (!chatMap.has(msg.chat_id)) {
-              chatMap.set(msg.chat_id, {
-                chat_id: msg.chat_id,
+            // Determine the chat_id based on whether the instance is the sender or receiver
+            let currentChatId = msg.from === instanceIdentifier ? msg.to : msg.from;
+             if (msg.from.includes('@g.us') || msg.to.includes('@g.us')) { // Handle group chats
+                currentChatId = msg.from.includes('@g.us') ? msg.from : msg.to;
+            }
+
+
+            if (!chatMap.has(currentChatId)) {
+              chatMap.set(currentChatId, {
+                chat_id: currentChatId,
                 lastMessage: msg.mensaje,
                 lastMessageTimestamp: msg.timestamp.toDate(),
                 lastMessageSender: msg.user_name,
               });
             }
-            // Since messages are ordered by timestamp desc, the first one encountered for a chat_id is the latest.
           });
           
           const sortedConversations = Array.from(chatMap.values()).sort(
             (a,b) => b.lastMessageTimestamp.getTime() - a.lastMessageTimestamp.getTime()
           );
-
           setConversations(sortedConversations);
-
         } catch (err) {
           console.error("Error fetching conversations:", err);
           setError("Error al cargar las conversaciones de Qyvoo.");
@@ -139,9 +169,142 @@ export default function ChatPage() {
     }
   }, [whatsAppInstance]);
 
+
+  // Fetch messages for selected chat
+  useEffect(() => {
+    if (selectedChatId && whatsAppInstance) {
+      setIsLoadingMessages(true);
+      const instanceIdentifier = whatsAppInstance.id || whatsAppInstance.name;
+      const q = query(
+        collection(db, 'chat'),
+        where('instanceId', '==', instanceIdentifier),
+        // This query needs to find messages WHERE (from == selectedChatId AND to == instanceNumber) OR (to == selectedChatId AND from == instanceNumber)
+        // Firestore doesn't support OR queries on different fields directly.
+        // We'll filter by chat_id (which represents the external contact)
+        where('chat_id', '==', selectedChatId),
+        orderBy('timestamp', 'asc')
+      );
+
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const messages: ChatMessage[] = [];
+        querySnapshot.forEach((doc) => {
+          messages.push({ id: doc.id, ...(doc.data() as ChatMessageDocument) });
+        });
+        setActiveMessages(messages);
+        setIsLoadingMessages(false);
+      }, (error) => {
+        console.error("Error fetching active messages:", error);
+        setError("Error al cargar los mensajes del chat.");
+        setIsLoadingMessages(false);
+      });
+
+      return () => unsubscribe();
+    } else {
+      setActiveMessages([]);
+    }
+  }, [selectedChatId, whatsAppInstance]);
+
+
+  // Fetch contact details
+  useEffect(() => {
+    if (selectedChatId) {
+      setIsLoadingContact(true);
+      const fetchDetails = async () => {
+        try {
+          const contactDocRef = doc(db, 'contacts', selectedChatId);
+          const contactDocSnap = await getDoc(contactDocRef);
+          if (contactDocSnap.exists()) {
+            const data = { id: contactDocSnap.id, ...contactDocSnap.data() } as ContactDetails;
+            setContactDetails(data);
+            setInitialContactDetails(data); // For cancel edit
+          } else {
+            setContactDetails({ id: selectedChatId }); // Initialize with ID if not exists
+            setInitialContactDetails({ id: selectedChatId });
+          }
+        } catch (error) {
+          console.error("Error fetching contact details:", error);
+          // Potentially set an error state for contact details
+        } finally {
+          setIsLoadingContact(false);
+        }
+      };
+      fetchDetails();
+      setIsEditingContact(false); // Reset edit mode when chat changes
+    } else {
+      setContactDetails(null);
+      setInitialContactDetails(null);
+      setIsEditingContact(false);
+    }
+  }, [selectedChatId]);
+
+
+  const handleSendMessage = async () => {
+    if (!replyMessage.trim() || !selectedChatId || !whatsAppInstance || !user) return;
+
+    const newMessage: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
+      chat_id: selectedChatId, // The person we are talking to
+      from: whatsAppInstance.phoneNumber, // Agent/Instance is sending
+      to: selectedChatId,                  // Recipient is the selected chat
+      instance: whatsAppInstance.name,
+      instanceId: whatsAppInstance.id,
+      mensaje: replyMessage.trim(),
+      user_name: 'agente', // Message sent by an agent
+      timestamp: serverTimestamp(), // Use serverTimestamp for consistency
+    };
+
+    try {
+      await addDoc(collection(db, 'chat'), newMessage);
+      setReplyMessage("");
+      // Optimistic UI update or rely on snapshot listener
+      console.log("Message saved to Firestore. Placeholder for Qyvoo webhook to send message.");
+      // Example: await callQyvooWebhookToSend(newMessage); 
+    } catch (error) {
+      console.error("Error sending message:", error);
+      setError("Error al enviar el mensaje.");
+    }
+  };
+  
+  const handleSaveContactDetails = async () => {
+    if (!contactDetails || !selectedChatId) return;
+    setIsSavingContact(true);
+    try {
+      const contactDocRef = doc(db, 'contacts', selectedChatId);
+      await setDoc(contactDocRef, { 
+        email: contactDetails.email || null,
+        telefono: contactDetails.telefono || null,
+        empresa: contactDetails.empresa || null,
+        ubicacion: contactDetails.ubicacion || null,
+        tipoCliente: contactDetails.tipoCliente || null,
+      }, { merge: true }); // merge true to avoid overwriting other fields if any
+      setInitialContactDetails(contactDetails); // Update initial state after save
+      setIsEditingContact(false);
+      // Show success toast
+    } catch (error) {
+      console.error("Error saving contact details:", error);
+      // Show error toast
+    } finally {
+      setIsSavingContact(false);
+    }
+  };
+
+  const handleContactInputChange = (field: keyof ContactDetails, value: string) => {
+    setContactDetails(prev => prev ? { ...prev, [field]: value } : null);
+  };
+  
+  const handleContactSelectChange = (value: string) => {
+    setContactDetails(prev => prev ? { ...prev, tipoCliente: value as ContactDetails['tipoCliente'] } : null);
+  };
+
+
   const formatPhoneNumber = (chat_id: string) => {
     return chat_id.split('@')[0];
-  }
+  };
+
+  const formatTimestamp = (timestamp: FirestoreTimestamp | Date | undefined): string => {
+    if (!timestamp) return "";
+    const date = timestamp instanceof FirestoreTimestamp ? timestamp.toDate() : timestamp;
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
   if (isLoadingInstance) {
     return (
@@ -163,6 +326,9 @@ export default function ChatPage() {
         </CardHeader>
         <CardContent>
           <p>{error}</p>
+          <p className="mt-4 text-sm text-muted-foreground">
+            Por favor, ve a la página de <Link href="/dashboard/configuration" className="text-primary underline hover:text-primary/80">Configuración</Link> para conectar o verificar tu instancia.
+          </p>
         </CardContent>
       </Card>
     );
@@ -187,13 +353,13 @@ export default function ChatPage() {
     );
   }
 
+
   return (
     <div className="flex h-[calc(100vh-theme(spacing.16)-theme(spacing.12))] border bg-card text-card-foreground shadow-sm rounded-lg overflow-hidden">
       {/* Left Column: Conversation List */}
-      <div className="w-full md:w-1/3 md:min-w-[300px] md:max-w-[380px] border-r flex flex-col">
+      <div className="w-full md:w-1/3 lg:w-1/4 md:min-w-[300px] md:max-w-[380px] border-r flex flex-col">
         <div className="p-4 border-b">
           <h2 className="text-xl font-semibold">Conversaciones Activas</h2>
-          {/* Optional: Search bar here */}
         </div>
         <ScrollArea className="flex-grow">
           {isLoadingChats ? (
@@ -206,7 +372,7 @@ export default function ChatPage() {
               <MessageCircle className="mx-auto h-12 w-12 text-gray-400 mb-2" />
               No hay conversaciones activas.
             </div>
-          ) : error ? (
+          ) : error && !isLoadingChats ? ( // Ensure error only shows if not loading chats
              <div className="p-6 text-center text-destructive">
               <AlertTriangle className="mx-auto h-12 w-12 mb-2" />
               {error}
@@ -222,7 +388,7 @@ export default function ChatPage() {
                   >
                     <Avatar className="h-10 w-10 mr-3">
                        <AvatarFallback>
-                        {formatPhoneNumber(convo.chat_id).slice(-2)} {/* Last 2 digits for fallback */}
+                        {formatPhoneNumber(convo.chat_id).slice(-2)}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-grow overflow-hidden">
@@ -232,7 +398,6 @@ export default function ChatPage() {
                         {convo.lastMessage}
                       </p>
                     </div>
-                    {/* Optional: Timestamp or unread count */}
                   </Button>
                 </li>
               ))}
@@ -241,31 +406,166 @@ export default function ChatPage() {
         </ScrollArea>
       </div>
 
-      {/* Right Column: Chat View / Welcome */}
-      <div className="hidden md:flex flex-1 flex-col items-center justify-center p-6 bg-muted/30">
+      {/* Middle Column: Chat View */}
+      <div className="flex-1 flex flex-col bg-muted/30">
         {selectedChatId ? (
-          <div className="text-center">
-            <h3 className="text-2xl font-semibold mb-2">Chat con {formatPhoneNumber(selectedChatId)}</h3>
-            <p className="text-muted-foreground">La visualización de mensajes detallados y la funcionalidad de envío estarán disponibles próximamente.</p>
-            {/* Future: Chat messages display and input */}
-          </div>
+          <>
+            <CardHeader className="p-4 border-b bg-card">
+              <CardTitle className="text-lg">Chat con {formatPhoneNumber(selectedChatId)}</CardTitle>
+            </CardHeader>
+            <ScrollArea className="flex-grow p-4 space-y-4">
+              {isLoadingMessages ? (
+                <div className="flex justify-center items-center h-full">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : activeMessages.length === 0 ? (
+                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                    <MessageCircle className="h-16 w-16 mb-4" />
+                    <p>No hay mensajes en esta conversación.</p>
+                    <p className="text-sm">Envía un mensaje para comenzar.</p>
+                </div>
+              ) : (
+                activeMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${msg.from === selectedChatId || msg.user_name?.toLowerCase() === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-[70%] p-3 rounded-lg shadow ${
+                        msg.from === selectedChatId || msg.user_name?.toLowerCase() === 'user'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-card border' 
+                      }`}
+                    >
+                      <p className="text-sm">{msg.mensaje}</p>
+                      <p className={`text-xs mt-1 ${ msg.from === selectedChatId || msg.user_name?.toLowerCase() === 'user' ? 'text-primary-foreground/70 text-right' : 'text-muted-foreground text-right'}`}>
+                        {formatTimestamp(msg.timestamp)}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+              <div ref={messagesEndRef} />
+            </ScrollArea>
+            <CardFooter className="p-4 border-t bg-card">
+              <div className="flex w-full items-center space-x-2">
+                <Textarea
+                  placeholder="Escribe tu mensaje como administrador..."
+                  value={replyMessage}
+                  onChange={(e) => setReplyMessage(e.target.value)}
+                  className="flex-grow resize-none"
+                  rows={1}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                />
+                <Button onClick={handleSendMessage} disabled={!replyMessage.trim()}>
+                  <Send className="h-4 w-4 mr-2" /> Enviar
+                </Button>
+              </div>
+            </CardFooter>
+          </>
         ) : (
-          <div className="text-center max-w-md">
-            <EvolveLinkLogo className="h-16 w-auto mx-auto mb-6 text-primary" data-ai-hint="company logo"/>
-            <h2 className="text-2xl font-semibold mb-2">Bienvenido a Qyvoo</h2>
-            <p className="text-muted-foreground mb-6">
-              Selecciona una conversación de la lista de la izquierda para ver los mensajes.
-            </p>
-            <Alert className="bg-background border-border text-foreground">
-              <MessageCircle className="h-5 w-5" />
-              <AlertTitle className="font-semibold">Panel de Monitoreo</AlertTitle>
-              <AlertDescription>
-                Esta interfaz te permite monitorear las conversaciones de tus campañas y responder como administrador.
-              </AlertDescription>
-            </Alert>
+          <div className="hidden md:flex flex-1 flex-col items-center justify-center p-6">
+            <div className="text-center max-w-md">
+              <EvolveLinkLogo className="h-16 w-auto mx-auto mb-6 text-primary" data-ai-hint="company logo"/>
+              <h2 className="text-2xl font-semibold mb-2">Bienvenido a Qyvoo</h2>
+              <p className="text-muted-foreground mb-6">
+                Selecciona una conversación de la lista de la izquierda para ver los mensajes.
+              </p>
+              <Alert className="bg-background border-border text-foreground">
+                <MessageCircle className="h-5 w-5" />
+                <AlertTitle className="font-semibold">Panel de Monitoreo</AlertTitle>
+                <AlertDescription>
+                  Esta interfaz te permite monitorear las conversaciones de tus campañas y responder como administrador.
+                </AlertDescription>
+              </Alert>
+            </div>
           </div>
         )}
       </div>
+      
+      {/* Right Column: Additional Information */}
+      {selectedChatId && (
+        <div className="w-full md:w-1/3 lg:w-1/4 md:min-w-[300px] md:max-w-[380px] border-l flex flex-col bg-card">
+          <CardHeader className="p-4 border-b">
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-lg">Información del Contacto</CardTitle>
+              {!isEditingContact && (
+                <Button variant="ghost" size="icon" onClick={() => setIsEditingContact(true)} disabled={isLoadingContact}>
+                  <Edit3 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <ScrollArea className="flex-grow p-4">
+            {isLoadingContact ? (
+               <div className="flex items-center justify-center p-6">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : contactDetails ? (
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="contactEmail" className="flex items-center text-sm text-muted-foreground"><Mail className="h-4 w-4 mr-2"/>Email</Label>
+                  <Input id="contactEmail" value={contactDetails.email || ""} onChange={(e) => handleContactInputChange('email', e.target.value)} readOnly={!isEditingContact} placeholder="No disponible"/>
+                </div>
+                <div>
+                  <Label htmlFor="contactTelefono" className="flex items-center text-sm text-muted-foreground"><Phone className="h-4 w-4 mr-2"/>Teléfono</Label>
+                  <Input id="contactTelefono" value={contactDetails.telefono || formatPhoneNumber(selectedChatId)} onChange={(e) => handleContactInputChange('telefono', e.target.value)} readOnly={!isEditingContact || !!formatPhoneNumber(selectedChatId)} placeholder="No disponible"/>
+                </div>
+                <div>
+                  <Label htmlFor="contactEmpresa" className="flex items-center text-sm text-muted-foreground"><Building className="h-4 w-4 mr-2"/>Empresa</Label>
+                  <Input id="contactEmpresa" value={contactDetails.empresa || ""} onChange={(e) => handleContactInputChange('empresa', e.target.value)} readOnly={!isEditingContact} placeholder="No disponible"/>
+                </div>
+                <div>
+                  <Label htmlFor="contactUbicacion" className="flex items-center text-sm text-muted-foreground"><MapPin className="h-4 w-4 mr-2"/>Ubicación</Label>
+                  <Input id="contactUbicacion" value={contactDetails.ubicacion || ""} onChange={(e) => handleContactInputChange('ubicacion', e.target.value)} readOnly={!isEditingContact} placeholder="No disponible"/>
+                </div>
+                <div>
+                  <Label htmlFor="contactTipoCliente" className="flex items-center text-sm text-muted-foreground"><UserCheck className="h-4 w-4 mr-2"/>Tipo de Cliente</Label>
+                   <Select 
+                    value={contactDetails.tipoCliente || ""} 
+                    onValueChange={handleContactSelectChange}
+                    disabled={!isEditingContact}
+                  >
+                    <SelectTrigger id="contactTipoCliente">
+                      <SelectValue placeholder="Seleccionar tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Prospecto">Prospecto</SelectItem>
+                      <SelectItem value="Cliente">Cliente</SelectItem>
+                      <SelectItem value="Proveedor">Proveedor</SelectItem>
+                      <SelectItem value="Otro">Otro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {isEditingContact && (
+                  <div className="flex justify-end space-x-2 pt-4">
+                    <Button variant="outline" onClick={() => { setIsEditingContact(false); setContactDetails(initialContactDetails);}} disabled={isSavingContact}>
+                      <XCircle className="mr-2 h-4 w-4" /> Cancelar
+                    </Button>
+                    <Button onClick={handleSaveContactDetails} disabled={isSavingContact}>
+                      {isSavingContact ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                      Guardar
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-center">No hay información de contacto disponible.</p>
+            )}
+          </ScrollArea>
+           <CardFooter className="p-2 border-t">
+             <p className="text-xs text-muted-foreground text-center w-full">Información disponible solo para planes pagados.</p>
+          </CardFooter>
+        </div>
+      )}
     </div>
   );
 }
+// Need to import onSnapshot from firebase/firestore
+import { onSnapshot } from 'firebase/firestore';
