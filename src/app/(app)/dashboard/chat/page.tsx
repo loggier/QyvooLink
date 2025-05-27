@@ -255,13 +255,15 @@ export default function ChatPage() {
   const handleSendMessage = async () => {
     if (!replyMessage.trim() || !selectedChatId || !whatsAppInstance || !user) return;
 
+    const trimmedMessage = replyMessage.trim();
+
     const newMessageData: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
       chat_id: selectedChatId, 
       from: whatsAppInstance.phoneNumber || `instance_${whatsAppInstance.id}`, 
       to: selectedChatId, 
       instance: whatsAppInstance.name,
       instanceId: whatsAppInstance.id,
-      mensaje: replyMessage.trim(),
+      mensaje: trimmedMessage,
       user_name: 'agente', 
       timestamp: serverTimestamp(), 
     };
@@ -269,12 +271,46 @@ export default function ChatPage() {
     try {
       await addDoc(collection(db, 'chat'), newMessageData);
       setReplyMessage("");
-      console.log("Message saved to Firestore. TODO: Implement Qyvoo webhook call to send the message via WhatsApp.");
-       toast({ title: "Mensaje Enviado", description: "Tu mensaje ha sido guardado en el chat." });
+      toast({ title: "Mensaje Guardado", description: "Tu mensaje ha sido guardado en el chat." });
+
+      // Call the webhook
+      const webhookPayload = [{
+        chat_id: selectedChatId,
+        instanceId: whatsAppInstance.id,
+        mensaje: trimmedMessage,
+        instance: whatsAppInstance.name,
+        user_name: "agent", // As per user's example for webhook
+        timestamp: new Date().toISOString(),
+      }];
+
+      const webhookUrl = "https://n8n.vemontech.com/webhook-test/qyvoo";
+
+      try {
+        const webhookResponse = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(webhookPayload),
+        });
+
+        if (webhookResponse.ok) {
+          console.log("Message successfully sent to webhook:", webhookPayload);
+          toast({ title: "Mensaje Enviado a Qyvoo", description: "El mensaje también fue enviado al sistema Qyvoo." });
+        } else {
+          const errorData = await webhookResponse.text();
+          console.error("Error sending message to webhook:", webhookResponse.status, errorData);
+          toast({ variant: "destructive", title: "Error de Webhook", description: `No se pudo enviar el mensaje a Qyvoo: ${webhookResponse.status}` });
+        }
+      } catch (webhookError) {
+        console.error("Error calling webhook:", webhookError);
+        toast({ variant: "destructive", title: "Error de Red Webhook", description: "No se pudo conectar con el servicio de Qyvoo." });
+      }
+
     } catch (error) {
-      console.error("Error sending message:", error);
-      setError("Error al enviar el mensaje.");
-      toast({ variant: "destructive", title: "Error", description: "No se pudo enviar el mensaje." });
+      console.error("Error sending message (Firestore):", error);
+      setError("Error al enviar el mensaje a Firestore.");
+      toast({ variant: "destructive", title: "Error en Firestore", description: "No se pudo guardar el mensaje." });
     }
   };
   
@@ -289,11 +325,11 @@ export default function ChatPage() {
       const dataToSave: ContactDetails = {
         nombre: detailsToSave.nombre || "",
         apellido: detailsToSave.apellido || "",
-        email: detailsToSave.email || null, 
-        telefono: detailsToSave.telefono || null,
-        empresa: detailsToSave.empresa || null,
-        ubicacion: detailsToSave.ubicacion || null,
-        tipoCliente: detailsToSave.tipoCliente || undefined, // Allow undefined for unselected
+        email: detailsToSave.email || "", 
+        telefono: detailsToSave.telefono || "",
+        empresa: detailsToSave.empresa || "",
+        ubicacion: detailsToSave.ubicacion || "",
+        tipoCliente: detailsToSave.tipoCliente || undefined, 
         instanceId: detailsToSave.instanceId || whatsAppInstance.id,
         userId: detailsToSave.userId || user.uid,
       };
@@ -310,7 +346,7 @@ export default function ChatPage() {
     }
   };
 
-  const handleContactInputChange = (field: keyof Omit<ContactDetails, 'id' | 'instanceId' | 'userId'>, value: string) => {
+  const handleContactInputChange = (field: keyof Omit<ContactDetails, 'id' | 'instanceId' | 'userId' | 'tipoCliente'>, value: string) => {
     setContactDetails(prev => prev ? { ...prev, [field]: value } : null);
   };
   
@@ -481,7 +517,7 @@ export default function ChatPage() {
                       timestampAlignmentClass += ' text-secondary-foreground/80';
                       IconComponent = User; 
                       avatarFallbackClass = "bg-green-500 text-white";
-                    } else {
+                    } else { // Fallback for other system messages if any
                       bubbleClass = 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200';
                       timestampAlignmentClass += ' text-gray-500 dark:text-gray-400';
                       IconComponent = MessageCircle; 
@@ -654,4 +690,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
