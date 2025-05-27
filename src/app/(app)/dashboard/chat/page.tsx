@@ -31,7 +31,7 @@ interface ChatMessageDocument {
   mensaje: string;
   timestamp: FirestoreTimestamp; 
   to: string;
-  user_name: 'User' | 'bot' | 'agente' | string;
+  user_name: 'User' | 'bot' | 'agente' | string; // user_name can be User, bot, or agent
 }
 
 interface ChatMessage extends ChatMessageDocument {
@@ -138,10 +138,20 @@ export default function ChatPage() {
           
           const chatMap = new Map<string, ConversationSummary>();
           messages.forEach(msg => {
-            let currentChatId = msg.from === instanceIdentifier ? msg.to : msg.from;
-             if (msg.from.includes('@g.us') || msg.to.includes('@g.us')) { 
-                currentChatId = msg.from.includes('@g.us') ? msg.from : msg.to;
+            // chat_id in Firestore seems to be the contact's JID when it's a 1:1 chat initiated or received by them
+            // For group messages, chat_id might be the group JID.
+            // We need to correctly identify the other party in a 1:1 chat.
+            let currentChatId = msg.chat_id; // Use chat_id directly from document as the primary key for conversation
+             if (msg.from === instanceIdentifier) { // Message sent by our instance
+                currentChatId = msg.to;
+            } else if (msg.to === instanceIdentifier) { // Message received by our instance
+                currentChatId = msg.from;
             }
+            // Handle group chats - if the chat_id ends with @g.us it is a group
+            if (msg.chat_id.endsWith('@g.us')) {
+                currentChatId = msg.chat_id;
+            }
+
 
             if (!chatMap.has(currentChatId)) {
               chatMap.set(currentChatId, {
@@ -174,10 +184,14 @@ export default function ChatPage() {
     if (selectedChatId && whatsAppInstance) {
       setIsLoadingMessages(true);
       const instanceIdentifier = whatsAppInstance.id || whatsAppInstance.name;
+      
+      // Query for messages where instanceId matches and either from or to matches selectedChatId
+      // This is a simplified approach. For a robust solution, ensure `chat_id` field in Firestore 
+      // correctly represents the conversation participant's JID for 1:1 chats.
       const q = query(
         collection(db, 'chat'),
         where('instanceId', '==', instanceIdentifier),
-        where('chat_id', '==', selectedChatId),
+        where('chat_id', '==', selectedChatId), // Assuming chat_id in Firestore correctly identifies the conversation partner
         orderBy('timestamp', 'asc')
       );
 
@@ -214,8 +228,8 @@ export default function ChatPage() {
             setContactDetails(data);
             setInitialContactDetails(data);
           } else {
-            setContactDetails({ id: selectedChatId }); 
-            setInitialContactDetails({ id: selectedChatId });
+            setContactDetails({ id: selectedChatId, telefono: formatPhoneNumber(selectedChatId) }); 
+            setInitialContactDetails({ id: selectedChatId, telefono: formatPhoneNumber(selectedChatId) });
           }
         } catch (error) {
           console.error("Error fetching contact details:", error);
@@ -236,21 +250,22 @@ export default function ChatPage() {
   const handleSendMessage = async () => {
     if (!replyMessage.trim() || !selectedChatId || !whatsAppInstance || !user) return;
 
-    const newMessage: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
+    const newMessageData: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
       chat_id: selectedChatId, 
-      from: whatsAppInstance.phoneNumber, 
-      to: selectedChatId,                  
+      from: whatsAppInstance.phoneNumber, // Message is from our instance's number
+      to: selectedChatId, // To the selected contact
       instance: whatsAppInstance.name,
       instanceId: whatsAppInstance.id,
       mensaje: replyMessage.trim(),
-      user_name: 'agente', 
+      user_name: 'agente', // Sent by an agent
       timestamp: serverTimestamp(), 
     };
 
     try {
-      await addDoc(collection(db, 'chat'), newMessage);
+      await addDoc(collection(db, 'chat'), newMessageData);
       setReplyMessage("");
-      console.log("Message saved to Firestore. Placeholder for Qyvoo webhook to send message.");
+      // Placeholder for actual message sending via Qyvoo webhook
+      console.log("Message saved to Firestore. TODO: Implement Qyvoo webhook call to send the message via WhatsApp.");
     } catch (error) {
       console.error("Error sending message:", error);
       setError("Error al enviar el mensaje.");
@@ -262,13 +277,16 @@ export default function ChatPage() {
     setIsSavingContact(true);
     try {
       const contactDocRef = doc(db, 'contacts', selectedChatId);
+      // Ensure we don't save the 'id' field into the document itself
+      const { id, ...detailsToSave } = contactDetails;
       await setDoc(contactDocRef, { 
-        email: contactDetails.email || null,
-        telefono: contactDetails.telefono || null,
-        empresa: contactDetails.empresa || null,
-        ubicacion: contactDetails.ubicacion || null,
-        tipoCliente: contactDetails.tipoCliente || null,
-      }, { merge: true });
+        ...detailsToSave,
+        email: detailsToSave.email || null, // Ensure null if empty
+        telefono: detailsToSave.telefono || null,
+        empresa: detailsToSave.empresa || null,
+        ubicacion: detailsToSave.ubicacion || null,
+        tipoCliente: detailsToSave.tipoCliente || null,
+       }, { merge: true });
       setInitialContactDetails(contactDetails); 
       setIsEditingContact(false);
     } catch (error) {
@@ -278,7 +296,7 @@ export default function ChatPage() {
     }
   };
 
-  const handleContactInputChange = (field: keyof ContactDetails, value: string) => {
+  const handleContactInputChange = (field: keyof Omit<ContactDetails, 'id'>, value: string) => {
     setContactDetails(prev => prev ? { ...prev, [field]: value } : null);
   };
   
@@ -288,6 +306,7 @@ export default function ChatPage() {
 
 
   const formatPhoneNumber = (chat_id: string) => {
+    if (!chat_id) return "Desconocido";
     return chat_id.split('@')[0];
   };
 
@@ -420,34 +439,42 @@ export default function ChatPage() {
                 </div>
               ) : (
                 activeMessages.map((msg) => {
-                  const isFromContact = msg.from === selectedChatId || msg.user_name?.toLowerCase() === 'user';
-                  const isFromBot = !isFromContact && msg.user_name?.toLowerCase() === 'bot';
-                  const isFromAgent = !isFromContact && msg.user_name?.toLowerCase() === 'agente';
+                  // Determine if the message is from the external contact
+                  const isFromExternalContact = msg.from === selectedChatId;
+                  
+                  // If not from external contact, determine if it's bot or agent (from system)
+                  const isBotSystemMessage = !isFromExternalContact && msg.user_name?.toLowerCase() === 'bot';
+                  const isAgentSystemMessage = !isFromExternalContact && msg.user_name?.toLowerCase() === 'agente';
+                  // Default for other system messages (if user_name is not bot/agent, e.g. 'user' from instance but not external contact)
+                  const isOtherSystemMessage = !isFromExternalContact && !isBotSystemMessage && !isAgentSystemMessage;
+
 
                   return (
                     <div
                       key={msg.id}
-                      className={`flex w-full ${isFromContact ? 'justify-end' : 'justify-start'}`}
+                      className={`flex w-full ${isFromExternalContact ? 'justify-end' : 'justify-start'}`}
                     >
                       <div className={`flex items-end space-x-2 max-w-[75%]`}>
-                        {(isFromBot || isFromAgent) && (
+                        {/* System messages (Bot or Agent) */}
+                        {(!isFromExternalContact) && (
                           <>
                             <div
                               className={`py-2 px-3 rounded-lg shadow-md ${
-                                isFromBot ? 'bg-card border' : 'bg-secondary'
+                                isBotSystemMessage ? 'bg-card border' : 'bg-secondary' // Bot: card, Agent/OtherSystem: secondary
                               }`}
                             >
                               <p className="text-sm">{msg.mensaje}</p>
-                              <p className={`text-xs mt-1 ${isFromBot ? 'text-muted-foreground' : 'text-secondary-foreground/80'} text-right`}>
+                              <p className={`text-xs mt-1 ${isBotSystemMessage ? 'text-muted-foreground' : 'text-secondary-foreground/80'} text-right`}>
                                 {formatTimestamp(msg.timestamp)}
                               </p>
                             </div>
-                            {isFromBot && (
+                            {isBotSystemMessage && (
                               <Bot className="h-5 w-5 text-muted-foreground flex-shrink-0" /> 
                             )}
                           </>
                         )}
-                        {isFromContact && (
+                        {/* External contact's messages */}
+                        {isFromExternalContact && (
                           <div
                             className={`py-2 px-3 rounded-lg shadow-md bg-primary text-primary-foreground`}
                           >
@@ -479,7 +506,7 @@ export default function ChatPage() {
                     }
                   }}
                 />
-                <Button onClick={handleSendMessage} disabled={!replyMessage.trim()}>
+                <Button onClick={handleSendMessage} disabled={!replyMessage.trim() || isLoadingMessages}>
                   <Send className="h-4 w-4 mr-2" /> Enviar
                 </Button>
               </div>
@@ -526,12 +553,12 @@ export default function ChatPage() {
             ) : contactDetails ? (
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="contactEmail" className="flex items-center text-sm text-muted-foreground"><Mail className="h-4 w-4 mr-2"/>Email</Label>
+                  <Label htmlFor="contactEmail" className="flex items-center text-sm text-muted-foreground"><Mail className="h-4 w-4 mr-2"/>Correo Electrónico</Label>
                   <Input id="contactEmail" value={contactDetails.email || ""} onChange={(e) => handleContactInputChange('email', e.target.value)} readOnly={!isEditingContact} placeholder="No disponible"/>
                 </div>
                 <div>
                   <Label htmlFor="contactTelefono" className="flex items-center text-sm text-muted-foreground"><Phone className="h-4 w-4 mr-2"/>Teléfono</Label>
-                  <Input id="contactTelefono" value={contactDetails.telefono || formatPhoneNumber(selectedChatId)} onChange={(e) => handleContactInputChange('telefono', e.target.value)} readOnly={!isEditingContact || !!formatPhoneNumber(selectedChatId)} placeholder="No disponible"/>
+                  <Input id="contactTelefono" value={contactDetails.telefono || ""} onChange={(e) => handleContactInputChange('telefono', e.target.value)} readOnly={!isEditingContact || !!contactDetails.telefono && contactDetails.telefono === formatPhoneNumber(selectedChatId)} placeholder="No disponible"/>
                 </div>
                 <div>
                   <Label htmlFor="contactEmpresa" className="flex items-center text-sm text-muted-foreground"><Building className="h-4 w-4 mr-2"/>Empresa</Label>
@@ -573,14 +600,15 @@ export default function ChatPage() {
                 )}
               </div>
             ) : (
-              <p className="text-muted-foreground text-center">No hay información de contacto disponible.</p>
+              <p className="text-muted-foreground text-center">No hay información de contacto disponible para {formatPhoneNumber(selectedChatId)}.</p>
             )}
           </ScrollArea>
            <CardFooter className="p-2 border-t">
-             <p className="text-xs text-muted-foreground text-center w-full">Información disponible solo para planes pagados.</p>
+             <p className="text-xs text-muted-foreground text-center w-full">Información de contacto adicional.</p>
           </CardFooter>
         </div>
       )}
     </div>
   );
 }
+
