@@ -283,7 +283,7 @@ export default function ChatPage() {
         timestamp: new Date().toISOString(),
       }];
 
-      const webhookUrl = "https://n8n.vemontech.com/webhook-test/qyvoo";
+      const webhookUrl = "https://n8n.vemontech.com/webhook/qyvoo"; // Updated URL
 
       try {
         const webhookResponse = await fetch(webhookUrl, {
