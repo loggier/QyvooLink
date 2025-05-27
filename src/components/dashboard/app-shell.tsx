@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ReactNode } from 'react';
@@ -17,7 +18,7 @@ import { EvolveLinkLogo } from '@/components/icons';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -27,7 +28,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Home, Settings, BarChart2, LogOut, UserCircle } from 'lucide-react';
+import { Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare } from 'lucide-react'; // Added MessageSquare
 
 interface NavItem {
   href: string;
@@ -37,6 +38,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Panel de Control', icon: Home },
+  { href: '/dashboard/chat', label: 'Conversaciones', icon: MessageSquare }, // Added Chat link
   { href: '/dashboard/configuration', label: 'Configuración', icon: Settings },
   { href: '/dashboard/reports', label: 'Reportes', icon: BarChart2 },
 ];
@@ -59,7 +61,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Sidebar collapsible="icon">
         <SidebarHeader className="p-4 flex flex-col items-center group-data-[collapsible=icon]:items-center">
            <Link href="/dashboard" className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
-            <EvolveLinkLogo className="h-8 w-auto text-primary" />
+            <EvolveLinkLogo className="h-8 w-auto text-primary" data-ai-hint="company logo" />
             <span className="text-xl font-semibold text-primary group-data-[collapsible=icon]:hidden">Qyvoo</span>
           </Link>
         </SidebarHeader>
