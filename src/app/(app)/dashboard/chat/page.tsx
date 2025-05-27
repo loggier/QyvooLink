@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -6,13 +7,13 @@ import { db } from '@/lib/firebase';
 import { 
   doc, getDoc, 
   collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, Timestamp as FirestoreTimestamp,
-  setDoc
+  setDoc, onSnapshot
 } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EvolveLinkLogo } from '@/components/icons';
-import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Edit3, Save, XCircle, Building, MapPin, Mail, Phone, UserCheck } from 'lucide-react';
+import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Edit3, Save, XCircle, Building, MapPin, Mail, Phone, UserCheck, Bot } from 'lucide-react';
 import type { WhatsAppInstance } from '../configuration/page'; 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from '@/components/ui/button';
@@ -20,7 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import Link from 'next/link'; // Added Link for configuration page
+import Link from 'next/link';
 
 interface ChatMessageDocument {
   chat_id: string;
@@ -137,12 +138,10 @@ export default function ChatPage() {
           
           const chatMap = new Map<string, ConversationSummary>();
           messages.forEach(msg => {
-            // Determine the chat_id based on whether the instance is the sender or receiver
             let currentChatId = msg.from === instanceIdentifier ? msg.to : msg.from;
-             if (msg.from.includes('@g.us') || msg.to.includes('@g.us')) { // Handle group chats
+             if (msg.from.includes('@g.us') || msg.to.includes('@g.us')) { 
                 currentChatId = msg.from.includes('@g.us') ? msg.from : msg.to;
             }
-
 
             if (!chatMap.has(currentChatId)) {
               chatMap.set(currentChatId, {
@@ -178,9 +177,6 @@ export default function ChatPage() {
       const q = query(
         collection(db, 'chat'),
         where('instanceId', '==', instanceIdentifier),
-        // This query needs to find messages WHERE (from == selectedChatId AND to == instanceNumber) OR (to == selectedChatId AND from == instanceNumber)
-        // Firestore doesn't support OR queries on different fields directly.
-        // We'll filter by chat_id (which represents the external contact)
         where('chat_id', '==', selectedChatId),
         orderBy('timestamp', 'asc')
       );
@@ -216,20 +212,19 @@ export default function ChatPage() {
           if (contactDocSnap.exists()) {
             const data = { id: contactDocSnap.id, ...contactDocSnap.data() } as ContactDetails;
             setContactDetails(data);
-            setInitialContactDetails(data); // For cancel edit
+            setInitialContactDetails(data);
           } else {
-            setContactDetails({ id: selectedChatId }); // Initialize with ID if not exists
+            setContactDetails({ id: selectedChatId }); 
             setInitialContactDetails({ id: selectedChatId });
           }
         } catch (error) {
           console.error("Error fetching contact details:", error);
-          // Potentially set an error state for contact details
         } finally {
           setIsLoadingContact(false);
         }
       };
       fetchDetails();
-      setIsEditingContact(false); // Reset edit mode when chat changes
+      setIsEditingContact(false); 
     } else {
       setContactDetails(null);
       setInitialContactDetails(null);
@@ -242,22 +237,20 @@ export default function ChatPage() {
     if (!replyMessage.trim() || !selectedChatId || !whatsAppInstance || !user) return;
 
     const newMessage: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
-      chat_id: selectedChatId, // The person we are talking to
-      from: whatsAppInstance.phoneNumber, // Agent/Instance is sending
-      to: selectedChatId,                  // Recipient is the selected chat
+      chat_id: selectedChatId, 
+      from: whatsAppInstance.phoneNumber, 
+      to: selectedChatId,                  
       instance: whatsAppInstance.name,
       instanceId: whatsAppInstance.id,
       mensaje: replyMessage.trim(),
-      user_name: 'agente', // Message sent by an agent
-      timestamp: serverTimestamp(), // Use serverTimestamp for consistency
+      user_name: 'agente', 
+      timestamp: serverTimestamp(), 
     };
 
     try {
       await addDoc(collection(db, 'chat'), newMessage);
       setReplyMessage("");
-      // Optimistic UI update or rely on snapshot listener
       console.log("Message saved to Firestore. Placeholder for Qyvoo webhook to send message.");
-      // Example: await callQyvooWebhookToSend(newMessage); 
     } catch (error) {
       console.error("Error sending message:", error);
       setError("Error al enviar el mensaje.");
@@ -275,13 +268,11 @@ export default function ChatPage() {
         empresa: contactDetails.empresa || null,
         ubicacion: contactDetails.ubicacion || null,
         tipoCliente: contactDetails.tipoCliente || null,
-      }, { merge: true }); // merge true to avoid overwriting other fields if any
-      setInitialContactDetails(contactDetails); // Update initial state after save
+      }, { merge: true });
+      setInitialContactDetails(contactDetails); 
       setIsEditingContact(false);
-      // Show success toast
     } catch (error) {
       console.error("Error saving contact details:", error);
-      // Show error toast
     } finally {
       setIsSavingContact(false);
     }
@@ -372,7 +363,7 @@ export default function ChatPage() {
               <MessageCircle className="mx-auto h-12 w-12 text-gray-400 mb-2" />
               No hay conversaciones activas.
             </div>
-          ) : error && !isLoadingChats ? ( // Ensure error only shows if not loading chats
+          ) : error && !isLoadingChats ? ( 
              <div className="p-6 text-center text-destructive">
               <AlertTriangle className="mx-auto h-12 w-12 mb-2" />
               {error}
@@ -394,7 +385,10 @@ export default function ChatPage() {
                     <div className="flex-grow overflow-hidden">
                       <p className="font-semibold truncate">{formatPhoneNumber(convo.chat_id)}</p>
                       <p className="text-xs text-muted-foreground truncate">
-                        <span className="font-medium">{convo.lastMessageSender === 'bot' ? 'Bot' : convo.lastMessageSender === 'agente' ? 'Agente' : 'Usuario'}: </span>
+                        <span className="font-medium">
+                          {convo.lastMessageSender?.toLowerCase() === 'bot' ? 'Bot' : 
+                           convo.lastMessageSender?.toLowerCase() === 'agente' ? 'Agente' : 'Usuario'}: 
+                        </span>
                         {convo.lastMessage}
                       </p>
                     </div>
@@ -413,7 +407,7 @@ export default function ChatPage() {
             <CardHeader className="p-4 border-b bg-card">
               <CardTitle className="text-lg">Chat con {formatPhoneNumber(selectedChatId)}</CardTitle>
             </CardHeader>
-            <ScrollArea className="flex-grow p-4 space-y-4">
+            <ScrollArea className="flex-grow p-4 space-y-3">
               {isLoadingMessages ? (
                 <div className="flex justify-center items-center h-full">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -425,25 +419,48 @@ export default function ChatPage() {
                     <p className="text-sm">Envía un mensaje para comenzar.</p>
                 </div>
               ) : (
-                activeMessages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex ${msg.from === selectedChatId || msg.user_name?.toLowerCase() === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
+                activeMessages.map((msg) => {
+                  const isFromContact = msg.from === selectedChatId || msg.user_name?.toLowerCase() === 'user';
+                  const isFromBot = !isFromContact && msg.user_name?.toLowerCase() === 'bot';
+                  const isFromAgent = !isFromContact && msg.user_name?.toLowerCase() === 'agente';
+
+                  return (
                     <div
-                      className={`max-w-[70%] p-3 rounded-lg shadow ${
-                        msg.from === selectedChatId || msg.user_name?.toLowerCase() === 'user'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-card border' 
-                      }`}
+                      key={msg.id}
+                      className={`flex w-full ${isFromContact ? 'justify-end' : 'justify-start'}`}
                     >
-                      <p className="text-sm">{msg.mensaje}</p>
-                      <p className={`text-xs mt-1 ${ msg.from === selectedChatId || msg.user_name?.toLowerCase() === 'user' ? 'text-primary-foreground/70 text-right' : 'text-muted-foreground text-right'}`}>
-                        {formatTimestamp(msg.timestamp)}
-                      </p>
+                      <div className={`flex items-end space-x-2 max-w-[75%]`}>
+                        {(isFromBot || isFromAgent) && (
+                          <>
+                            <div
+                              className={`py-2 px-3 rounded-lg shadow-md ${
+                                isFromBot ? 'bg-card border' : 'bg-secondary'
+                              }`}
+                            >
+                              <p className="text-sm">{msg.mensaje}</p>
+                              <p className={`text-xs mt-1 ${isFromBot ? 'text-muted-foreground' : 'text-secondary-foreground/80'} text-right`}>
+                                {formatTimestamp(msg.timestamp)}
+                              </p>
+                            </div>
+                            {isFromBot && (
+                              <Bot className="h-5 w-5 text-muted-foreground flex-shrink-0" /> 
+                            )}
+                          </>
+                        )}
+                        {isFromContact && (
+                          <div
+                            className={`py-2 px-3 rounded-lg shadow-md bg-primary text-primary-foreground`}
+                          >
+                            <p className="text-sm">{msg.mensaje}</p>
+                            <p className={`text-xs mt-1 text-primary-foreground/70 text-right`}>
+                              {formatTimestamp(msg.timestamp)}
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  )
+                })
               )}
               <div ref={messagesEndRef} />
             </ScrollArea>
@@ -567,5 +584,3 @@ export default function ChatPage() {
     </div>
   );
 }
-// Need to import onSnapshot from firebase/firestore
-import { onSnapshot } from 'firebase/firestore';
