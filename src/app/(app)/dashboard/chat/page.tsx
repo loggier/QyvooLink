@@ -177,8 +177,6 @@ export default function ChatPage() {
       setIsLoadingMessages(true);
       const instanceIdentifier = whatsAppInstance.id || whatsAppInstance.name;
       
-      // This query structure assumes `chat_id` correctly identifies the external participant's JID for 1-on-1 chats,
-      // or the group JID for group chats.
       const q = query(
         collection(db, 'chat'),
         where('instanceId', '==', instanceIdentifier),
@@ -240,7 +238,7 @@ export default function ChatPage() {
 
     const newMessageData: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
       chat_id: selectedChatId, 
-      from: whatsAppInstance.phoneNumber, 
+      from: whatsAppInstance.phoneNumber || `instance_${whatsAppInstance.id}`, // Fallback if phoneNumber is not set
       to: selectedChatId, 
       instance: whatsAppInstance.name,
       instanceId: whatsAppInstance.id,
@@ -390,7 +388,8 @@ export default function ChatPage() {
                       <p className="text-xs text-muted-foreground truncate">
                         <span className="font-medium">
                           {convo.lastMessageSender?.toLowerCase() === 'bot' ? 'Bot' : 
-                           convo.lastMessageSender?.toLowerCase() === 'agente' ? 'Agente' : 'Usuario'}: 
+                           convo.lastMessageSender?.toLowerCase() === 'agente' ? 'Agente' : 
+                           convo.lastMessageSender?.toLowerCase() === 'user' ? 'Usuario' : 'Usuario'}: 
                         </span>
                         {convo.lastMessage}
                       </p>
@@ -423,49 +422,56 @@ export default function ChatPage() {
                 </div>
               ) : (
                 activeMessages.map((msg) => {
-                  const isFromExternalContact = msg.from === selectedChatId;
                   const userNameLower = msg.user_name?.toLowerCase();
-                  
-                  let MessageIcon: React.ElementType | null = null;
-                  let iconAvatarClass = "bg-muted"; // Default for external user avatar
-                  let bubbleClass = "";
-                  let timestampClass = "";
+                  const isExternalUser = userNameLower === 'user'; // 'user' from user_name means external contact
 
-                  if (isFromExternalContact) {
-                    MessageIcon = User;
-                    bubbleClass = 'bg-muted';
-                    timestampClass = 'text-muted-foreground';
-                  } else { // Message from instance (bot or agent)
+                  let alignmentClass: string;
+                  let bubbleClass: string;
+                  let timestampAlignmentClass: string;
+                  let IconComponent: React.ElementType | null = null;
+                  let avatarFallbackClass: string;
+                  
+                  if (isExternalUser) {
+                    alignmentClass = 'justify-start'; // Align left
+                    bubbleClass = 'bg-muted dark:bg-slate-700'; 
+                    timestampAlignmentClass = 'text-muted-foreground text-left';
+                    IconComponent = User;
+                    avatarFallbackClass = "bg-gray-400 text-white";
+                  } else { // System message (bot or agent)
+                    alignmentClass = 'justify-end'; // Align right
+                    timestampAlignmentClass = 'text-right';
+
                     if (userNameLower === 'bot') {
-                      MessageIcon = Bot;
-                      iconAvatarClass = "bg-blue-500 text-white"; // Distinct for bot avatar
                       bubbleClass = 'bg-primary text-primary-foreground';
-                      timestampClass = 'text-primary-foreground/80';
-                    } else if (userNameLower === 'agente' || userNameLower === 'user') { // System 'user' or 'agente'
-                      MessageIcon = User; // Agent uses User icon
-                      iconAvatarClass = "bg-green-500 text-white"; // Distinct for agent avatar
-                      bubbleClass = 'bg-secondary text-secondary-foreground';
-                      timestampClass = 'text-secondary-foreground/80';
+                      timestampAlignmentClass += ' text-primary-foreground/80';
+                      IconComponent = Bot;
+                      avatarFallbackClass = "bg-blue-500 text-white";
+                    } else if (userNameLower === 'agente') {
+                      bubbleClass = 'bg-secondary text-secondary-foreground dark:bg-slate-600 dark:text-slate-100';
+                      timestampAlignmentClass += ' text-secondary-foreground/80';
+                      IconComponent = User; // Agent uses User icon
+                      avatarFallbackClass = "bg-green-500 text-white";
                     } else {
-                      // Fallback for other system messages (e.g. if user_name is unexpected)
-                      // Could be a generic system icon or no icon
-                       MessageIcon = User; // Default to user icon for unknown system messages
-                       bubbleClass = 'bg-gray-200 text-gray-800';
-                       timestampClass = 'text-gray-500';
+                      // Fallback for other system messages (e.g. if user_name is unexpected or missing)
+                      // Or if it's an older message from 'User' (system) before 'agente' was used
+                      bubbleClass = 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200';
+                      timestampAlignmentClass += ' text-gray-500 dark:text-gray-400';
+                      IconComponent = MessageCircle; 
+                      avatarFallbackClass = "bg-gray-300 dark:bg-gray-600 text-black dark:text-white";
                     }
                   }
 
                   return (
                     <div
                       key={msg.id}
-                      className={`flex w-full ${isFromExternalContact ? 'justify-start' : 'justify-end'}`}
+                      className={`flex w-full ${alignmentClass}`}
                     >
-                      <div className={`flex items-end space-x-2 max-w-[75%]`}>
-                        {/* Icon is always rendered to the left of the bubble within this inner div */}
-                        {MessageIcon && isFromExternalContact && (
+                      <div className={`flex items-end max-w-[75%] gap-2`}>
+                        {/* Avatar for External User (on the left) */}
+                        {IconComponent && isExternalUser && (
                           <Avatar className={`h-6 w-6 self-end mb-1`}>
-                            <AvatarFallback className={iconAvatarClass}>
-                              <MessageIcon className="h-4 w-4" />
+                            <AvatarFallback className={avatarFallbackClass}>
+                              <IconComponent className="h-4 w-4" />
                             </AvatarFallback>
                           </Avatar>
                         )}
@@ -474,17 +480,17 @@ export default function ChatPage() {
                         <div
                           className={`py-2 px-3 rounded-lg shadow-md ${bubbleClass}`}
                         >
-                          <p className="text-sm">{msg.mensaje}</p>
-                          <p className={`text-xs mt-1 ${timestampClass} ${isFromExternalContact ? 'text-left' : 'text-right'}`}>
+                          <p className="text-sm break-words">{msg.mensaje}</p>
+                          <p className={`text-xs mt-1 ${timestampAlignmentClass}`}>
                             {formatTimestamp(msg.timestamp)}
                           </p>
                         </div>
 
-                         {/* Icon for system messages (bot/agent), shown to the right of their bubble (if aligned right) */}
-                        {MessageIcon && !isFromExternalContact && (
+                         {/* Avatar for System (Bot/Agent) messages (on the right) */}
+                        {IconComponent && !isExternalUser && (
                           <Avatar className={`h-6 w-6 self-end mb-1`}>
-                             <AvatarFallback className={iconAvatarClass}>
-                              <MessageIcon className="h-4 w-4" />
+                             <AvatarFallback className={avatarFallbackClass}>
+                              <IconComponent className="h-4 w-4" />
                             </AvatarFallback>
                           </Avatar>
                         )}
@@ -615,6 +621,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
-
-    
