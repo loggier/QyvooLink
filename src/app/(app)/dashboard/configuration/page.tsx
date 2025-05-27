@@ -102,10 +102,9 @@ export default function ConfigurationPage() {
     }
     setIsLoading(true);
 
-    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
+    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false'; // Defaults to true if not 'false'
     const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
     const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/evolution';
-    
     const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
     const webhookUrl = `${baseWebhookUrl}?action=get_info_instance`;
 
@@ -143,7 +142,7 @@ export default function ConfigurationPage() {
         apiKey: instanceInfo.token || instanceToRefresh.apiKey, 
         qrCodeUrl: instanceInfo.qrCodeUrl || null, 
         connectionWebhookUrl: instanceInfo.connectionWebhookUrl || null,
-        _count: instanceInfo._count || instanceToRefresh._count,
+        _count: instanceInfo._count || instanceToRefresh._count || { Message: 0, Contact: 0, Chat: 0 },
       };
       
       const fullyUpdatedInstance = { ...instanceToRefresh, ...updatedInstanceData };
@@ -217,11 +216,10 @@ export default function ConfigurationPage() {
       return;
     }
     setIsLoading(true);
-    
-    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
+
+    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false'; // Defaults to true if not 'false'
     const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
     const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/evolution';
-
     const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
     const webhookUrl = `${baseWebhookUrl}?action=create_instance`;
 
@@ -300,6 +298,7 @@ export default function ConfigurationPage() {
       toast({ variant: "destructive", title: "Error", description: "No hay instancia para eliminar o no estás autenticado." });
       return;
     }
+     if (isLoading) return; // Prevent multiple clicks if already loading
     
     console.log("Opening delete confirmation dialog.");
     setIsDeleteDialogOpen(true);
@@ -307,7 +306,7 @@ export default function ConfigurationPage() {
 
   const confirmDeleteInstance = async () => {
     console.log("confirmDeleteInstance Fired.");
-    if (!user || !whatsAppInstance) return; // Should already be checked by handleDeleteInstanceClick
+    if (!user || !whatsAppInstance) return; 
 
     setIsLoading(true);
     setIsDeleteDialogOpen(false);
@@ -315,7 +314,6 @@ export default function ConfigurationPage() {
     const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
     const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
     const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/evolution';
-    
     const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
     const webhookUrl = `${baseWebhookUrl}?action=delete_instance`;
     
@@ -370,7 +368,6 @@ export default function ConfigurationPage() {
     const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
     const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
     const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook-test/evolution';
-    
     const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
     const webhookUrl = `${baseWebhookUrl}?action=connect_instance`;
 
@@ -402,9 +399,11 @@ export default function ConfigurationPage() {
         status: 'Pendiente',
       };
       
-      const instanceToUpdate = { ...whatsAppInstance, ...newInstanceData };
-      setWhatsAppInstance(instanceToUpdate); // Update local state
-      await setDoc(doc(db, 'instances', user.uid), instanceToUpdate , { merge: true }); // Update Firestore
+      const instanceToUpdate = { ...(whatsAppInstance || {}), ...newInstanceData } as WhatsAppInstance;
+      setWhatsAppInstance(instanceToUpdate); 
+      if (whatsAppInstance) { // Only save to DB if there was an existing instance to update its QR
+         await setDoc(doc(db, 'instances', user.uid), instanceToUpdate , { merge: true }); 
+      }
       
       toast({ title: "Código QR Generado", description: "Escanea el código QR para conectar tu instancia." });
 
