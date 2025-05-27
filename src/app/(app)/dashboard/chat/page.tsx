@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EvolveLinkLogo } from '@/components/icons';
-import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Edit3, Save, XCircle, Building, MapPin, Mail, Phone, UserCheck, Bot } from 'lucide-react';
+import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Edit3, Save, XCircle, Building, MapPin, Mail, Phone, UserCheck, Bot, UserRound } from 'lucide-react';
 import type { WhatsAppInstance } from '../configuration/page'; 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Link from 'next/link';
+import { useToast } from '@/hooks/use-toast';
 
 interface ChatMessageDocument {
   chat_id: string;
@@ -48,15 +49,20 @@ interface ConversationSummary {
 
 interface ContactDetails {
   id?: string; 
+  nombre?: string;
+  apellido?: string;
   email?: string;
   telefono?: string;
   empresa?: string;
   ubicacion?: string;
   tipoCliente?: 'Prospecto' | 'Cliente' | 'Proveedor' | 'Otro';
+  instanceId?: string;
+  userId?: string;
 }
 
 export default function ChatPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [whatsAppInstance, setWhatsAppInstance] = useState<WhatsAppInstance | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
@@ -143,7 +149,7 @@ export default function ChatPage() {
             } else if (msg.to === instanceIdentifier) { 
                 currentChatId = msg.from;
             }
-            if (msg.chat_id.endsWith('@g.us')) { // Handle group chats if chat_id is the group JID
+            if (msg.chat_id.endsWith('@g.us')) { 
                 currentChatId = msg.chat_id;
             }
 
@@ -204,7 +210,7 @@ export default function ChatPage() {
   }, [selectedChatId, whatsAppInstance]);
 
   useEffect(() => {
-    if (selectedChatId) {
+    if (selectedChatId && user && whatsAppInstance) {
       setIsLoadingContact(true);
       const fetchDetails = async () => {
         try {
@@ -215,11 +221,24 @@ export default function ChatPage() {
             setContactDetails(data);
             setInitialContactDetails(data);
           } else {
-            setContactDetails({ id: selectedChatId, telefono: formatPhoneNumber(selectedChatId) }); 
-            setInitialContactDetails({ id: selectedChatId, telefono: formatPhoneNumber(selectedChatId) });
+            const initialData: ContactDetails = { 
+              id: selectedChatId, 
+              telefono: formatPhoneNumber(selectedChatId),
+              nombre: "",
+              apellido: "",
+              email: "",
+              empresa: "",
+              ubicacion: "",
+              tipoCliente: undefined,
+              instanceId: whatsAppInstance.id,
+              userId: user.uid,
+            };
+            setContactDetails(initialData); 
+            setInitialContactDetails(initialData);
           }
         } catch (error) {
           console.error("Error fetching contact details:", error);
+           toast({ variant: "destructive", title: "Error", description: "Error al cargar detalles del contacto." });
         } finally {
           setIsLoadingContact(false);
         }
@@ -231,14 +250,14 @@ export default function ChatPage() {
       setInitialContactDetails(null);
       setIsEditingContact(false);
     }
-  }, [selectedChatId]);
+  }, [selectedChatId, user, whatsAppInstance, toast]);
 
   const handleSendMessage = async () => {
     if (!replyMessage.trim() || !selectedChatId || !whatsAppInstance || !user) return;
 
     const newMessageData: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
       chat_id: selectedChatId, 
-      from: whatsAppInstance.phoneNumber || `instance_${whatsAppInstance.id}`, // Fallback if phoneNumber is not set
+      from: whatsAppInstance.phoneNumber || `instance_${whatsAppInstance.id}`, 
       to: selectedChatId, 
       instance: whatsAppInstance.name,
       instanceId: whatsAppInstance.id,
@@ -251,36 +270,47 @@ export default function ChatPage() {
       await addDoc(collection(db, 'chat'), newMessageData);
       setReplyMessage("");
       console.log("Message saved to Firestore. TODO: Implement Qyvoo webhook call to send the message via WhatsApp.");
+       toast({ title: "Mensaje Enviado", description: "Tu mensaje ha sido guardado en el chat." });
     } catch (error) {
       console.error("Error sending message:", error);
       setError("Error al enviar el mensaje.");
+      toast({ variant: "destructive", title: "Error", description: "No se pudo enviar el mensaje." });
     }
   };
   
   const handleSaveContactDetails = async () => {
-    if (!contactDetails || !selectedChatId) return;
+    if (!contactDetails || !selectedChatId || !user || !whatsAppInstance) return;
     setIsSavingContact(true);
     try {
       const contactDocRef = doc(db, 'contacts', selectedChatId);
-      const { id, ...detailsToSave } = contactDetails;
-      await setDoc(contactDocRef, { 
-        ...detailsToSave,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { id, ...detailsToSave } = contactDetails; 
+
+      const dataToSave: ContactDetails = {
+        nombre: detailsToSave.nombre || "",
+        apellido: detailsToSave.apellido || "",
         email: detailsToSave.email || null, 
         telefono: detailsToSave.telefono || null,
         empresa: detailsToSave.empresa || null,
         ubicacion: detailsToSave.ubicacion || null,
-        tipoCliente: detailsToSave.tipoCliente || null,
-       }, { merge: true });
+        tipoCliente: detailsToSave.tipoCliente || undefined, // Allow undefined for unselected
+        instanceId: detailsToSave.instanceId || whatsAppInstance.id,
+        userId: detailsToSave.userId || user.uid,
+      };
+
+      await setDoc(contactDocRef, dataToSave, { merge: true });
       setInitialContactDetails(contactDetails); 
       setIsEditingContact(false);
+      toast({ title: "Contacto Actualizado", description: "La información del contacto ha sido guardada." });
     } catch (error) {
       console.error("Error saving contact details:", error);
+      toast({ variant: "destructive", title: "Error", description: "No se pudo guardar la información del contacto." });
     } finally {
       setIsSavingContact(false);
     }
   };
 
-  const handleContactInputChange = (field: keyof Omit<ContactDetails, 'id'>, value: string) => {
+  const handleContactInputChange = (field: keyof Omit<ContactDetails, 'id' | 'instanceId' | 'userId'>, value: string) => {
     setContactDetails(prev => prev ? { ...prev, [field]: value } : null);
   };
   
@@ -423,7 +453,7 @@ export default function ChatPage() {
               ) : (
                 activeMessages.map((msg) => {
                   const userNameLower = msg.user_name?.toLowerCase();
-                  const isExternalUser = userNameLower === 'user'; // 'user' from user_name means external contact
+                  const isExternalUser = userNameLower === 'user'; 
 
                   let alignmentClass: string;
                   let bubbleClass: string;
@@ -432,13 +462,13 @@ export default function ChatPage() {
                   let avatarFallbackClass: string;
                   
                   if (isExternalUser) {
-                    alignmentClass = 'justify-start'; // Align left
+                    alignmentClass = 'justify-start'; 
                     bubbleClass = 'bg-muted dark:bg-slate-700'; 
                     timestampAlignmentClass = 'text-muted-foreground text-left';
                     IconComponent = User;
                     avatarFallbackClass = "bg-gray-400 text-white";
-                  } else { // System message (bot or agent)
-                    alignmentClass = 'justify-end'; // Align right
+                  } else { 
+                    alignmentClass = 'justify-end'; 
                     timestampAlignmentClass = 'text-right';
 
                     if (userNameLower === 'bot') {
@@ -449,11 +479,9 @@ export default function ChatPage() {
                     } else if (userNameLower === 'agente') {
                       bubbleClass = 'bg-secondary text-secondary-foreground dark:bg-slate-600 dark:text-slate-100';
                       timestampAlignmentClass += ' text-secondary-foreground/80';
-                      IconComponent = User; // Agent uses User icon
+                      IconComponent = User; 
                       avatarFallbackClass = "bg-green-500 text-white";
                     } else {
-                      // Fallback for other system messages (e.g. if user_name is unexpected or missing)
-                      // Or if it's an older message from 'User' (system) before 'agente' was used
                       bubbleClass = 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200';
                       timestampAlignmentClass += ' text-gray-500 dark:text-gray-400';
                       IconComponent = MessageCircle; 
@@ -467,7 +495,6 @@ export default function ChatPage() {
                       className={`flex w-full ${alignmentClass}`}
                     >
                       <div className={`flex items-end max-w-[75%] gap-2`}>
-                        {/* Avatar for External User (on the left) */}
                         {IconComponent && isExternalUser && (
                           <Avatar className={`h-6 w-6 self-end mb-1`}>
                             <AvatarFallback className={avatarFallbackClass}>
@@ -476,7 +503,6 @@ export default function ChatPage() {
                           </Avatar>
                         )}
                         
-                        {/* Message Bubble */}
                         <div
                           className={`py-2 px-3 rounded-lg shadow-md ${bubbleClass}`}
                         >
@@ -486,7 +512,6 @@ export default function ChatPage() {
                           </p>
                         </div>
 
-                         {/* Avatar for System (Bot/Agent) messages (on the right) */}
                         {IconComponent && !isExternalUser && (
                           <Avatar className={`h-6 w-6 self-end mb-1`}>
                              <AvatarFallback className={avatarFallbackClass}>
@@ -563,6 +588,14 @@ export default function ChatPage() {
             ) : contactDetails ? (
               <div className="space-y-4">
                 <div>
+                  <Label htmlFor="contactNombre" className="flex items-center text-sm text-muted-foreground"><UserRound className="h-4 w-4 mr-2"/>Nombre</Label>
+                  <Input id="contactNombre" value={contactDetails.nombre || ""} onChange={(e) => handleContactInputChange('nombre', e.target.value)} readOnly={!isEditingContact} placeholder="No disponible"/>
+                </div>
+                <div>
+                  <Label htmlFor="contactApellido" className="flex items-center text-sm text-muted-foreground"><UserRound className="h-4 w-4 mr-2"/>Apellido</Label>
+                  <Input id="contactApellido" value={contactDetails.apellido || ""} onChange={(e) => handleContactInputChange('apellido', e.target.value)} readOnly={!isEditingContact} placeholder="No disponible"/>
+                </div>
+                <div>
                   <Label htmlFor="contactEmail" className="flex items-center text-sm text-muted-foreground"><Mail className="h-4 w-4 mr-2"/>Correo Electrónico</Label>
                   <Input id="contactEmail" value={contactDetails.email || ""} onChange={(e) => handleContactInputChange('email', e.target.value)} readOnly={!isEditingContact} placeholder="No disponible"/>
                 </div>
@@ -621,3 +654,4 @@ export default function ChatPage() {
     </div>
   );
 }
+
