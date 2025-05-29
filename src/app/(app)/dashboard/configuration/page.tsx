@@ -10,10 +10,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { useState, useEffect, useCallback } from 'react';
@@ -29,7 +29,7 @@ const phoneRegex = new RegExp(
 
 const addInstanceSchema = z.object({
   instanceName: z.string().min(3, { message: "El nombre de la instancia debe tener al menos 3 caracteres." }),
-  phoneNumber: z.string().regex(phoneRegex, { message: "Número de teléfono inválido." }),
+  phoneNumber: z.string().regex(phoneRegex, { message: "Número de teléfono inválido." })
 });
 
 type AddInstanceFormData = z.infer<typeof addInstanceSchema>;
@@ -52,7 +52,8 @@ interface WhatsAppInstance {
   connectionWebhookUrl?: string | null; 
   _count?: WhatsAppInstanceCount;
   userId: string;
-  userEmail: string | null;
+ userEmail: string | null; 
+ 
 }
 
 interface RefreshedInstanceInfo {
@@ -61,7 +62,7 @@ interface RefreshedInstanceInfo {
   connectionStatus: string; 
   token?: string; 
   qrCodeUrl?: string | null;
-  connectionWebhookUrl?: string | null;
+ connectionWebhookUrl?: string | null;
   _count?: WhatsAppInstanceCount;
 }
 
@@ -77,6 +78,9 @@ export default function ConfigurationPage() {
   const [isQrCodeModalOpen, setIsQrCodeModalOpen] = useState(false);
   const [qrCodeDataUri, setQrCodeDataUri] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+  const [demoConfig, setDemoConfig] = useState({ demo: false, demoPhoneNumber: '' });
+  const [isSavingDemoConfig, setIsSavingDemoConfig] = useState(false);
 
 
   const mapWebhookStatus = useCallback((webhookStatus?: string): InstanceStatus => {
@@ -160,6 +164,43 @@ export default function ConfigurationPage() {
     }
   }, [user, toast, mapWebhookStatus]);
 
+  const handleSaveDemoConfig = async () => {
+    if (!user || !whatsAppInstance) {
+      toast({ variant: "destructive", title: "Error", description: "No se puede guardar la configuración demo sin una instancia o usuario autenticado." });
+      return;
+    }
+
+    if (demoConfig.demo && (!demoConfig.demoPhoneNumber || !phoneRegex.test(demoConfig.demoPhoneNumber))) {
+       toast({ variant: "destructive", title: "Error de validación", description: "El número de teléfono demo es requerido y debe ser válido en modo demo si el modo demo está habilitado." });
+       return;
+    }
+    
+    setIsSavingDemoConfig(true);
+    const updatedInstance = {
+      ...whatsAppInstance,
+      demo: demoConfig.demo,
+      demoPhoneNumber: demoConfig.demo ? demoConfig.demoPhoneNumber : null,
+    };
+
+    try {
+      await setDoc(doc(db, 'instances', user.uid), updatedInstance, { merge: true });
+      setWhatsAppInstance(updatedInstance);
+      toast({ title: "Configuración Demo Actualizada", description: "La configuración del modo demo ha sido guardada." });
+      // Update local state to match the saved state from Firestore
+      setDemoConfig({ demo: updatedInstance.demo ?? false, demoPhoneNumber: updatedInstance.demoPhoneNumber || '' });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error al actualizar", description: `No se pudo guardar la configuración demo: ${error.message}` });
+    } finally {
+      setIsSavingDemoConfig(false);
+    }
+  };
+
+  // Add this effect to sync demo config state with whatsAppInstance when whatsAppInstance changes
+ useEffect(() => {
+ if (whatsAppInstance) {
+      setDemoConfig({ demo: whatsAppInstance.demo ?? false, demoPhoneNumber: whatsAppInstance.demoPhoneNumber || '' });
+ }
+ }, [whatsAppInstance]);
 
   useEffect(() => {
     const loadInstance = async () => {
@@ -171,7 +212,11 @@ export default function ConfigurationPage() {
 
           if (instanceDocSnap.exists()) {
             const instanceDataFromDb = instanceDocSnap.data() as WhatsAppInstance;
-            setWhatsAppInstance(instanceDataFromDb); 
+            setWhatsAppInstance(instanceDataFromDb);
+            setDemoConfig({
+              demo: instanceDataFromDb.demo ?? false,
+              demoPhoneNumber: instanceDataFromDb.demoPhoneNumber || '',
+            });
             await fetchAndUpdateInstanceInfo(instanceDataFromDb, false); 
           } else {
             setWhatsAppInstance(null);
@@ -224,14 +269,15 @@ export default function ConfigurationPage() {
     const webhookUrl = `${baseWebhookUrl}?action=create_instance`;
 
     try {
+      const requestBody: any = {
+ instanceName: values.instanceName,
+        phoneNumber: values.phoneNumber, 
+        userId: user.uid, 
+      };
       const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          instanceName: values.instanceName,
-          phoneNumber: values.phoneNumber, 
-          userId: user.uid, 
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const responseBodyArray = await response.json();
@@ -415,7 +461,7 @@ export default function ConfigurationPage() {
   };
 
 
-  const handleRefreshWrapper = async () => {
+ const handleRefreshWrapper = async () => {
     if (!whatsAppInstance) return;
     await fetchAndUpdateInstanceInfo(whatsAppInstance, true);
   }
@@ -441,7 +487,7 @@ export default function ConfigurationPage() {
 
   return (
     <div className="space-y-8">
-      <div>
+ <div>
         <h2 className="text-3xl font-bold tracking-tight text-foreground">Panel de Configuración Qyvoo</h2>
         <p className="text-muted-foreground">
           Gestiona la configuración de tu API Qyvoo, instancias de WhatsApp, horarios comerciales y mensajes.
@@ -494,19 +540,14 @@ export default function ConfigurationPage() {
                             </FormControl>
                             <FormMessage />
                           </FormItem>
-                        )}
-                      />
-                      <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => setIsAddInstanceDialogOpen(false)} disabled={isLoading}>
-                          Cancelar
-                        </Button>
-                        <Button type="submit" disabled={isLoading}>
-                          {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Agregar Instancia"}
-                        </Button>
-                      </DialogFooter>
+                        )}/>
+                        <Button type="submit" disabled={isLoading || form.formState.isSubmitting} className="mt-4 w-full">
+  {isLoading || form.formState.isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+  {isLoading || form.formState.isSubmitting ? "Agregando..." : "Agregar Instancia"}
+</Button>
                     </form>
                   </Form>
-                </DialogContent>
+ </DialogContent>
               </Dialog>
             )}
           </div>
@@ -679,7 +720,8 @@ export default function ConfigurationPage() {
       </AlertDialog>
 
 
-      <Card>
+
+ <Card>
         <CardHeader>
           <CardTitle>Configuración General de API Qyvoo</CardTitle>
           <CardDescription>Configura tu conexión a la API general de Qyvoo (si aplica).</CardDescription>
@@ -724,6 +766,48 @@ export default function ConfigurationPage() {
         </CardContent>
       </Card>
 
+ <Card>
+ <CardHeader>
+ <CardTitle>Configuración Demo</CardTitle>
+ <CardDescription>
+ Habilita el modo demo para simular interacciones de WhatsApp sin una instancia real.
+ </CardDescription>
+ </CardHeader>
+ <CardContent className="space-y-4">
+ <div className="flex items-center space-x-2">
+ <Switch
+            id="isDemo"
+ checked={demoConfig.demo}
+ onCheckedChange={(checked) => setDemoConfig(prevState => ({ ...prevState, demo: checked }))}
+ disabled={!whatsAppInstance || isSavingDemoConfig}
+ />
+ <Label htmlFor="isDemo">Habilitar Modo Demo</Label>
+ </div>
+ {demoConfig.demo && (
+ <div className="space-y-2">
+ <Label htmlFor="numeroDemo">Número de Teléfono Demo (con código de país)</Label>
+ <Input
+              id="numeroDemo"
+ type="tel"
+ placeholder="+1234567890"
+ value={demoConfig.demoPhoneNumber}
+ onChange={(e) => setDemoConfig(prevState => ({ ...prevState, demoPhoneNumber: e.target.value }))}
+ disabled={!whatsAppInstance || isSavingDemoConfig}
+ />
+ <p className="text-sm text-muted-foreground">
+ Este número será usado como destino en las simulaciones.
+ </p>
+ </div>
+ )}
+ </CardContent>
+ <CardFooter>
+ <Button onClick={handleSaveDemoConfig} disabled={!whatsAppInstance || isSavingDemoConfig}>
+ {isSavingDemoConfig ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+ {isSavingDemoConfig ? "Guardando..." : "Guardar Demo"}
+ </Button>
+ </CardFooter>
+ </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Respuestas Automáticas y Mensajes de Bienvenida</CardTitle>
@@ -760,7 +844,7 @@ export default function ConfigurationPage() {
         <Button size="lg" onClick={() => toast({ title: "Guardado", description: "Configuraciones guardadas (simulado)." })}>
             Guardar Configuraciones
         </Button>
-      </div>
+ </div>
     </div>
   );
 }
