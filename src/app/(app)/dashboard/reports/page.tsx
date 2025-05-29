@@ -116,7 +116,7 @@ export default function ReportsPage() {
                  <ChartLegend content={<ChartLegendContent />} />
               </RechartsBarChart>
             </ChartContainer>
-          </CardContent>
+          </CardContent> 
         </Card>
       </div>
 
