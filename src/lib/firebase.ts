@@ -37,7 +37,7 @@ if (
 
 const firebaseConfig = {
   apiKey: apiKey,
-  authDomain: authDomain,
+  authDomain: authDomain, 
   projectId: projectId,
   storageBucket: storageBucket,
   messagingSenderId: messagingSenderId,

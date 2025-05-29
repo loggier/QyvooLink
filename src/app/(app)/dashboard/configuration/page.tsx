@@ -9,11 +9,11 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { useForm, Controller } from 'react-hook-form';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { useState, useEffect, useCallback } from 'react';
@@ -42,7 +42,7 @@ interface WhatsAppInstanceCount {
   Chat: number;
 }
 
-interface WhatsAppInstance {
+export interface WhatsAppInstance { // Exported for chat page
   id: string; 
   name: string; 
   phoneNumber: string;
@@ -52,8 +52,9 @@ interface WhatsAppInstance {
   connectionWebhookUrl?: string | null; 
   _count?: WhatsAppInstanceCount;
   userId: string;
- userEmail: string | null; 
- 
+  userEmail: string | null;
+  demo?: boolean;
+  demoPhoneNumber?: string | null;
 }
 
 interface RefreshedInstanceInfo {
@@ -62,7 +63,7 @@ interface RefreshedInstanceInfo {
   connectionStatus: string; 
   token?: string; 
   qrCodeUrl?: string | null;
- connectionWebhookUrl?: string | null;
+  connectionWebhookUrl?: string | null;
   _count?: WhatsAppInstanceCount;
 }
 
@@ -106,10 +107,35 @@ export default function ConfigurationPage() {
     }
     setIsLoading(true);
 
-    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false'; // Defaults to true if not 'false'
-    const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
-    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
-    const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
+    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
+    const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL;
+    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL;
+    
+    let baseWebhookUrl: string | undefined;
+
+    if (useTestWebhook) {
+        baseWebhookUrl = testWebhookBase;
+        if (!baseWebhookUrl) {
+            toast({
+                variant: "destructive",
+                title: "Configuración Incompleta",
+                description: "La URL del webhook de prueba (NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL) no está configurada.",
+            });
+            setIsLoading(false);
+            return false;
+        }
+    } else {
+        baseWebhookUrl = prodWebhookBase;
+        if (!baseWebhookUrl) {
+            toast({
+                variant: "destructive",
+                title: "Configuración Incompleta",
+                description: "La URL del webhook de producción (NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL) no está configurada.",
+            });
+            setIsLoading(false);
+            return false;
+        }
+    }
     const webhookUrl = `${baseWebhookUrl}?action=get_info_instance`;
 
     try {
@@ -134,6 +160,7 @@ export default function ConfigurationPage() {
           await deleteDoc(doc(db, 'instances', user.uid));
           setWhatsAppInstance(null);
           if (showToast) toast({ title: "Instancia no encontrada", description: "La instancia fue eliminada de Qyvoo y de tu configuración." });
+          setIsLoading(false);
           return false;
         }
         throw new Error(`Respuesta del webhook no fue exitosa o datos de instancia no encontrados: ${errorDetail}`);
@@ -155,12 +182,12 @@ export default function ConfigurationPage() {
       setWhatsAppInstance(fullyUpdatedInstance);
 
       if (showToast) toast({ title: "Estado Actualizado", description: "El estado de la instancia de Qyvoo ha sido actualizado." });
+      setIsLoading(false);
       return true;
     } catch (error: any) {
       if (showToast) toast({ variant: "destructive", title: "Error al refrescar", description: error.message });
-      return false;
-    } finally {
       setIsLoading(false);
+      return false;
     }
   }, [user, toast, mapWebhookStatus]);
 
@@ -186,7 +213,6 @@ export default function ConfigurationPage() {
       await setDoc(doc(db, 'instances', user.uid), updatedInstance, { merge: true });
       setWhatsAppInstance(updatedInstance);
       toast({ title: "Configuración Demo Actualizada", description: "La configuración del modo demo ha sido guardada." });
-      // Update local state to match the saved state from Firestore
       setDemoConfig({ demo: updatedInstance.demo ?? false, demoPhoneNumber: updatedInstance.demoPhoneNumber || '' });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error al actualizar", description: `No se pudo guardar la configuración demo: ${error.message}` });
@@ -195,7 +221,6 @@ export default function ConfigurationPage() {
     }
   };
 
-  // Add this effect to sync demo config state with whatsAppInstance when whatsAppInstance changes
  useEffect(() => {
  if (whatsAppInstance) {
       setDemoConfig({ demo: whatsAppInstance.demo ?? false, demoPhoneNumber: whatsAppInstance.demoPhoneNumber || '' });
@@ -262,15 +287,40 @@ export default function ConfigurationPage() {
     }
     setIsLoading(true);
 
-    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false'; // Defaults to true if not 'false'
-    const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
-    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
-    const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
+    const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
+    const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL;
+    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL;
+
+    let baseWebhookUrl: string | undefined;
+
+    if (useTestWebhook) {
+        baseWebhookUrl = testWebhookBase;
+        if (!baseWebhookUrl) {
+            toast({
+                variant: "destructive",
+                title: "Configuración Incompleta",
+                description: "La URL del webhook de prueba (NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL) no está configurada.",
+            });
+            setIsLoading(false);
+            return;
+        }
+    } else {
+        baseWebhookUrl = prodWebhookBase;
+        if (!baseWebhookUrl) {
+            toast({
+                variant: "destructive",
+                title: "Configuración Incompleta",
+                description: "La URL del webhook de producción (NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL) no está configurada.",
+            });
+            setIsLoading(false);
+            return;
+        }
+    }
     const webhookUrl = `${baseWebhookUrl}?action=create_instance`;
 
     try {
       const requestBody: any = {
- instanceName: values.instanceName,
+        instanceName: values.instanceName,
         phoneNumber: values.phoneNumber, 
         userId: user.uid, 
       };
@@ -335,32 +385,50 @@ export default function ConfigurationPage() {
   }
 
   const handleDeleteInstanceClick = () => {
-    console.log("handleDeleteInstanceClick Fired. Current isLoading state:", isLoading);
-    console.log("User:", user);
-    console.log("WhatsApp Instance:", whatsAppInstance);
-
     if (!user || !whatsAppInstance) {
-      console.log("Exiting handleDeleteInstanceClick: User or WhatsApp instance is missing.");
       toast({ variant: "destructive", title: "Error", description: "No hay instancia para eliminar o no estás autenticado." });
       return;
     }
-     if (isLoading) return; // Prevent multiple clicks if already loading
+     if (isLoading) return;
     
-    console.log("Opening delete confirmation dialog.");
     setIsDeleteDialogOpen(true);
   };
 
   const confirmDeleteInstance = async () => {
-    console.log("confirmDeleteInstance Fired.");
     if (!user || !whatsAppInstance) return; 
 
     setIsLoading(true);
     setIsDeleteDialogOpen(false);
 
     const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
-    const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
-    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
-    const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
+    const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL;
+    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL;
+    
+    let baseWebhookUrl: string | undefined;
+
+    if (useTestWebhook) {
+        baseWebhookUrl = testWebhookBase;
+        if (!baseWebhookUrl) {
+            toast({
+                variant: "destructive",
+                title: "Configuración Incompleta",
+                description: "La URL del webhook de prueba (NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL) no está configurada.",
+            });
+            setIsLoading(false);
+            return;
+        }
+    } else {
+        baseWebhookUrl = prodWebhookBase;
+        if (!baseWebhookUrl) {
+            toast({
+                variant: "destructive",
+                title: "Configuración Incompleta",
+                description: "La URL del webhook de producción (NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL) no está configurada.",
+            });
+            setIsLoading(false);
+            return;
+        }
+    }
     const webhookUrl = `${baseWebhookUrl}?action=delete_instance`;
     
     try {
@@ -412,9 +480,34 @@ export default function ConfigurationPage() {
     setIsLoading(true);
 
     const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
-    const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
-    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL || 'https://n8n.vemontech.com/webhook/evolution';
-    const baseWebhookUrl = useTestWebhook ? testWebhookBase : prodWebhookBase;
+    const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL;
+    const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL;
+
+    let baseWebhookUrl: string | undefined;
+
+    if (useTestWebhook) {
+        baseWebhookUrl = testWebhookBase;
+        if (!baseWebhookUrl) {
+            toast({
+                variant: "destructive",
+                title: "Configuración Incompleta",
+                description: "La URL del webhook de prueba (NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL) no está configurada.",
+            });
+            setIsLoading(false);
+            return;
+        }
+    } else {
+        baseWebhookUrl = prodWebhookBase;
+        if (!baseWebhookUrl) {
+            toast({
+                variant: "destructive",
+                title: "Configuración Incompleta",
+                description: "La URL del webhook de producción (NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL) no está configurada.",
+            });
+            setIsLoading(false);
+            return;
+        }
+    }
     const webhookUrl = `${baseWebhookUrl}?action=connect_instance`;
 
     try {
@@ -447,7 +540,7 @@ export default function ConfigurationPage() {
       
       const instanceToUpdate = { ...(whatsAppInstance || {}), ...newInstanceData } as WhatsAppInstance;
       setWhatsAppInstance(instanceToUpdate); 
-      if (whatsAppInstance) { // Only save to DB if there was an existing instance to update its QR
+      if (whatsAppInstance) { 
          await setDoc(doc(db, 'instances', user.uid), instanceToUpdate , { merge: true }); 
       }
       
@@ -659,10 +752,29 @@ export default function ConfigurationPage() {
                     <RefreshCw className={`mr-2 h-4 w-4 ${isLoading && whatsAppInstance ? 'animate-spin' : ''}`} />
                     {isLoading && whatsAppInstance ? "Refrescando..." : "Refrescar Estado"}
                   </Button>
-                  <Button variant="destructive" onClick={handleDeleteInstanceClick} disabled={isLoading}>
-                     {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                    {isLoading ? "Eliminando..." : "Eliminar"}
-                  </Button>
+                  <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+                    <AlertDialogTrigger asChild>
+                       <Button variant="destructive" onClick={(e) => { e.preventDefault(); handleDeleteInstanceClick();}} disabled={isLoading}>
+                         {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                         {isLoading ? "Eliminando..." : "Eliminar"}
+                       </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>¿Estás absolutamente seguro?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Esta acción no se puede deshacer. Esto eliminará permanentemente tu instancia de Qyvoo
+                          y sus datos de nuestros servidores, así como de tu configuración en esta aplicación.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setIsDeleteDialogOpen(false)} disabled={isLoading}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmDeleteInstance} disabled={isLoading} className="bg-destructive hover:bg-destructive/90">
+                          {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Eliminar"}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </CardFooter>
             </Card>
@@ -700,26 +812,6 @@ export default function ConfigurationPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Estás absolutamente seguro?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta acción no se puede deshacer. Esto eliminará permanentemente tu instancia de Qyvoo
-              y sus datos de nuestros servidores, así como de tu configuración en esta aplicación.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setIsDeleteDialogOpen(false)} disabled={isLoading}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeleteInstance} disabled={isLoading}>
-              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Eliminar"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-
 
  <Card>
         <CardHeader>
@@ -803,7 +895,7 @@ export default function ConfigurationPage() {
  <CardFooter>
  <Button onClick={handleSaveDemoConfig} disabled={!whatsAppInstance || isSavingDemoConfig}>
  {isSavingDemoConfig ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
- {isSavingDemoConfig ? "Guardando..." : "Guardar Demo"}
+ {isSavingDemoConfig ? "Guardando..." : "Guardar Configuración Demo"}
  </Button>
  </CardFooter>
  </Card>
