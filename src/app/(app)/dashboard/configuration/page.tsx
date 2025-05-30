@@ -55,6 +55,7 @@ export interface WhatsAppInstance { // Exported for chat page
   userEmail: string | null;
   demo?: boolean;
   demoPhoneNumber?: string | null;
+  chatbotEnabled?: boolean; // Nueva propiedad
 }
 
 interface RefreshedInstanceInfo {
@@ -81,7 +82,36 @@ export default function ConfigurationPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   const [demoConfig, setDemoConfig] = useState({ demo: false, demoPhoneNumber: '' });
+  const [botsEnabled, setBotsEnabled] = useState(true); // New state for Bots
   const [isSavingDemoConfig, setIsSavingDemoConfig] = useState(false);
+
+  const [chatbotConfig, setChatbotConfig] = useState({ enabled: false });
+  const [isSavingChatbotConfig, setIsSavingChatbotConfig] = useState(false);
+  
+  // Agregar esta función para manejar el guardado del chatbot
+const handleSaveChatbotConfig = async () => {
+  if (!user || !whatsAppInstance) {
+    toast({ variant: "destructive", title: "Error", description: "No se puede guardar la configuración del chatbot sin una instancia o usuario autenticado." });
+    return;
+  }
+
+  setIsSavingChatbotConfig(true);
+  const updatedInstance = {
+    ...whatsAppInstance,
+    chatbotEnabled: chatbotConfig.enabled,
+  };
+
+  try {
+    await setDoc(doc(db, 'instances', user.uid), updatedInstance, { merge: true });
+    setWhatsAppInstance(updatedInstance);
+    toast({ title: "Configuración Chatbot Actualizada", description: "La configuración del chatbot ha sido guardada." });
+    setChatbotConfig({ enabled: updatedInstance.chatbotEnabled ?? false });
+  } catch (error: any) {
+    toast({ variant: "destructive", title: "Error al actualizar", description: `No se pudo guardar la configuración del chatbot: ${error.message}` });
+  } finally {
+    setIsSavingChatbotConfig(false);
+  }
+};
 
 
   const mapWebhookStatus = useCallback((webhookStatus?: string): InstanceStatus => {
@@ -220,6 +250,14 @@ export default function ConfigurationPage() {
       setIsSavingDemoConfig(false);
     }
   };
+
+  // Agregar este useEffect para sincronizar el estado del chatbot cuando cambie la instancia
+useEffect(() => {
+  if (whatsAppInstance) {
+    setChatbotConfig({ enabled: whatsAppInstance.chatbotEnabled ?? false });
+  }
+}, [whatsAppInstance]);
+
 
  useEffect(() => {
  if (whatsAppInstance) {
@@ -891,6 +929,7 @@ export default function ConfigurationPage() {
  </p>
  </div>
  )}
+               
  </CardContent>
  <CardFooter>
  <Button onClick={handleSaveDemoConfig} disabled={!whatsAppInstance || isSavingDemoConfig}>
@@ -899,6 +938,48 @@ export default function ConfigurationPage() {
  </Button>
  </CardFooter>
  </Card>
+<Card>
+  <CardHeader>
+    <CardTitle>Configuración Chatbot</CardTitle>
+    <CardDescription>
+      Habilita o deshabilita el chatbot automático para responder mensajes.
+    </CardDescription>
+  </CardHeader>
+  <CardContent className="space-y-4">
+    <div className="flex items-center space-x-2">
+      <Switch
+        id="chatbotEnabled"
+        checked={chatbotConfig.enabled}
+        onCheckedChange={(checked) => setChatbotConfig(prevState => ({ ...prevState, enabled: checked }))}
+        disabled={!whatsAppInstance || isSavingChatbotConfig}
+      />
+      <Label htmlFor="chatbotEnabled">Activar Chatbot</Label>
+    </div>
+    {chatbotConfig.enabled && (
+      <div className="mt-4 p-4 border rounded-md bg-accent/10">
+        <p className="text-sm text-accent-foreground">
+          ✅ El chatbot está habilitado y responderá automáticamente a los mensajes recibidos.
+        </p>
+      </div>
+    )}
+    {!chatbotConfig.enabled && (
+      <div className="mt-4 p-4 border rounded-md bg-muted/50">
+        <p className="text-sm text-muted-foreground">
+          ⏸️ El chatbot está deshabilitado. Los mensajes requerirán respuesta manual.
+        </p>
+      </div>
+    )}
+  </CardContent>
+  <CardFooter>
+    <Button 
+      onClick={handleSaveChatbotConfig} 
+      disabled={!whatsAppInstance || isSavingChatbotConfig}
+    >
+      {isSavingChatbotConfig ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+      {isSavingChatbotConfig ? "Guardando..." : "Guardar Configuración Chatbot"}
+    </Button>
+  </CardFooter>
+</Card>
 
       <Card>
         <CardHeader>
