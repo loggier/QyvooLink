@@ -15,7 +15,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, Trash2, PlusCircle, Settings } from 'lucide-react';
+import { Loader2, Save, Trash2, PlusCircle, Settings, Trash } from 'lucide-react';
 
 // Types for Bot Configuration
 interface Service {
@@ -51,6 +51,7 @@ interface BotConfigData {
   contact: BotContactDetails;
   closingMessage: string;
   promptXml?: string;
+  instanceIdAssociated?: string;
 }
 
 const availableRules: string[] = [
@@ -67,21 +68,13 @@ const initialBusinessContext: BusinessContext = {
   location: "[Ciudad, País]",
   mission: "Nuestra misión es [Declaración de Misión de la Empresa].",
 };
-const initialServiceCatalog: ServiceCategory[] = [
+const initialServiceCatalog: ServiceCategory[] = [ // This will be used as a fallback if a user has old data without categories being an array
   {
     id: crypto.randomUUID(),
     categoryName: "Servicios de Consultoría",
     services: [
       { id: crypto.randomUUID(), name: "Consultoría Estratégica", price: "$150/hora", notes: "Análisis de negocio, planificación y optimización de procesos." },
       { id: crypto.randomUUID(), name: "Consultoría Tecnológica", price: "$180/hora", notes: "Asesoramiento en infraestructura, software y transformación digital." },
-    ],
-  },
-  {
-    id: crypto.randomUUID(),
-    categoryName: "Desarrollo de Software",
-    services: [
-      { id: crypto.randomUUID(), name: "Desarrollo Web a Medida", price: "Desde $5000", notes: "Creación de sitios web y aplicaciones web personalizadas." },
-      { id: crypto.randomUUID(), name: "Desarrollo de Apps Móviles", price: "Desde $8000", notes: "Aplicaciones nativas e híbridas para iOS y Android." },
     ],
   },
 ];
@@ -114,7 +107,7 @@ export default function BotConfigPage() {
   const [selectedRules, setSelectedRules] = useState<string[]>([]);
   const [agentRole, setAgentRole] = useState<string>(initialAgentRole);
   const [businessContext, setBusinessContext] = useState<BusinessContext>(initialBusinessContext);
-  const [serviceCatalog, setServiceCatalog] = useState<ServiceCategory[]>(initialServiceCatalog);
+  const [serviceCatalog, setServiceCatalog] = useState<ServiceCategory[]>([]); // Initialize as empty
   const [contactDetails, setContactDetails] = useState<BotContactDetails>(initialContactDetails);
   const [closingMessage, setClosingMessage] = useState<string>(initialClosingMessage);
   const [generatedXml, setGeneratedXml] = useState<string>("");
@@ -134,8 +127,7 @@ export default function BotConfigPage() {
             setSelectedRules(data.rules || []);
             setAgentRole(data.agentRole || initialAgentRole);
             setBusinessContext(data.businessContext || initialBusinessContext);
-            // Ensure loaded catalog has IDs
-            const loadedCatalog = (data.serviceCatalog || initialServiceCatalog).map(cat => ({
+            const loadedCatalog = (data.serviceCatalog || []).map(cat => ({ // Default to [] if not present
               ...cat,
               id: cat.id || crypto.randomUUID(),
               services: (cat.services || []).map(srv => ({
@@ -146,13 +138,13 @@ export default function BotConfigPage() {
             setServiceCatalog(loadedCatalog);
             setContactDetails(data.contact || initialContactDetails);
             setClosingMessage(data.closingMessage || initialClosingMessage);
-            if (data.promptXml) setGeneratedXml(data.promptXml); // Load XML if exists
+            if (data.promptXml) setGeneratedXml(data.promptXml);
           } else {
             // Set initial defaults if no data found
             setSelectedRules([]);
             setAgentRole(initialAgentRole);
             setBusinessContext(initialBusinessContext);
-            setServiceCatalog(initialServiceCatalog.map(cat => ({...cat, id: cat.id || crypto.randomUUID(), services: cat.services.map(srv => ({...srv, id: srv.id || crypto.randomUUID()})) })));
+            setServiceCatalog([]); // Start with an empty catalog for new users
             setContactDetails(initialContactDetails);
             setClosingMessage(initialClosingMessage);
           }
@@ -165,26 +157,44 @@ export default function BotConfigPage() {
       };
       loadData();
     } else {
-      setIsLoading(false); // No user, stop loading
+      setIsLoading(false); 
     }
   }, [user, toast]);
 
   // Generate XML
   useEffect(() => {
     const generate = () => {
-      const xml = `
-<prompt>
+      const businessContextIsEmpty = !businessContext.description?.trim() && !businessContext.location?.trim() && !businessContext.mission?.trim();
+      const contactDetailsIsEmpty = !contactDetails.phone?.trim() && !contactDetails.email?.trim() && !contactDetails.website?.trim();
+      
+      const activeCategories = serviceCatalog.filter(
+        category => category.categoryName.trim() !== "" || category.services.length > 0
+      );
+      const serviceCatalogIsEmpty = activeCategories.length === 0;
+
+      let rulesXml = '';
+      if (selectedRules.length > 0) {
+        rulesXml = `
   <rules>
     ${selectedRules.map(rule => `<rule>${escapeXml(rule)}</rule>`).join('\n    ')}
-  </rules>
-  <agentRole>${escapeXml(agentRole)}</agentRole>
+  </rules>`;
+      }
+
+      let businessContextXml = '';
+      if (!businessContextIsEmpty) {
+        businessContextXml = `
   <businessContext>
     <description>${escapeXml(businessContext.description)}</description>
     <location>${escapeXml(businessContext.location)}</location>
     <mission>${escapeXml(businessContext.mission)}</mission>
-  </businessContext>
+  </businessContext>`;
+      }
+
+      let serviceCatalogXmlSection = '';
+      if (!serviceCatalogIsEmpty) {
+        serviceCatalogXmlSection = `
   <serviceCatalog>
-    ${serviceCatalog.map(category => `
+    ${activeCategories.map(category => `
     <category name="${escapeXml(category.categoryName)}">
       ${category.services.map(service => `
       <service>
@@ -193,18 +203,32 @@ export default function BotConfigPage() {
         <notes>${escapeXml(service.notes)}</notes>
       </service>`).join('\n      ')}
     </category>`).join('\n    ')}
-  </serviceCatalog>
+  </serviceCatalog>`;
+      }
+
+      let contactXml = '';
+      if (!contactDetailsIsEmpty) {
+        contactXml = `
   <contact>
     <phone>${escapeXml(contactDetails.phone)}</phone>
     <email>${escapeXml(contactDetails.email)}</email>
     <website>${escapeXml(contactDetails.website)}</website>
-  </contact>
+  </contact>`;
+      }
+
+      const finalXml = `
+<prompt>
+  ${rulesXml.trim() ? rulesXml.trim() : ''}
+  <agentRole>${escapeXml(agentRole)}</agentRole>
+  ${businessContextXml.trim() ? businessContextXml.trim() : ''}
+  ${serviceCatalogXmlSection.trim() ? serviceCatalogXmlSection.trim() : ''}
+  ${contactXml.trim() ? contactXml.trim() : ''}
   <closingMessage>${escapeXml(closingMessage)}</closingMessage>
 </prompt>
-      `.trim();
-      setGeneratedXml(xml);
+      `.trim().replace(/^\s*\n/gm, ""); // Clean up empty lines from omitted sections
+      setGeneratedXml(finalXml);
     };
-    if (!isLoading) { // Only generate if not loading initial data
+    if (!isLoading) { 
         generate();
     }
   }, [selectedRules, agentRole, businessContext, serviceCatalog, contactDetails, closingMessage, isLoading]);
@@ -212,6 +236,25 @@ export default function BotConfigPage() {
   const handleRuleChange = (rule: string) => {
     setSelectedRules(prev =>
       prev.includes(rule) ? prev.filter(r => r !== rule) : [...prev, rule]
+    );
+  };
+
+  const handleAddCategory = () => {
+    setServiceCatalog(prev => [
+      ...prev,
+      { id: crypto.randomUUID(), categoryName: "Nueva Categoría", services: [] }
+    ]);
+  };
+
+  const handleRemoveCategory = (categoryId: string) => {
+    setServiceCatalog(prev => prev.filter(cat => cat.id !== categoryId));
+  };
+
+  const handleCategoryNameChange = (categoryIndex: number, newName: string) => {
+    setServiceCatalog(prev => 
+      prev.map((cat, idx) => 
+        idx === categoryIndex ? { ...cat, categoryName: newName } : cat
+      )
     );
   };
 
@@ -256,6 +299,25 @@ export default function BotConfigPage() {
       return;
     }
     setIsSaving(true);
+    let instanceIdAssociated: string | undefined = undefined;
+    try {
+        const instanceDocRef = doc(db, 'instances', user.uid);
+        const instanceDocSnap = await getDoc(instanceDocRef);
+        if (instanceDocSnap.exists()) {
+            const instanceData = instanceDocSnap.data();
+            if (instanceData && instanceData.id) {
+                instanceIdAssociated = instanceData.id;
+            } else {
+                console.warn("Instance data found but 'id' field is missing or undefined.");
+            }
+        } else {
+            console.warn("Instance document not found for user:", user.uid);
+        }
+    } catch (error) {
+        console.error("Error fetching instance ID for bot config:", error);
+        // Optionally notify user or proceed without instanceIdAssociated
+    }
+
     try {
       const configToSave: BotConfigData = {
         rules: selectedRules,
@@ -265,8 +327,9 @@ export default function BotConfigPage() {
         contact: contactDetails,
         closingMessage,
         promptXml: generatedXml,
+        instanceIdAssociated,
       };
-      await setDoc(doc(db, 'qybot', user.uid), configToSave);
+      await setDoc(doc(db, 'qybot', user.uid), configToSave, { merge: true });
       toast({ title: "Éxito", description: "Configuración del bot guardada correctamente." });
     } catch (error) {
       console.error("Error saving bot configuration:", error);
@@ -302,7 +365,6 @@ export default function BotConfigPage() {
       <h1 className="text-3xl font-bold text-foreground">Configurar Bot de Ventas</h1>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Left Column: Configuration Form */}
         <ScrollArea className="h-auto md:h-[calc(100vh-12rem)] pr-4">
         <div className="space-y-6">
           <Card>
@@ -342,7 +404,7 @@ export default function BotConfigPage() {
           <Card>
             <CardHeader>
               <CardTitle>Contexto del Negocio</CardTitle>
-              <CardDescription>Información sobre tu empresa.</CardDescription>
+              <CardDescription>Información sobre tu empresa. Se omitirá del XML si todos los campos están vacíos.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -363,14 +425,24 @@ export default function BotConfigPage() {
           <Card>
             <CardHeader>
               <CardTitle>Catálogo de Servicios</CardTitle>
-              <CardDescription>Define los servicios que ofrece el bot.</CardDescription>
+              <CardDescription>Define los servicios que ofrece el bot. Se omitirá del XML si no hay categorías o servicios definidos.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {serviceCatalog.map((category, catIndex) => (
-                <div key={category.id || catIndex} className="p-4 border rounded-md space-y-3 bg-muted/30">
-                  <h3 className="text-lg font-semibold text-foreground">{category.categoryName}</h3>
+                <div key={category.id} className="p-4 border rounded-md space-y-3 bg-muted/30">
+                  <div className="flex justify-between items-center mb-2">
+                    <Input 
+                      value={category.categoryName}
+                      onChange={(e) => handleCategoryNameChange(catIndex, e.target.value)}
+                      placeholder="Nombre de la Categoría"
+                      className="text-lg font-semibold text-foreground flex-grow mr-2"
+                    />
+                    <Button variant="destructive" size="icon" onClick={() => handleRemoveCategory(category.id)}>
+                      <Trash className="h-4 w-4" />
+                    </Button>
+                  </div>
                   {category.services.map((service, srvIndex) => (
-                    <Card key={service.id || srvIndex} className="p-3 bg-background shadow-sm">
+                    <Card key={service.id} className="p-3 bg-background shadow-sm">
                       <div className="space-y-2">
                         <div>
                           <Label htmlFor={`srvName-${catIndex}-${srvIndex}`}>Nombre del Servicio</Label>
@@ -385,23 +457,26 @@ export default function BotConfigPage() {
                           <Textarea id={`srvNotes-${catIndex}-${srvIndex}`} value={service.notes} onChange={(e) => handleServiceChange(catIndex, srvIndex, 'notes', e.target.value)} rows={2} placeholder="Descripción breve o detalles" />
                         </div>
                       </div>
-                      <Button variant="destructive" size="sm" onClick={() => handleRemoveService(catIndex, service.id)} className="mt-2 float-right">
-                        <Trash2 className="h-4 w-4 mr-1" /> Eliminar
+                      <Button variant="outline" size="sm" onClick={() => handleRemoveService(catIndex, service.id)} className="mt-2 float-right">
+                        <Trash2 className="h-4 w-4 mr-1" /> Eliminar Servicio
                       </Button>
                     </Card>
                   ))}
-                  <Button variant="outline" onClick={() => handleAddService(catIndex)}>
-                    <PlusCircle className="h-4 w-4 mr-2" /> Añadir Servicio a {category.categoryName}
+                  <Button variant="outline" onClick={() => handleAddService(catIndex)} className="mt-2">
+                    <PlusCircle className="h-4 w-4 mr-2" /> Añadir Servicio a {category.categoryName || "esta categoría"}
                   </Button>
                 </div>
               ))}
+              <Button variant="default" onClick={handleAddCategory} className="w-full">
+                <PlusCircle className="h-4 w-4 mr-2" /> Añadir Nueva Categoría de Servicios
+              </Button>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
               <CardTitle>Datos de Contacto</CardTitle>
-              <CardDescription>Información de contacto que el bot puede proporcionar.</CardDescription>
+              <CardDescription>Información de contacto que el bot puede proporcionar. Se omitirá del XML si todos los campos están vacíos.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -436,7 +511,6 @@ export default function BotConfigPage() {
         </div>
         </ScrollArea>
 
-        {/* Right Column: XML Preview and Save Button */}
         <div className="space-y-6 sticky top-4 md:h-[calc(100vh-4rem)] flex flex-col">
           <Card className="flex-grow flex flex-col">
             <CardHeader>
@@ -460,3 +534,6 @@ export default function BotConfigPage() {
     </div>
   );
 }
+
+
+    
