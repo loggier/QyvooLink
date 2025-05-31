@@ -919,7 +919,7 @@ useEffect(() => {
  <Input
               id="numeroDemo"
  type="tel"
- placeholder="+1234567890"
+ placeholder="521234567890"
  value={demoConfig.demoPhoneNumber}
  onChange={(e) => setDemoConfig(prevState => ({ ...prevState, demoPhoneNumber: e.target.value }))}
  disabled={!whatsAppInstance || isSavingDemoConfig}
