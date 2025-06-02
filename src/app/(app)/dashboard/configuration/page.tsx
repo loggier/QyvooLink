@@ -851,50 +851,6 @@ useEffect(() => {
         </DialogContent>
       </Dialog>
 
- <Card>
-        <CardHeader>
-          <CardTitle>Configuración General de API Qyvoo</CardTitle>
-          <CardDescription>Configura tu conexión a la API general de Qyvoo (si aplica).</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="apiUrl">URL de la API Qyvoo</Label>
-            <Input id="apiUrl" placeholder="https://api.qyvoo.com" defaultValue="https://api.qyvoo.com" />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="apiKeyGeneral">Clave de API Qyvoo</Label>
-            <Input id="apiKeyGeneral" type="password" placeholder="Ingresa tu Clave de API" defaultValue="tuClaveApiQyvooSecreta" />
-          </div>
-          <Button onClick={() => toast({ title: "Prueba de Conexión", description: "Funcionalidad de prueba pendiente."})}>Probar Conexión</Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Horario Comercial</CardTitle>
-          <CardDescription>Establece tus horas operativas para respuestas automáticas.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center space-x-2">
-            <Switch id="businessHoursEnabled" defaultChecked />
-            <Label htmlFor="businessHoursEnabled">Habilitar Horario Comercial</Label>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="startTime">Hora de Inicio</Label>
-              <Input id="startTime" type="time" defaultValue="09:00" />
-            </div>
-            <div>
-              <Label htmlFor="endTime">Hora de Fin</Label>
-              <Input id="endTime" type="time" defaultValue="17:00" />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="outOfOfficeMessage">Mensaje de Fuera de Oficina</Label>
-            <Textarea id="outOfOfficeMessage" placeholder="Actualmente no estamos disponibles..." defaultValue="Gracias por tu mensaje. Actualmente estamos fuera de la oficina y te responderemos durante nuestro horario comercial (Lun-Vie, 9 AM - 5 PM)." />
-          </div>
-        </CardContent>
-      </Card>
 
  <Card>
  <CardHeader>
@@ -981,37 +937,6 @@ useEffect(() => {
   </CardFooter>
 </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Respuestas Automáticas y Mensajes de Bienvenida</CardTitle>
-          <CardDescription>Personaliza mensajes automatizados para tus usuarios.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center space-x-2">
-            <Switch id="welcomeMessageEnabled" defaultChecked />
-            <Label htmlFor="welcomeMessageEnabled">Habilitar Mensaje de Bienvenida</Label>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="welcomeMessage">Texto del Mensaje de Bienvenida</Label>
-            <Textarea id="welcomeMessage" placeholder="¡Bienvenido a nuestro servicio!" defaultValue="¡Hola! Bienvenido a Qyvoo. ¿Cómo podemos ayudarte hoy?"/>
-          </div>
-          
-          <Separator className="my-6" />
-
-          <div className="flex items-center space-x-2">
-            <Switch id="autoResponderEnabled" />
-            <Label htmlFor="autoResponderEnabled">Habilitar Respuesta Automática General (ej. para palabras clave comunes)</Label>
-          </div>
-           <div className="space-y-2">
-            <Label htmlFor="autoResponderKeywords">Palabras Clave (separadas por comas)</Label>
-            <Input id="autoResponderKeywords" placeholder="precios, ayuda, soporte" />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="autoResponderMessage">Mensaje de Respuesta Automática</Label>
-            <Textarea id="autoResponderMessage" placeholder="Gracias por preguntar sobre..." />
-          </div>
-        </CardContent>
-      </Card>
 
       <div className="flex justify-end">
         <Button size="lg" onClick={() => toast({ title: "Guardado", description: "Configuraciones guardadas (simulado)." })}>
