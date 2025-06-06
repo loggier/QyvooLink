@@ -63,7 +63,54 @@ interface ContactDetails {
   _chatIdOriginal?: string;
 }
 
-const getContactDocId = (userId: string, chatId: string): string => `${userId}_${chatId}`;
+const getContactDocId = (userId: string, chatId: string): string => `${userId}_${chatId.replace(/@/g, '_')}`;
+
+
+function formatWhatsAppMessage(text: string | undefined | null): React.ReactNode[] {
+  if (typeof text !== 'string' || !text) {
+    return [text]; // Devuelve el texto original si no es una cadena o está vacío
+  }
+
+  const elements: React.ReactNode[] = [];
+  // Orden de patrones: ``` (multilínea), *, _, ~
+  const regex = /(```(?:.|\n)*?```)|(\*(.+?)\*)|(_([^_]+?)_)|(~([^~]+?)~)/g;
+
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    const startIndex = match.index;
+
+    // Añadir texto antes del match
+    if (startIndex > lastIndex) {
+      elements.push(text.substring(lastIndex, startIndex));
+    }
+
+    if (match[1]) { // ```codigo``` (match[1] es el texto completo ```...```)
+      elements.push(<code key={lastIndex} className="font-mono bg-muted text-muted-foreground px-1 py-0.5 rounded text-xs">{match[1].slice(3, -3)}</code>);
+    } else if (match[2]) { // *negrita* (match[2] es *...*, match[3] es ...)
+      elements.push(<strong key={lastIndex}>{match[3]}</strong>);
+    } else if (match[4]) { // _cursiva_ (match[4] es _..._, match[5] es ...)
+      elements.push(<em key={lastIndex}>{match[5]}</em>);
+    } else if (match[6]) { // ~tachado~ (match[6] es ~...~, match[7] es ...)
+      elements.push(<del key={lastIndex}>{match[7]}</del>);
+    }
+    lastIndex = regex.lastIndex;
+  }
+
+  // Añadir texto restante después del último match
+  if (lastIndex < text.length) {
+    elements.push(text.substring(lastIndex));
+  }
+  
+  // Si no hubo matches, y el texto original no estaba vacío, retornar el texto original en un array para consistencia.
+  if (elements.length === 0 && text.length > 0) {
+    elements.push(text);
+  }
+
+  return elements;
+}
+
 
 export default function ChatPage() {
   const { user } = useAuth();
@@ -174,6 +221,7 @@ export default function ChatPage() {
           });
           
           const contactPromises = Array.from(chatMap.keys()).map(async (chat_id) => {
+            if (!user) return { chatId: chat_id, data: null }; // Early exit if no user
             const contactDocId = getContactDocId(user.uid, chat_id);
             try {
                 const contactDocRef = doc(db, 'contacts', contactDocId);
@@ -199,7 +247,8 @@ export default function ChatPage() {
           for (const [chat_id_key, summary] of chatMap.entries()) {
               const contactData = contactsDataMap.get(chat_id_key);
               let displayName = formatPhoneNumber(chat_id_key);
-              let avatarFallbackText = displayName.slice(-2);
+              let avatarFallbackText = displayName.length >= 2 ? displayName.slice(-2) : displayName;
+
 
               if (contactData) {
                   let nameParts = [];
@@ -215,10 +264,14 @@ export default function ChatPage() {
                       displayName = tempDisplayName.trim();
                       if (contactData.nombre && contactData.nombre.trim() && contactData.apellido && contactData.apellido.trim()) {
                           avatarFallbackText = `${contactData.nombre.trim()[0]}${contactData.apellido.trim()[0]}`.toUpperCase();
-                      } else if (contactData.nombre && contactData.nombre.trim()) {
+                      } else if (contactData.nombre && contactData.nombre.trim() && contactData.nombre.trim().length >=2) {
                           avatarFallbackText = contactData.nombre.trim().substring(0,2).toUpperCase();
-                      } else if (contactData.empresa && contactData.empresa.trim()) {
+                      } else if (contactData.nombre && contactData.nombre.trim()) {
+                           avatarFallbackText = contactData.nombre.trim().substring(0,1).toUpperCase();
+                      } else if (contactData.empresa && contactData.empresa.trim() && contactData.empresa.trim().length >= 2) {
                           avatarFallbackText = contactData.empresa.trim().substring(0,2).toUpperCase();
+                      } else if (contactData.empresa && contactData.empresa.trim()) {
+                           avatarFallbackText = contactData.empresa.trim().substring(0,1).toUpperCase();
                       }
                   }
               }
@@ -389,6 +442,7 @@ export default function ChatPage() {
     const compositeContactId = getContactDocId(user.uid, selectedChatId);
     const contactDocRef = doc(db, 'contacts', compositeContactId);
     
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id: _docIdFromState, ...dataToPersist } = contactDetails; 
     
     const finalDataToPersist: ContactDetails = {
@@ -403,7 +457,7 @@ export default function ChatPage() {
       await setDoc(contactDocRef, finalDataToPersist, { merge: true });
       
       const updatedContactState = { ...finalDataToPersist, id: compositeContactId };
-      delete (updatedContactState as any)._chatIdOriginal; 
+      // delete (updatedContactState as any)._chatIdOriginal; // Keep it if useful for debugging or future use
 
       setContactDetails(updatedContactState);
       setInitialContactDetails(updatedContactState); 
@@ -522,7 +576,7 @@ export default function ChatPage() {
                            convo.lastMessageSender?.toLowerCase() === 'agente' ? 'Agente' : 
                            convo.lastMessageSender?.toLowerCase() === 'user' ? 'Usuario' : 'Usuario'}: 
                         </span>
-                        {convo.lastMessage}
+                        <span className="truncate">{convo.lastMessage}</span>
                       </p>
                     </div>
                   </Button>
@@ -568,7 +622,7 @@ export default function ChatPage() {
                     alignmentClass = 'justify-start'; 
                     bubbleClass = 'bg-muted dark:bg-slate-700'; 
                     timestampAlignmentClass = 'text-muted-foreground text-left';
-                    IconComponent = UserRound; // Changed for consistency
+                    IconComponent = UserRound; 
                     avatarFallbackClass = "bg-gray-400 text-white";
                   } else { 
                     alignmentClass = 'justify-end'; 
@@ -582,7 +636,7 @@ export default function ChatPage() {
                     } else if (userNameLower === 'agente') {
                       bubbleClass = 'bg-secondary text-secondary-foreground dark:bg-slate-600 dark:text-slate-100';
                       timestampAlignmentClass += ' text-secondary-foreground/80';
-                      IconComponent = User; // Kept as User for agent
+                      IconComponent = User; 
                       avatarFallbackClass = "bg-green-500 text-white";
                     } else { 
                       bubbleClass = 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200';
@@ -609,7 +663,9 @@ export default function ChatPage() {
                         <div
                           className={`py-2 px-3 rounded-lg shadow-md ${bubbleClass}`}
                         >
-                          <p className="text-sm break-words">{msg.mensaje}</p>
+                          <p className="text-sm break-words whitespace-pre-wrap">
+                             {formatWhatsAppMessage(msg.mensaje)}
+                          </p>
                           <p className={`text-xs mt-1 ${timestampAlignmentClass}`}>
                             {formatTimestamp(msg.timestamp)}
                           </p>
