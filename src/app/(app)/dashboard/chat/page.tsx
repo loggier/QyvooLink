@@ -48,24 +48,27 @@ interface ConversationSummary {
 }
 
 interface ContactDetails {
-  id?: string; 
+  id?: string; // This will store the composite Firestore document ID: userId_chatId
   nombre?: string;
   apellido?: string;
   email?: string;
-  telefono?: string;
+  telefono?: string; // This is the editable phone number for display/contact
   empresa?: string;
   ubicacion?: string;
   tipoCliente?: 'Prospecto' | 'Cliente' | 'Proveedor' | 'Otro';
-  instanceId?: string;
-  userId?: string;
+  instanceId?: string; // ID of the Qyvoo WhatsApp instance
+  userId?: string; // ID of the user who owns this contact entry
 }
+
+// Helper function to generate the composite contact document ID
+const getContactDocId = (userId: string, chatId: string): string => `${userId}_${chatId}`;
 
 export default function ChatPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [whatsAppInstance, setWhatsAppInstance] = useState<WhatsAppInstance | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null); // This is the raw phone_number@c.us
   const [isLoadingInstance, setIsLoadingInstance] = useState(true);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -213,8 +216,9 @@ export default function ChatPage() {
     if (selectedChatId && user && whatsAppInstance) {
       setIsLoadingContact(true);
       const fetchDetails = async () => {
+        const compositeContactId = getContactDocId(user.uid, selectedChatId);
         try {
-          const contactDocRef = doc(db, 'contacts', selectedChatId);
+          const contactDocRef = doc(db, 'contacts', compositeContactId);
           const contactDocSnap = await getDoc(contactDocRef);
           if (contactDocSnap.exists()) {
             const data = { id: contactDocSnap.id, ...contactDocSnap.data() } as ContactDetails;
@@ -222,7 +226,7 @@ export default function ChatPage() {
             setInitialContactDetails(data);
           } else {
             const initialData: ContactDetails = { 
-              id: selectedChatId, 
+              id: compositeContactId, 
               telefono: formatPhoneNumber(selectedChatId),
               nombre: "",
               apellido: "",
@@ -230,8 +234,8 @@ export default function ChatPage() {
               empresa: "",
               ubicacion: "",
               tipoCliente: undefined,
-              instanceId: whatsAppInstance.id,
-              userId: user.uid,
+              instanceId: whatsAppInstance.id, // Qyvoo Instance ID
+              userId: user.uid, // Logged-in user's ID
             };
             setContactDetails(initialData); 
             setInitialContactDetails(initialData);
@@ -273,17 +277,16 @@ export default function ChatPage() {
       setReplyMessage("");
       toast({ title: "Mensaje Guardado", description: "Tu mensaje ha sido guardado en el chat." });
 
-      // Call the webhook
       const webhookPayload = [{
         chat_id: selectedChatId,
         instanceId: whatsAppInstance.id,
         mensaje: trimmedMessage,
         instance: whatsAppInstance.name,
-        user_name: "agent", // As per user's example for webhook
+        user_name: "agent", 
         timestamp: new Date().toISOString(),
       }];
 
-      const webhookUrl = "https://n8n.vemontech.com/webhook/qyvoo"; // Updated URL
+      const webhookUrl = "https://n8n.vemontech.com/webhook/qyvoo";
 
       try {
         const webhookResponse = await fetch(webhookUrl, {
@@ -315,27 +318,34 @@ export default function ChatPage() {
   };
   
   const handleSaveContactDetails = async () => {
-    if (!contactDetails || !selectedChatId || !user || !whatsAppInstance) return;
+    if (!selectedChatId || !user || !whatsAppInstance || !contactDetails) return;
     setIsSavingContact(true);
+
+    const compositeContactId = getContactDocId(user.uid, selectedChatId);
+    const contactDocRef = doc(db, 'contacts', compositeContactId);
+
+    // Prepare the data to be persisted in Firestore, excluding the 'id' field from ContactDetails state
+    // Ensure critical fields like userId are correctly sourced/overridden.
+    const { id: _docIdFromState, ...dataToPersist } = contactDetails; 
+    
+    const finalDataToPersist = {
+      ...dataToPersist,
+      userId: user.uid, // Always save/override with the current authenticated user's ID
+      instanceId: dataToPersist.instanceId || whatsAppInstance.id, // Ensure Qyvoo instanceId is set
+      telefono: dataToPersist.telefono || formatPhoneNumber(selectedChatId), // Fallback for telefono
+      // Adding raw chatId for reference, though 'telefono' is the primary editable phone field
+      _chatIdOriginal: selectedChatId 
+    };
+
     try {
-      const contactDocRef = doc(db, 'contacts', selectedChatId);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { id, ...detailsToSave } = contactDetails; 
+      await setDoc(contactDocRef, finalDataToPersist, { merge: true });
+      
+      // Update local state: the persisted data + the composite document ID
+      const updatedContactState = { ...finalDataToPersist, id: compositeContactId };
+      delete (updatedContactState as any)._chatIdOriginal; // Remove helper field not in ContactDetails type
 
-      const dataToSave: ContactDetails = {
-        nombre: detailsToSave.nombre || "",
-        apellido: detailsToSave.apellido || "",
-        email: detailsToSave.email || "", 
-        telefono: detailsToSave.telefono || "",
-        empresa: detailsToSave.empresa || "",
-        ubicacion: detailsToSave.ubicacion || "",
-        tipoCliente: detailsToSave.tipoCliente || undefined, 
-        instanceId: detailsToSave.instanceId || whatsAppInstance.id,
-        userId: detailsToSave.userId || user.uid,
-      };
-
-      await setDoc(contactDocRef, dataToSave, { merge: true });
-      setInitialContactDetails(contactDetails); 
+      setContactDetails(updatedContactState);
+      setInitialContactDetails(updatedContactState); 
       setIsEditingContact(false);
       toast({ title: "Contacto Actualizado", description: "La información del contacto ha sido guardada." });
     } catch (error) {
@@ -517,7 +527,7 @@ export default function ChatPage() {
                       timestampAlignmentClass += ' text-secondary-foreground/80';
                       IconComponent = User; 
                       avatarFallbackClass = "bg-green-500 text-white";
-                    } else { // Fallback for other system messages if any
+                    } else { 
                       bubbleClass = 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200';
                       timestampAlignmentClass += ' text-gray-500 dark:text-gray-400';
                       IconComponent = MessageCircle; 
@@ -633,11 +643,17 @@ export default function ChatPage() {
                 </div>
                 <div>
                   <Label htmlFor="contactEmail" className="flex items-center text-sm text-muted-foreground"><Mail className="h-4 w-4 mr-2"/>Correo Electrónico</Label>
-                  <Input id="contactEmail" value={contactDetails.email || ""} onChange={(e) => handleContactInputChange('email', e.target.value)} readOnly={!isEditingContact} placeholder="No disponible"/>
+                  <Input id="contactEmail" type="email" value={contactDetails.email || ""} onChange={(e) => handleContactInputChange('email', e.target.value)} readOnly={!isEditingContact} placeholder="No disponible"/>
                 </div>
                 <div>
                   <Label htmlFor="contactTelefono" className="flex items-center text-sm text-muted-foreground"><Phone className="h-4 w-4 mr-2"/>Teléfono</Label>
-                  <Input id="contactTelefono" value={contactDetails.telefono || ""} onChange={(e) => handleContactInputChange('telefono', e.target.value)} readOnly={!isEditingContact || !!contactDetails.telefono && contactDetails.telefono === formatPhoneNumber(selectedChatId)} placeholder="No disponible"/>
+                  <Input 
+                    id="contactTelefono" 
+                    value={contactDetails.telefono || ""} 
+                    onChange={(e) => handleContactInputChange('telefono', e.target.value)} 
+                    readOnly={!isEditingContact} 
+                    placeholder="No disponible"
+                  />
                 </div>
                 <div>
                   <Label htmlFor="contactEmpresa" className="flex items-center text-sm text-muted-foreground"><Building className="h-4 w-4 mr-2"/>Empresa</Label>
@@ -690,3 +706,4 @@ export default function ChatPage() {
     </div>
   );
 }
+
