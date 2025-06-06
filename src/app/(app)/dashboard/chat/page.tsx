@@ -45,22 +45,24 @@ interface ConversationSummary {
   lastMessage: string;
   lastMessageTimestamp: Date;
   lastMessageSender: string;
+  displayName?: string; 
+  avatarFallback?: string; 
 }
 
 interface ContactDetails {
-  id?: string; // This will store the composite Firestore document ID: userId_chatId
+  id?: string; 
   nombre?: string;
   apellido?: string;
   email?: string;
-  telefono?: string; // This is the editable phone number for display/contact
+  telefono?: string; 
   empresa?: string;
   ubicacion?: string;
   tipoCliente?: 'Prospecto' | 'Cliente' | 'Proveedor' | 'Otro';
-  instanceId?: string; // ID of the Qyvoo WhatsApp instance
-  userId?: string; // ID of the user who owns this contact entry
+  instanceId?: string; 
+  userId?: string; 
+  _chatIdOriginal?: string;
 }
 
-// Helper function to generate the composite contact document ID
 const getContactDocId = (userId: string, chatId: string): string => `${userId}_${chatId}`;
 
 export default function ChatPage() {
@@ -68,7 +70,7 @@ export default function ChatPage() {
   const { toast } = useToast();
   const [whatsAppInstance, setWhatsAppInstance] = useState<WhatsAppInstance | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(null); // This is the raw phone_number@c.us
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null); 
   const [isLoadingInstance, setIsLoadingInstance] = useState(true);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,6 +86,11 @@ export default function ChatPage() {
   const [isSavingContact, setIsSavingContact] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  const formatPhoneNumber = (chat_id: string | undefined): string => {
+    if (!chat_id) return "Desconocido";
+    return chat_id.split('@')[0];
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -125,7 +132,7 @@ export default function ChatPage() {
   }, [user]);
 
   useEffect(() => {
-    if (whatsAppInstance && whatsAppInstance.status === 'Conectado' && (whatsAppInstance.id || whatsAppInstance.name)) {
+    if (whatsAppInstance && whatsAppInstance.status === 'Conectado' && (whatsAppInstance.id || whatsAppInstance.name) && user) {
       const fetchConversations = async () => {
         setIsLoadingChats(true);
         setError(null);
@@ -144,7 +151,7 @@ export default function ChatPage() {
             messages.push({ id: doc.id, ...(doc.data() as ChatMessageDocument) });
           });
           
-          const chatMap = new Map<string, ConversationSummary>();
+          const chatMap = new Map<string, Omit<ConversationSummary, 'displayName' | 'avatarFallback'>>();
           messages.forEach(msg => {
             let currentChatId = msg.chat_id; 
              if (msg.from === instanceIdentifier) { 
@@ -166,10 +173,67 @@ export default function ChatPage() {
             }
           });
           
-          const sortedConversations = Array.from(chatMap.values()).sort(
+          const contactPromises = Array.from(chatMap.keys()).map(async (chat_id) => {
+            const contactDocId = getContactDocId(user.uid, chat_id);
+            try {
+                const contactDocRef = doc(db, 'contacts', contactDocId);
+                const contactDocSnap = await getDoc(contactDocRef);
+                if (contactDocSnap.exists()) {
+                    return { chatId: chat_id, data: contactDocSnap.data() as ContactDetails };
+                }
+            } catch (contactError) {
+                console.warn(`Error fetching contact for ${chat_id}:`, contactError);
+            }
+            return { chatId: chat_id, data: null };
+          });
+
+          const contactResults = await Promise.all(contactPromises);
+          const contactsDataMap = new Map<string, ContactDetails | null>();
+          contactResults.forEach(result => {
+              if (result) {
+                  contactsDataMap.set(result.chatId, result.data);
+              }
+          });
+
+          const enrichedConversations: ConversationSummary[] = [];
+          for (const [chat_id_key, summary] of chatMap.entries()) {
+              const contactData = contactsDataMap.get(chat_id_key);
+              let displayName = formatPhoneNumber(chat_id_key);
+              let avatarFallbackText = displayName.slice(-2);
+
+              if (contactData) {
+                  let nameParts = [];
+                  if (contactData.nombre && contactData.nombre.trim()) nameParts.push(contactData.nombre.trim());
+                  if (contactData.apellido && contactData.apellido.trim()) nameParts.push(contactData.apellido.trim());
+                  
+                  let tempDisplayName = nameParts.join(' ').trim();
+                  if (contactData.empresa && contactData.empresa.trim()) {
+                      tempDisplayName += ` [${contactData.empresa.trim()}]`;
+                  }
+                  
+                  if (tempDisplayName.trim()) {
+                      displayName = tempDisplayName.trim();
+                      if (contactData.nombre && contactData.nombre.trim() && contactData.apellido && contactData.apellido.trim()) {
+                          avatarFallbackText = `${contactData.nombre.trim()[0]}${contactData.apellido.trim()[0]}`.toUpperCase();
+                      } else if (contactData.nombre && contactData.nombre.trim()) {
+                          avatarFallbackText = contactData.nombre.trim().substring(0,2).toUpperCase();
+                      } else if (contactData.empresa && contactData.empresa.trim()) {
+                          avatarFallbackText = contactData.empresa.trim().substring(0,2).toUpperCase();
+                      }
+                  }
+              }
+              enrichedConversations.push({
+                  ...summary,
+                  displayName: displayName,
+                  avatarFallback: avatarFallbackText
+              });
+          }
+
+          const sortedConversations = enrichedConversations.sort(
             (a,b) => b.lastMessageTimestamp.getTime() - a.lastMessageTimestamp.getTime()
           );
           setConversations(sortedConversations);
+
         } catch (err) {
           console.error("Error fetching conversations:", err);
           setError("Error al cargar las conversaciones de Qyvoo.");
@@ -179,7 +243,7 @@ export default function ChatPage() {
       };
       fetchConversations();
     }
-  }, [whatsAppInstance]);
+  }, [whatsAppInstance, user]); // Added user dependency
 
   useEffect(() => {
     if (selectedChatId && whatsAppInstance) {
@@ -234,8 +298,9 @@ export default function ChatPage() {
               empresa: "",
               ubicacion: "",
               tipoCliente: undefined,
-              instanceId: whatsAppInstance.id, // Qyvoo Instance ID
-              userId: user.uid, // Logged-in user's ID
+              instanceId: whatsAppInstance.id,
+              userId: user.uid, 
+              _chatIdOriginal: selectedChatId,
             };
             setContactDetails(initialData); 
             setInitialContactDetails(initialData);
@@ -323,26 +388,22 @@ export default function ChatPage() {
 
     const compositeContactId = getContactDocId(user.uid, selectedChatId);
     const contactDocRef = doc(db, 'contacts', compositeContactId);
-
-    // Prepare the data to be persisted in Firestore, excluding the 'id' field from ContactDetails state
-    // Ensure critical fields like userId are correctly sourced/overridden.
+    
     const { id: _docIdFromState, ...dataToPersist } = contactDetails; 
     
-    const finalDataToPersist = {
+    const finalDataToPersist: ContactDetails = {
       ...dataToPersist,
-      userId: user.uid, // Always save/override with the current authenticated user's ID
-      instanceId: dataToPersist.instanceId || whatsAppInstance.id, // Ensure Qyvoo instanceId is set
-      telefono: dataToPersist.telefono || formatPhoneNumber(selectedChatId), // Fallback for telefono
-      // Adding raw chatId for reference, though 'telefono' is the primary editable phone field
+      userId: user.uid, 
+      instanceId: dataToPersist.instanceId || whatsAppInstance.id, 
+      telefono: dataToPersist.telefono || formatPhoneNumber(selectedChatId), 
       _chatIdOriginal: selectedChatId 
     };
 
     try {
       await setDoc(contactDocRef, finalDataToPersist, { merge: true });
       
-      // Update local state: the persisted data + the composite document ID
       const updatedContactState = { ...finalDataToPersist, id: compositeContactId };
-      delete (updatedContactState as any)._chatIdOriginal; // Remove helper field not in ContactDetails type
+      delete (updatedContactState as any)._chatIdOriginal; 
 
       setContactDetails(updatedContactState);
       setInitialContactDetails(updatedContactState); 
@@ -356,17 +417,12 @@ export default function ChatPage() {
     }
   };
 
-  const handleContactInputChange = (field: keyof Omit<ContactDetails, 'id' | 'instanceId' | 'userId' | 'tipoCliente'>, value: string) => {
+  const handleContactInputChange = (field: keyof Omit<ContactDetails, 'id' | 'instanceId' | 'userId' | 'tipoCliente' | '_chatIdOriginal'>, value: string) => {
     setContactDetails(prev => prev ? { ...prev, [field]: value } : null);
   };
   
   const handleContactSelectChange = (value: string) => {
     setContactDetails(prev => prev ? { ...prev, tipoCliente: value as ContactDetails['tipoCliente'] } : null);
-  };
-
-  const formatPhoneNumber = (chat_id: string) => {
-    if (!chat_id) return "Desconocido";
-    return chat_id.split('@')[0];
   };
 
   const formatTimestamp = (timestamp: FirestoreTimestamp | Date | undefined): string => {
@@ -424,7 +480,6 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-[calc(100vh-theme(spacing.16)-theme(spacing.12))] border bg-card text-card-foreground shadow-sm rounded-lg overflow-hidden">
-      {/* Left Column: Conversation List */}
       <div className="w-full md:w-1/3 lg:w-1/4 md:min-w-[300px] md:max-w-[380px] border-r flex flex-col">
         <div className="p-4 border-b">
           <h2 className="text-xl font-semibold">Conversaciones Activas</h2>
@@ -456,11 +511,11 @@ export default function ChatPage() {
                   >
                     <Avatar className="h-10 w-10 mr-3">
                        <AvatarFallback>
-                        {formatPhoneNumber(convo.chat_id).slice(-2)}
+                        {convo.avatarFallback || formatPhoneNumber(convo.chat_id).slice(-2)}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-grow overflow-hidden">
-                      <p className="font-semibold truncate">{formatPhoneNumber(convo.chat_id)}</p>
+                      <p className="font-semibold truncate">{convo.displayName || formatPhoneNumber(convo.chat_id)}</p>
                       <p className="text-xs text-muted-foreground truncate">
                         <span className="font-medium">
                           {convo.lastMessageSender?.toLowerCase() === 'bot' ? 'Bot' : 
@@ -478,12 +533,14 @@ export default function ChatPage() {
         </ScrollArea>
       </div>
 
-      {/* Middle Column: Chat View */}
       <div className="flex-1 flex flex-col bg-muted/30">
         {selectedChatId ? (
           <>
             <CardHeader className="p-4 border-b bg-card">
-              <CardTitle className="text-lg">Chat con {formatPhoneNumber(selectedChatId)}</CardTitle>
+              <CardTitle className="text-lg">Chat con {
+                  conversations.find(c => c.chat_id === selectedChatId)?.displayName ||
+                  formatPhoneNumber(selectedChatId)
+              }</CardTitle>
             </CardHeader>
             <ScrollArea className="flex-grow p-4 space-y-3">
               {isLoadingMessages ? (
@@ -511,7 +568,7 @@ export default function ChatPage() {
                     alignmentClass = 'justify-start'; 
                     bubbleClass = 'bg-muted dark:bg-slate-700'; 
                     timestampAlignmentClass = 'text-muted-foreground text-left';
-                    IconComponent = User;
+                    IconComponent = UserRound; // Changed for consistency
                     avatarFallbackClass = "bg-gray-400 text-white";
                   } else { 
                     alignmentClass = 'justify-end'; 
@@ -525,7 +582,7 @@ export default function ChatPage() {
                     } else if (userNameLower === 'agente') {
                       bubbleClass = 'bg-secondary text-secondary-foreground dark:bg-slate-600 dark:text-slate-100';
                       timestampAlignmentClass += ' text-secondary-foreground/80';
-                      IconComponent = User; 
+                      IconComponent = User; // Kept as User for agent
                       avatarFallbackClass = "bg-green-500 text-white";
                     } else { 
                       bubbleClass = 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200';
@@ -613,7 +670,6 @@ export default function ChatPage() {
         )}
       </div>
       
-      {/* Right Column: Additional Information */}
       {selectedChatId && (
         <div className="w-full md:w-1/3 lg:w-1/4 md:min-w-[300px] md:max-w-[380px] border-l flex flex-col bg-card">
           <CardHeader className="p-4 border-b">
