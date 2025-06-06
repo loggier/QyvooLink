@@ -3,15 +3,16 @@
 
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wifi, WifiOff, BotMessageSquare, MessageCircleOff, FlaskConical, Users, MessageSquare, FileText, Loader2, AlertTriangle, HelpCircle } from "lucide-react";
+import { Wifi, WifiOff, BotMessageSquare, MessageCircleOff, FlaskConical, Users, MessageSquare, FileText, Loader2, AlertTriangle, HelpCircle, MessageSquareText, ListChecks } from "lucide-react";
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
-import type { WhatsAppInstance } from './configuration/page'; // Assuming this type is exported
-import type { BotConfigData } from './bot-config/page'; // Assuming this type is exported
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import type { WhatsAppInstance } from './configuration/page'; 
+import type { BotConfigData } from './bot-config/page'; 
+import type { ChatMessageDocument } from './chat/page'; // Asumiendo que esta interfaz puede ser importada
 
 interface DashboardStats {
-  instanceStatus: 'Conectado' | 'Desconectado' | 'Pendiente' | 'No Configurada' | 'Cargando';
+  instanceStatus: 'Conectado' | 'Desconectado' | 'Pendiente' | 'No Configurada' | 'Error' | 'Cargando';
   isChatbotGloballyEnabled?: boolean;
   isDemoMode?: boolean;
   contactCount: number | string;
@@ -23,7 +24,9 @@ const initialStats: DashboardStats = {
   instanceStatus: 'Cargando',
   contactCount: 'Cargando...',
   conversationCount: 'Cargando...',
-  isLoading: true, // Added for overall loading state
+  isChatbotGloballyEnabled: undefined,
+  isDemoMode: undefined,
+  isBotPromptConfigured: undefined,
 };
 
 
@@ -42,6 +45,7 @@ export default function DashboardPage() {
           let demoModeVal: boolean | undefined = undefined;
           let contactsVal: number | string = 0;
           let conversationsVal: number | string = 0;
+          let instanceIdForChats: string | null = null;
 
           // Fetch instance data
           const instanceDocRef = doc(db, 'instances', user.uid);
@@ -52,8 +56,8 @@ export default function DashboardPage() {
             instanceStatusVal = instanceData.status || 'Pendiente';
             chatbotEnabledVal = instanceData.chatbotEnabled;
             demoModeVal = instanceData.demo;
-            contactsVal = instanceData._count?.Contact ?? 0;
-            conversationsVal = instanceData._count?.Chat ?? 0;
+            instanceIdForChats = instanceData.id || instanceData.name; // Para la consulta de chats
+            // contactsVal y conversationsVal se calcularán a continuación desde Firestore
           }
 
           // Fetch bot configuration data
@@ -62,11 +66,63 @@ export default function DashboardPage() {
           const botConfigDocSnap = await getDoc(botConfigDocRef);
           if (botConfigDocSnap.exists()) {
              const botConfig = botConfigDocSnap.data() as BotConfigData;
-             // Check if essential parts of the prompt are configured
              if (botConfig.agentRole && botConfig.agentRole.trim() !== "" && botConfig.promptXml && botConfig.promptXml.trim() !== "") {
                 botPromptConfiguredVal = true;
              }
           }
+
+          // Fetch contacts count from 'contacts' collection
+          try {
+            const contactsQuery = query(collection(db, 'contacts'), where('userId', '==', user.uid));
+            const contactsSnapshot = await getDocs(contactsQuery);
+            contactsVal = contactsSnapshot.size;
+          } catch (e) {
+            console.error("Error fetching contacts count:", e);
+            contactsVal = "Error";
+          }
+
+          // Fetch active conversations count from 'chat' collection
+          if (instanceIdForChats) {
+            try {
+              const chatQuery = query(
+                collection(db, 'chat'),
+                where('instanceId', '==', instanceIdForChats)
+              );
+              const chatSnapshot = await getDocs(chatQuery);
+              const chatMessages: ChatMessageDocument[] = [];
+              chatSnapshot.forEach((doc) => {
+                chatMessages.push(doc.data() as ChatMessageDocument);
+              });
+
+              const chatMap = new Map<string, any>();
+              chatMessages.forEach(msg => {
+                let currentChatId = msg.chat_id;
+                if (instanceIdForChats) { // Asegurar que instanceIdForChats no es null
+                    if (msg.from === instanceIdForChats) { 
+                        currentChatId = msg.to;
+                    } else if (msg.to === instanceIdForChats) { 
+                        currentChatId = msg.from;
+                    }
+                }
+                // Para grupos, el chat_id es el identificador del grupo
+                if (msg.chat_id.endsWith('@g.us')) { 
+                    currentChatId = msg.chat_id;
+                }
+                // Solo se añade si no existe para contar conversaciones únicas
+                if (!chatMap.has(currentChatId)) {
+                  chatMap.set(currentChatId, {}); // El valor no importa, solo las claves
+                }
+              });
+              conversationsVal = chatMap.size;
+
+            } catch (e) {
+              console.error("Error fetching conversations count:", e);
+              conversationsVal = "Error";
+            }
+          } else {
+            conversationsVal = 0; // Si no hay instancia, no hay conversaciones
+          }
+
 
           setStats({
             instanceStatus: instanceStatusVal,
@@ -92,8 +148,7 @@ export default function DashboardPage() {
       };
       fetchData();
     } else {
-      // Handle case where user is not available (e.g. still loading auth state)
-      setIsLoading(true); // Keep loading until user is confirmed
+      setIsLoading(true); 
     }
   }, [user]);
 
@@ -112,6 +167,7 @@ export default function DashboardPage() {
       case 'Desconectado': return 'text-red-500';
       case 'Pendiente': return 'text-yellow-500';
       case 'No Configurada': return 'text-slate-500';
+      case 'Error': return 'text-red-700';
       default: return 'text-muted-foreground';
     }
   };
@@ -147,7 +203,8 @@ export default function DashboardPage() {
                stats.instanceStatus === 'No Configurada' ? 'Ve a Configuración para empezar.' :
                stats.instanceStatus === 'Pendiente' ? 'Esperando conexión o QR.' :
                stats.instanceStatus === 'Desconectado' ? 'Requiere acción para reconectar.' :
-               stats.instanceStatus === 'Cargando...' ? 'Verificando estado...' :
+               stats.instanceStatus === 'Cargando' ? 'Verificando estado...' : 
+               stats.instanceStatus === 'Error' ? 'Error al cargar estado.' :
                'Revisa la configuración.'
               }
             </p>
@@ -157,15 +214,19 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Chatbot Global</CardTitle>
-            {stats.isChatbotGloballyEnabled === undefined ? <HelpCircle className="h-5 w-5 text-slate-500" /> : 
+            {stats.isChatbotGloballyEnabled === undefined && stats.instanceStatus !== 'No Configurada' && stats.instanceStatus !== 'Cargando' ? <HelpCircle className="h-5 w-5 text-slate-500" /> : 
              stats.isChatbotGloballyEnabled ? <BotMessageSquare className="h-5 w-5 text-green-500" /> : <MessageCircleOff className="h-5 w-5 text-red-500" />}
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${stats.isChatbotGloballyEnabled === undefined ? 'text-slate-500' : stats.isChatbotGloballyEnabled ? 'text-green-500' : 'text-red-500'}`}>
-              {stats.isChatbotGloballyEnabled === undefined ? "No Configurado" : stats.isChatbotGloballyEnabled ? "Activado" : "Desactivado"}
+            <div className={`text-2xl font-bold ${stats.isChatbotGloballyEnabled === undefined && stats.instanceStatus !== 'No Configurada' && stats.instanceStatus !== 'Cargando' ? 'text-slate-500' : stats.isChatbotGloballyEnabled ? 'text-green-500' : 'text-red-500'}`}>
+              {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' ? "N/A" :
+               stats.isChatbotGloballyEnabled === undefined ? "No Definido" : 
+               stats.isChatbotGloballyEnabled ? "Activado" : "Desactivado"}
             </div>
             <p className="text-xs text-muted-foreground">
-              {stats.isChatbotGloballyEnabled === undefined ? "Define en Configuración." : stats.isChatbotGloballyEnabled ? "Respondiendo mensajes automáticamente." : "Solo respuestas manuales."}
+              {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' ? "Requiere instancia configurada." :
+               stats.isChatbotGloballyEnabled === undefined ? "Define en Configuración." : 
+               stats.isChatbotGloballyEnabled ? "Respondiendo mensajes automáticamente." : "Solo respuestas manuales."}
             </p>
           </CardContent>
         </Card>
@@ -173,38 +234,42 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Modo Demo</CardTitle>
-             {stats.isDemoMode === undefined ? <HelpCircle className="h-5 w-5 text-slate-500" /> : 
+             {stats.isDemoMode === undefined && stats.instanceStatus !== 'No Configurada' && stats.instanceStatus !== 'Cargando' ? <HelpCircle className="h-5 w-5 text-slate-500" /> : 
               stats.isDemoMode ? <FlaskConical className="h-5 w-5 text-blue-500" /> : <FlaskConical className="h-5 w-5 text-slate-500 opacity-50" />}
           </CardHeader>
           <CardContent>
-             <div className={`text-2xl font-bold ${stats.isDemoMode === undefined ? 'text-slate-500' : stats.isDemoMode ? 'text-blue-500' : 'text-slate-700 dark:text-slate-300'}`}>
-                {stats.isDemoMode === undefined ? "No Configurado" : stats.isDemoMode ? "Activado" : "Desactivado"}
+             <div className={`text-2xl font-bold ${stats.isDemoMode === undefined && stats.instanceStatus !== 'No Configurada' && stats.instanceStatus !== 'Cargando' ? 'text-slate-500' : stats.isDemoMode ? 'text-blue-500' : 'text-slate-700 dark:text-slate-300'}`}>
+                {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' ? "N/A" :
+                 stats.isDemoMode === undefined ? "No Definido" : 
+                 stats.isDemoMode ? "Activado" : "Desactivado"}
             </div>
             <p className="text-xs text-muted-foreground">
-                {stats.isDemoMode === undefined ? "Define en Configuración." : stats.isDemoMode ? "Simulando interacciones." : "Operando en modo real."}
+                {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' ? "Requiere instancia configurada." :
+                 stats.isDemoMode === undefined ? "Define en Configuración." : 
+                 stats.isDemoMode ? "Simulando interacciones." : "Operando en modo real."}
             </p>
           </CardContent>
         </Card>
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Contactos Totales</CardTitle>
+            <CardTitle className="text-sm font-medium">Contactos Guardados</CardTitle>
             <Users className="h-5 w-5 text-primary" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.contactCount}</div>
-            <p className="text-xs text-muted-foreground">Contactos únicos asociados.</p>
+            <p className="text-xs text-muted-foreground">Contactos en tu agenda personal.</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Conversaciones</CardTitle>
-            <MessageSquare className="h-5 w-5 text-primary" />
+            <CardTitle className="text-sm font-medium">Conversaciones Activas</CardTitle>
+            <ListChecks className="h-5 w-5 text-primary" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.conversationCount}</div>
-            <p className="text-xs text-muted-foreground">Total de hilos de chat registrados.</p>
+            <p className="text-xs text-muted-foreground">Hilos de chat únicos registrados.</p>
           </CardContent>
         </Card>
 
@@ -239,3 +304,6 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+
+    
