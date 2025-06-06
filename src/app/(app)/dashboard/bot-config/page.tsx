@@ -235,15 +235,13 @@ export default function BotConfigPage() {
       }
 
       const finalXml = `
-<prompt>
-  ${rulesXml.trim() ? rulesXml.trim() : ''}
-  <agentRole>${escapeXml(agentRole)}</agentRole>
-  ${businessContextXml.trim() ? businessContextXml.trim() : ''}
-  ${serviceCatalogXmlSection.trim() ? serviceCatalogXmlSection.trim() : ''}
-  ${contactXml.trim() ? contactXml.trim() : ''}
-  <closingMessage>${escapeXml(closingMessage)}</closingMessage>
-  ${notificationXml.trim() ? notificationXml.trim() : ''}
-</prompt>
+${rulesXml.trim() ? rulesXml.trim() : ''}
+${agentRole.trim() ? `<agentRole>${escapeXml(agentRole)}</agentRole>` : ''}
+${businessContextXml.trim() ? businessContextXml.trim() : ''}
+${serviceCatalogXmlSection.trim() ? serviceCatalogXmlSection.trim() : ''}
+${contactXml.trim() ? contactXml.trim() : ''}
+${closingMessage.trim() ? `<closingMessage>${escapeXml(closingMessage)}</closingMessage>` : ''}
+${notificationXml.trim() ? notificationXml.trim() : ''}
       `.trim().replace(/^\s*\n/gm, ""); 
       setGeneratedXml(finalXml);
     };
@@ -591,3 +589,4 @@ export default function BotConfigPage() {
     </div>
   );
 }
+
