@@ -15,7 +15,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, Trash2, PlusCircle, Settings, Trash } from 'lucide-react';
+import { Loader2, Save, Trash2, PlusCircle, Settings, Trash, Bell } from 'lucide-react';
 
 // Types for Bot Configuration
 interface Service {
@@ -52,6 +52,8 @@ interface BotConfigData {
   closingMessage: string;
   promptXml?: string;
   instanceIdAssociated?: string;
+  notificationPhoneNumber?: string;
+  notificationRule?: string;
 }
 
 const availableRules: string[] = [
@@ -68,7 +70,7 @@ const initialBusinessContext: BusinessContext = {
   location: "[Ciudad, País]",
   mission: "Nuestra misión es [Declaración de Misión de la Empresa].",
 };
-const initialServiceCatalog: ServiceCategory[] = [ // This will be used as a fallback if a user has old data without categories being an array
+const initialServiceCatalog: ServiceCategory[] = [ 
   {
     id: crypto.randomUUID(),
     categoryName: "Servicios de Consultoría",
@@ -84,6 +86,8 @@ const initialContactDetails: BotContactDetails = {
   website: "https://www.[dominioempresa].com",
 };
 const initialClosingMessage = "¿Te gustaría agendar una llamada para discutir esto más a fondo o prefieres que te envíe una propuesta directamente? También puedes visitar nuestro sitio web para más información.";
+const initialNotificationPhoneNumber = "";
+const initialNotificationRule = "";
 
 
 function escapeXml(unsafe: string): string {
@@ -107,14 +111,15 @@ export default function BotConfigPage() {
   const [selectedRules, setSelectedRules] = useState<string[]>([]);
   const [agentRole, setAgentRole] = useState<string>(initialAgentRole);
   const [businessContext, setBusinessContext] = useState<BusinessContext>(initialBusinessContext);
-  const [serviceCatalog, setServiceCatalog] = useState<ServiceCategory[]>([]); // Initialize as empty
+  const [serviceCatalog, setServiceCatalog] = useState<ServiceCategory[]>([]); 
   const [contactDetails, setContactDetails] = useState<BotContactDetails>(initialContactDetails);
   const [closingMessage, setClosingMessage] = useState<string>(initialClosingMessage);
+  const [notificationPhoneNumber, setNotificationPhoneNumber] = useState<string>(initialNotificationPhoneNumber);
+  const [notificationRule, setNotificationRule] = useState<string>(initialNotificationRule);
   const [generatedXml, setGeneratedXml] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
-  // Load data from Firestore
   useEffect(() => {
     if (user) {
       const loadData = async () => {
@@ -127,7 +132,7 @@ export default function BotConfigPage() {
             setSelectedRules(data.rules || []);
             setAgentRole(data.agentRole || initialAgentRole);
             setBusinessContext(data.businessContext || initialBusinessContext);
-            const loadedCatalog = (data.serviceCatalog || []).map(cat => ({ // Default to [] if not present
+            const loadedCatalog = (data.serviceCatalog || []).map(cat => ({ 
               ...cat,
               id: cat.id || crypto.randomUUID(),
               services: (cat.services || []).map(srv => ({
@@ -138,15 +143,18 @@ export default function BotConfigPage() {
             setServiceCatalog(loadedCatalog);
             setContactDetails(data.contact || initialContactDetails);
             setClosingMessage(data.closingMessage || initialClosingMessage);
+            setNotificationPhoneNumber(data.notificationPhoneNumber || initialNotificationPhoneNumber);
+            setNotificationRule(data.notificationRule || initialNotificationRule);
             if (data.promptXml) setGeneratedXml(data.promptXml);
           } else {
-            // Set initial defaults if no data found
             setSelectedRules([]);
             setAgentRole(initialAgentRole);
             setBusinessContext(initialBusinessContext);
-            setServiceCatalog([]); // Start with an empty catalog for new users
+            setServiceCatalog([]); 
             setContactDetails(initialContactDetails);
             setClosingMessage(initialClosingMessage);
+            setNotificationPhoneNumber(initialNotificationPhoneNumber);
+            setNotificationRule(initialNotificationRule);
           }
         } catch (error) {
           console.error("Error loading bot configuration:", error);
@@ -161,7 +169,6 @@ export default function BotConfigPage() {
     }
   }, [user, toast]);
 
-  // Generate XML
   useEffect(() => {
     const generate = () => {
       const businessContextIsEmpty = !businessContext.description?.trim() && !businessContext.location?.trim() && !businessContext.mission?.trim();
@@ -172,11 +179,16 @@ export default function BotConfigPage() {
       );
       const serviceCatalogIsEmpty = activeCategories.length === 0;
 
+      let allRulesForXml = [...selectedRules];
+      if (notificationRule.trim()) {
+        allRulesForXml.push(notificationRule.trim());
+      }
+
       let rulesXml = '';
-      if (selectedRules.length > 0) {
+      if (allRulesForXml.length > 0) {
         rulesXml = `
   <rules>
-    ${selectedRules.map(rule => `<rule>${escapeXml(rule)}</rule>`).join('\n    ')}
+    ${allRulesForXml.map(rule => `<rule>${escapeXml(rule)}</rule>`).join('\n    ')}
   </rules>`;
       }
 
@@ -215,6 +227,12 @@ export default function BotConfigPage() {
     <website>${escapeXml(contactDetails.website)}</website>
   </contact>`;
       }
+      
+      let notificationXml = '';
+      if (notificationPhoneNumber.trim()) {
+        notificationXml = `
+  <notification>${escapeXml(notificationPhoneNumber.trim())}</notification>`;
+      }
 
       const finalXml = `
 <prompt>
@@ -224,14 +242,15 @@ export default function BotConfigPage() {
   ${serviceCatalogXmlSection.trim() ? serviceCatalogXmlSection.trim() : ''}
   ${contactXml.trim() ? contactXml.trim() : ''}
   <closingMessage>${escapeXml(closingMessage)}</closingMessage>
+  ${notificationXml.trim() ? notificationXml.trim() : ''}
 </prompt>
-      `.trim().replace(/^\s*\n/gm, ""); // Clean up empty lines from omitted sections
+      `.trim().replace(/^\s*\n/gm, ""); 
       setGeneratedXml(finalXml);
     };
     if (!isLoading) { 
         generate();
     }
-  }, [selectedRules, agentRole, businessContext, serviceCatalog, contactDetails, closingMessage, isLoading]);
+  }, [selectedRules, agentRole, businessContext, serviceCatalog, contactDetails, closingMessage, notificationPhoneNumber, notificationRule, isLoading]);
 
   const handleRuleChange = (rule: string) => {
     setSelectedRules(prev =>
@@ -315,7 +334,6 @@ export default function BotConfigPage() {
         }
     } catch (error) {
         console.error("Error fetching instance ID for bot config:", error);
-        // Optionally notify user or proceed without instanceIdAssociated
     }
 
     try {
@@ -328,6 +346,8 @@ export default function BotConfigPage() {
         closingMessage,
         promptXml: generatedXml,
         instanceIdAssociated,
+        notificationPhoneNumber,
+        notificationRule,
       };
       await setDoc(doc(db, 'qybot', user.uid), configToSave, { merge: true });
       toast({ title: "Éxito", description: "Configuración del bot guardada correctamente." });
@@ -370,7 +390,7 @@ export default function BotConfigPage() {
           <Card>
             <CardHeader>
               <CardTitle>Reglas del Bot</CardTitle>
-              <CardDescription>Selecciona las reglas que el bot debe seguir.</CardDescription>
+              <CardDescription>Selecciona las reglas generales que el bot debe seguir. La regla de notificación se añadirá aquí si se define.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               {availableRules.map(rule => (
@@ -496,6 +516,43 @@ export default function BotConfigPage() {
 
           <Card>
             <CardHeader>
+              <CardTitle className="flex items-center">
+                <Bell className="mr-2 h-5 w-5 text-primary" />
+                Notificación
+              </CardTitle>
+              <CardDescription>Configura las notificaciones que el bot puede enviar. La regla se añadirá a las reglas generales del bot.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="notificationPhone">Número de WhatsApp para Notificaciones</Label>
+                <Input 
+                  id="notificationPhone" 
+                  value={notificationPhoneNumber} 
+                  onChange={handleTextAreaChange(setNotificationPhoneNumber)} 
+                  placeholder="Ej: 528112345678 (solo dígitos, con código de país)" 
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Ingresa el número completo sin espacios ni símbolos. Si se deja vacío, no se incluirá la etiqueta de notificación en el XML.
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="notificationRule">Regla de Notificación</Label>
+                <Textarea 
+                  id="notificationRule" 
+                  value={notificationRule} 
+                  onChange={handleTextAreaChange(setNotificationRule)} 
+                  rows={3} 
+                  placeholder="Ej: Notificar cuando un cliente solicite hablar con un humano." 
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Describe la condición bajo la cual el bot debe activar una notificación. Esta regla se agregará a la sección de reglas del prompt XML. Si se deja vacía, no se añadirá.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle>Mensaje de Cierre</CardTitle>
               <CardDescription>La llamada a la acción final del bot.</CardDescription>
             </CardHeader>
@@ -534,6 +591,3 @@ export default function BotConfigPage() {
     </div>
   );
 }
-
-
-    
