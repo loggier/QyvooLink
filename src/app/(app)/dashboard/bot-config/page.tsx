@@ -116,7 +116,7 @@ export default function BotConfigPage() {
   const [closingMessage, setClosingMessage] = useState<string>(initialClosingMessage);
   const [notificationPhoneNumber, setNotificationPhoneNumber] = useState<string>(initialNotificationPhoneNumber);
   const [notificationRule, setNotificationRule] = useState<string>(initialNotificationRule);
-  const [generatedXml, setGeneratedXml] = useState<string>("");
+  const [generatedXml, setGeneratedXml] = useState<string>(""); // Still needed for saving
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
@@ -145,7 +145,7 @@ export default function BotConfigPage() {
             setClosingMessage(data.closingMessage || initialClosingMessage);
             setNotificationPhoneNumber(data.notificationPhoneNumber || initialNotificationPhoneNumber);
             setNotificationRule(data.notificationRule || initialNotificationRule);
-            if (data.promptXml) setGeneratedXml(data.promptXml);
+            if (data.promptXml) setGeneratedXml(data.promptXml); // Keep populating for save logic
           } else {
             setSelectedRules([]);
             setAgentRole(initialAgentRole);
@@ -382,8 +382,8 @@ ${notificationXml.trim() ? notificationXml.trim() : ''}
     <div className="container mx-auto p-4 space-y-8">
       <h1 className="text-3xl font-bold text-foreground">Configurar Bot de Ventas</h1>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <ScrollArea className="h-auto md:h-[calc(100vh-12rem)] pr-4">
+      <div className="space-y-6">
+        <ScrollArea className="h-auto pr-4">
         <div className="space-y-6">
           <Card>
             <CardHeader>
@@ -566,21 +566,8 @@ ${notificationXml.trim() ? notificationXml.trim() : ''}
         </div>
         </ScrollArea>
 
-        <div className="space-y-6 sticky top-4 md:h-[calc(100vh-4rem)] flex flex-col">
-          <Card className="flex-grow flex flex-col">
-            <CardHeader>
-              <CardTitle>Vista Previa del Prompt XML</CardTitle>
-              <CardDescription>Este es el XML que se generará basado en tu configuración.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-grow overflow-hidden">
-              <ScrollArea className="h-full max-h-[calc(100vh-20rem)] md:max-h-full w-full border rounded-md p-2 bg-muted/50">
-                <pre className="text-sm whitespace-pre-wrap break-all text-foreground">
-                  <code>{generatedXml}</code>
-                </pre>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-          <Button onClick={handleSave} disabled={isSaving || !user} size="lg" className="w-full">
+        <div className="flex justify-end pt-6">
+          <Button onClick={handleSave} disabled={isSaving || !user} size="lg" className="w-full sm:w-auto">
             {isSaving ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
             {isSaving ? "Guardando..." : "Guardar Configuración del Bot"}
           </Button>
