@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EvolveLinkLogo } from '@/components/icons';
-import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Edit3, Save, XCircle, Building, MapPin, Mail, Phone, UserCheck, Bot, UserRound } from 'lucide-react';
+import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Edit3, Save, XCircle, Building, MapPin, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed } from 'lucide-react';
 import type { WhatsAppInstance } from '../configuration/page'; 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 
@@ -61,6 +62,7 @@ interface ContactDetails {
   instanceId?: string; 
   userId?: string; 
   _chatIdOriginal?: string;
+  chatbotEnabledForContact?: boolean; // Nuevo campo
 }
 
 const getContactDocId = (userId: string, chatId: string): string => `${userId}_${chatId.replace(/@/g, '_')}`;
@@ -68,11 +70,10 @@ const getContactDocId = (userId: string, chatId: string): string => `${userId}_$
 
 function formatWhatsAppMessage(text: string | undefined | null): React.ReactNode[] {
   if (typeof text !== 'string' || !text) {
-    return [text]; // Devuelve el texto original si no es una cadena o está vacío
+    return [text]; 
   }
 
   const elements: React.ReactNode[] = [];
-  // Orden de patrones: ``` (multilínea), *, _, ~
   const regex = /(```(?:.|\n)*?```)|(\*(.+?)\*)|(_([^_]+?)_)|(~([^~]+?)~)/g;
 
   let lastIndex = 0;
@@ -81,29 +82,26 @@ function formatWhatsAppMessage(text: string | undefined | null): React.ReactNode
   while ((match = regex.exec(text)) !== null) {
     const startIndex = match.index;
 
-    // Añadir texto antes del match
     if (startIndex > lastIndex) {
       elements.push(text.substring(lastIndex, startIndex));
     }
 
-    if (match[1]) { // ```codigo``` (match[1] es el texto completo ```...```)
+    if (match[1]) { 
       elements.push(<code key={lastIndex} className="font-mono bg-muted text-muted-foreground px-1 py-0.5 rounded text-xs">{match[1].slice(3, -3)}</code>);
-    } else if (match[2]) { // *negrita* (match[2] es *...*, match[3] es ...)
+    } else if (match[2]) { 
       elements.push(<strong key={lastIndex}>{match[3]}</strong>);
-    } else if (match[4]) { // _cursiva_ (match[4] es _..._, match[5] es ...)
+    } else if (match[4]) { 
       elements.push(<em key={lastIndex}>{match[5]}</em>);
-    } else if (match[6]) { // ~tachado~ (match[6] es ~...~, match[7] es ...)
+    } else if (match[6]) { 
       elements.push(<del key={lastIndex}>{match[7]}</del>);
     }
     lastIndex = regex.lastIndex;
   }
 
-  // Añadir texto restante después del último match
   if (lastIndex < text.length) {
     elements.push(text.substring(lastIndex));
   }
   
-  // Si no hubo matches, y el texto original no estaba vacío, retornar el texto original en un array para consistencia.
   if (elements.length === 0 && text.length > 0) {
     elements.push(text);
   }
@@ -221,7 +219,7 @@ export default function ChatPage() {
           });
           
           const contactPromises = Array.from(chatMap.keys()).map(async (chat_id) => {
-            if (!user) return { chatId: chat_id, data: null }; // Early exit if no user
+            if (!user) return { chatId: chat_id, data: null }; 
             const contactDocId = getContactDocId(user.uid, chat_id);
             try {
                 const contactDocRef = doc(db, 'contacts', contactDocId);
@@ -296,7 +294,7 @@ export default function ChatPage() {
       };
       fetchConversations();
     }
-  }, [whatsAppInstance, user]); // Added user dependency
+  }, [whatsAppInstance, user]); 
 
   useEffect(() => {
     if (selectedChatId && whatsAppInstance) {
@@ -339,6 +337,7 @@ export default function ChatPage() {
           const contactDocSnap = await getDoc(contactDocRef);
           if (contactDocSnap.exists()) {
             const data = { id: contactDocSnap.id, ...contactDocSnap.data() } as ContactDetails;
+            data.chatbotEnabledForContact = data.chatbotEnabledForContact ?? true; // Default to true if not set
             setContactDetails(data);
             setInitialContactDetails(data);
           } else {
@@ -354,6 +353,7 @@ export default function ChatPage() {
               instanceId: whatsAppInstance.id,
               userId: user.uid, 
               _chatIdOriginal: selectedChatId,
+              chatbotEnabledForContact: true, // Bot activo por defecto para nuevos contactos
             };
             setContactDetails(initialData); 
             setInitialContactDetails(initialData);
@@ -450,14 +450,14 @@ export default function ChatPage() {
       userId: user.uid, 
       instanceId: dataToPersist.instanceId || whatsAppInstance.id, 
       telefono: dataToPersist.telefono || formatPhoneNumber(selectedChatId), 
-      _chatIdOriginal: selectedChatId 
+      _chatIdOriginal: selectedChatId,
+      chatbotEnabledForContact: dataToPersist.chatbotEnabledForContact ?? true,
     };
 
     try {
       await setDoc(contactDocRef, finalDataToPersist, { merge: true });
       
       const updatedContactState = { ...finalDataToPersist, id: compositeContactId };
-      // delete (updatedContactState as any)._chatIdOriginal; // Keep it if useful for debugging or future use
 
       setContactDetails(updatedContactState);
       setInitialContactDetails(updatedContactState); 
@@ -471,7 +471,7 @@ export default function ChatPage() {
     }
   };
 
-  const handleContactInputChange = (field: keyof Omit<ContactDetails, 'id' | 'instanceId' | 'userId' | 'tipoCliente' | '_chatIdOriginal'>, value: string) => {
+  const handleContactInputChange = (field: keyof Omit<ContactDetails, 'id' | 'instanceId' | 'userId' | 'tipoCliente' | '_chatIdOriginal' | 'chatbotEnabledForContact'>, value: string) => {
     setContactDetails(prev => prev ? { ...prev, [field]: value } : null);
   };
   
@@ -792,6 +792,29 @@ export default function ChatPage() {
                       <SelectItem value="Otro">Otro</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2 mt-2">
+                     <Switch
+                        id="chatbotEnabledForContact"
+                        checked={contactDetails.chatbotEnabledForContact ?? true}
+                        onCheckedChange={(checked) => {
+                          if (isEditingContact) {
+                            setContactDetails(prev => prev ? { ...prev, chatbotEnabledForContact: checked } : null);
+                          }
+                        }}
+                        disabled={!isEditingContact || isLoadingContact || isSavingContact}
+                      />
+                    <Label htmlFor="chatbotEnabledForContact" className="flex items-center text-sm text-muted-foreground">
+                      <Bot className="h-4 w-4 mr-2" />
+                      Chatbot Activo para este Contacto
+                    </Label>
+                  </div>
+                   {isEditingContact && !contactDetails.chatbotEnabledForContact && (
+                    <p className="text-xs text-amber-600 dark:text-amber-500 mt-1 flex items-center">
+                        <MessageSquareDashed className="h-3 w-3 mr-1" /> El bot no responderá automáticamente a este contacto.
+                    </p>
+                  )}
                 </div>
                 
                 {isEditingContact && (
