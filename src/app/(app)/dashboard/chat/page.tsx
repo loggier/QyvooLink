@@ -663,7 +663,7 @@ export default function ChatPage() {
                         <div
                           className={`py-2 px-3 rounded-lg shadow-md ${bubbleClass}`}
                         >
-                          <p className="text-sm break-words whitespace-pre-wrap">
+                          <p className="text-sm break-all whitespace-pre-wrap">
                              {formatWhatsAppMessage(msg.mensaje)}
                           </p>
                           <p className={`text-xs mt-1 ${timestampAlignmentClass}`}>
