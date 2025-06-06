@@ -116,7 +116,7 @@ export default function BotConfigPage() {
   const [closingMessage, setClosingMessage] = useState<string>(initialClosingMessage);
   const [notificationPhoneNumber, setNotificationPhoneNumber] = useState<string>(initialNotificationPhoneNumber);
   const [notificationRule, setNotificationRule] = useState<string>(initialNotificationRule);
-  const [generatedXml, setGeneratedXml] = useState<string>(""); // Still needed for saving
+  const [generatedPromptConfig, setGeneratedPromptConfig] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
@@ -145,7 +145,7 @@ export default function BotConfigPage() {
             setClosingMessage(data.closingMessage || initialClosingMessage);
             setNotificationPhoneNumber(data.notificationPhoneNumber || initialNotificationPhoneNumber);
             setNotificationRule(data.notificationRule || initialNotificationRule);
-            if (data.promptXml) setGeneratedXml(data.promptXml); // Keep populating for save logic
+            if (data.promptXml) setGeneratedPromptConfig(data.promptXml);
           } else {
             setSelectedRules([]);
             setAgentRole(initialAgentRole);
@@ -179,22 +179,22 @@ export default function BotConfigPage() {
       );
       const serviceCatalogIsEmpty = activeCategories.length === 0;
 
-      let allRulesForXml = [...selectedRules];
+      let allRulesForConfig = [...selectedRules];
       if (notificationRule.trim()) {
-        allRulesForXml.push(notificationRule.trim());
+        allRulesForConfig.push(notificationRule.trim());
       }
 
-      let rulesXml = '';
-      if (allRulesForXml.length > 0) {
-        rulesXml = `
+      let rulesConfig = '';
+      if (allRulesForConfig.length > 0) {
+        rulesConfig = `
   <rules>
-    ${allRulesForXml.map(rule => `<rule>${escapeXml(rule)}</rule>`).join('\n    ')}
+    ${allRulesForConfig.map(rule => `<rule>${escapeXml(rule)}</rule>`).join('\n    ')}
   </rules>`;
       }
 
-      let businessContextXml = '';
+      let businessContextConfig = '';
       if (!businessContextIsEmpty) {
-        businessContextXml = `
+        businessContextConfig = `
   <businessContext>
     <description>${escapeXml(businessContext.description)}</description>
     <location>${escapeXml(businessContext.location)}</location>
@@ -202,9 +202,9 @@ export default function BotConfigPage() {
   </businessContext>`;
       }
 
-      let serviceCatalogXmlSection = '';
+      let serviceCatalogConfigSection = '';
       if (!serviceCatalogIsEmpty) {
-        serviceCatalogXmlSection = `
+        serviceCatalogConfigSection = `
   <serviceCatalog>
     ${activeCategories.map(category => `
     <category name="${escapeXml(category.categoryName)}">
@@ -218,9 +218,9 @@ export default function BotConfigPage() {
   </serviceCatalog>`;
       }
 
-      let contactXml = '';
+      let contactConfig = '';
       if (!contactDetailsIsEmpty) {
-        contactXml = `
+        contactConfig = `
   <contact>
     <phone>${escapeXml(contactDetails.phone)}</phone>
     <email>${escapeXml(contactDetails.email)}</email>
@@ -228,22 +228,22 @@ export default function BotConfigPage() {
   </contact>`;
       }
       
-      let notificationXml = '';
+      let notificationConfig = '';
       if (notificationPhoneNumber.trim()) {
-        notificationXml = `
+        notificationConfig = `
   <notification>${escapeXml(notificationPhoneNumber.trim())}</notification>`;
       }
 
-      const finalXml = `
-${rulesXml.trim() ? rulesXml.trim() : ''}
+      const finalPromptConfig = `
+${rulesConfig.trim() ? rulesConfig.trim() : ''}
 ${agentRole.trim() ? `<agentRole>${escapeXml(agentRole)}</agentRole>` : ''}
-${businessContextXml.trim() ? businessContextXml.trim() : ''}
-${serviceCatalogXmlSection.trim() ? serviceCatalogXmlSection.trim() : ''}
-${contactXml.trim() ? contactXml.trim() : ''}
+${businessContextConfig.trim() ? businessContextConfig.trim() : ''}
+${serviceCatalogConfigSection.trim() ? serviceCatalogConfigSection.trim() : ''}
+${contactConfig.trim() ? contactConfig.trim() : ''}
 ${closingMessage.trim() ? `<closingMessage>${escapeXml(closingMessage)}</closingMessage>` : ''}
-${notificationXml.trim() ? notificationXml.trim() : ''}
+${notificationConfig.trim() ? notificationConfig.trim() : ''}
       `.trim().replace(/^\s*\n/gm, ""); 
-      setGeneratedXml(finalXml);
+      setGeneratedPromptConfig(finalPromptConfig);
     };
     if (!isLoading) { 
         generate();
@@ -342,7 +342,7 @@ ${notificationXml.trim() ? notificationXml.trim() : ''}
         serviceCatalog,
         contact: contactDetails,
         closingMessage,
-        promptXml: generatedXml,
+        promptXml: generatedPromptConfig, // This field name in Firestore remains promptXml
         instanceIdAssociated,
         notificationPhoneNumber,
         notificationRule,
@@ -380,7 +380,7 @@ ${notificationXml.trim() ? notificationXml.trim() : ''}
 
   return (
     <div className="container mx-auto p-4 space-y-8">
-      <h1 className="text-3xl font-bold text-foreground">Configurar Bot de Ventas</h1>
+      <h1 className="text-3xl font-bold text-foreground">Configurar Prompt del Bot</h1>
       
       <div className="space-y-6">
         <ScrollArea className="h-auto pr-4">
@@ -422,7 +422,7 @@ ${notificationXml.trim() ? notificationXml.trim() : ''}
           <Card>
             <CardHeader>
               <CardTitle>Contexto del Negocio</CardTitle>
-              <CardDescription>Información sobre tu empresa. Se omitirá del XML si todos los campos están vacíos.</CardDescription>
+              <CardDescription>Información sobre tu empresa. Se omitirá de la configuración del prompt si todos los campos están vacíos.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -443,7 +443,7 @@ ${notificationXml.trim() ? notificationXml.trim() : ''}
           <Card>
             <CardHeader>
               <CardTitle>Catálogo de Servicios</CardTitle>
-              <CardDescription>Define los servicios que ofrece el bot. Se omitirá del XML si no hay categorías o servicios definidos.</CardDescription>
+              <CardDescription>Define los servicios que ofrece el bot. Se omitirá de la configuración del prompt si no hay categorías o servicios definidos.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {serviceCatalog.map((category, catIndex) => (
@@ -494,7 +494,7 @@ ${notificationXml.trim() ? notificationXml.trim() : ''}
           <Card>
             <CardHeader>
               <CardTitle>Datos de Contacto</CardTitle>
-              <CardDescription>Información de contacto que el bot puede proporcionar. Se omitirá del XML si todos los campos están vacíos.</CardDescription>
+              <CardDescription>Información de contacto que el bot puede proporcionar. Se omitirá de la configuración del prompt si todos los campos están vacíos.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -530,7 +530,7 @@ ${notificationXml.trim() ? notificationXml.trim() : ''}
                   placeholder="Ej: 528112345678 (solo dígitos, con código de país)" 
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Ingresa el número completo sin espacios ni símbolos. Si se deja vacío, no se incluirá la etiqueta de notificación en el XML.
+                  Ingresa el número completo sin espacios ni símbolos. Si se deja vacío, no se incluirá la información de notificación en el prompt del bot.
                 </p>
               </div>
               <div>
@@ -543,7 +543,7 @@ ${notificationXml.trim() ? notificationXml.trim() : ''}
                   placeholder="Ej: Notificar cuando un cliente solicite hablar con un humano." 
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Describe la condición bajo la cual el bot debe activar una notificación. Esta regla se agregará a la sección de reglas del prompt XML. Si se deja vacía, no se añadirá.
+                  Describe la condición bajo la cual el bot debe activar una notificación. Esta regla se agregará a la sección de reglas del prompt del bot. Si se deja vacía, no se añadirá.
                 </p>
               </div>
             </CardContent>
