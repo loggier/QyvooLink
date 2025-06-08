@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
+import { useSearchParams } from 'next/navigation'; // Importar useSearchParams
 
 interface ChatMessageDocument {
   chat_id: string;
@@ -62,7 +63,7 @@ interface ContactDetails {
   instanceId?: string; 
   userId?: string; 
   _chatIdOriginal?: string;
-  chatbotEnabledForContact?: boolean; // Nuevo campo
+  chatbotEnabledForContact?: boolean;
 }
 
 const getContactDocId = (userId: string, chatId: string): string => `${userId}_${chatId.replace(/@/g, '_')}`;
@@ -113,6 +114,7 @@ function formatWhatsAppMessage(text: string | undefined | null): React.ReactNode
 export default function ChatPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const searchParams = useSearchParams(); // Usar el hook
   const [whatsAppInstance, setWhatsAppInstance] = useState<WhatsAppInstance | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null); 
@@ -296,6 +298,24 @@ export default function ChatPage() {
     }
   }, [whatsAppInstance, user]); 
 
+  // useEffect para seleccionar el chat desde la URL
+  useEffect(() => {
+    const chatIdFromUrl = searchParams.get('chatId');
+    if (chatIdFromUrl && !isLoadingChats && conversations.length > 0) {
+      const conversationExists = conversations.find(c => c.chat_id === chatIdFromUrl);
+      if (conversationExists) {
+        if (selectedChatId !== chatIdFromUrl) {
+           setSelectedChatId(chatIdFromUrl);
+        }
+      } else {
+        // Opcional: Mostrar un toast si el chat ID de la URL no se encuentra
+        // toast({ variant: "destructive", title: "Chat no encontrado", description: `El chat con ID ${chatIdFromUrl} no fue encontrado.` });
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, isLoadingChats, conversations, selectedChatId]); // No agregamos toast aquí para evitar ciclos si el toast causa re-render
+
+
   useEffect(() => {
     if (selectedChatId && whatsAppInstance) {
       setIsLoadingMessages(true);
@@ -337,7 +357,7 @@ export default function ChatPage() {
           const contactDocSnap = await getDoc(contactDocRef);
           if (contactDocSnap.exists()) {
             const data = { id: contactDocSnap.id, ...contactDocSnap.data() } as ContactDetails;
-            data.chatbotEnabledForContact = data.chatbotEnabledForContact ?? true; // Default to true if not set
+            data.chatbotEnabledForContact = data.chatbotEnabledForContact ?? true; 
             setContactDetails(data);
             setInitialContactDetails(data);
           } else {
@@ -353,7 +373,7 @@ export default function ChatPage() {
               instanceId: whatsAppInstance.id,
               userId: user.uid, 
               _chatIdOriginal: selectedChatId,
-              chatbotEnabledForContact: true, // Bot activo por defecto para nuevos contactos
+              chatbotEnabledForContact: true, 
             };
             setContactDetails(initialData); 
             setInitialContactDetails(initialData);
