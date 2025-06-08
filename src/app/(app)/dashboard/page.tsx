@@ -68,6 +68,14 @@ const formatPhoneNumber = (chat_id: string | undefined): string => {
 
 const getContactDocId = (userId: string, chatId: string): string => `${userId}_${chatId.replace(/@/g, '_')}`;
 
+const truncateText = (text: string | undefined, maxLength: number): string => {
+  if (!text) return "";
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return text.substring(0, maxLength).trimEnd() + "...";
+};
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats>(initialStats);
@@ -123,8 +131,6 @@ export default function DashboardPage() {
                 collection(db, 'chat'),
                 where('instanceId', '==', instanceIdForChats),
                 orderBy('timestamp', 'desc')
-                // Limit can be higher initially to ensure we get 5 unique chats
-                // limit(25) // Example: fetch more to filter down
               );
               const chatSnapshot = await getDocs(chatQuery);
               const messages: ChatMessageDocument[] = [];
@@ -151,7 +157,7 @@ export default function DashboardPage() {
                 }
               });
               
-              conversationsVal = chatMap.size; // Total unique conversations
+              conversationsVal = chatMap.size; 
 
               const sortedUniqueMessages = Array.from(chatMap.values()).sort(
                 (a,b) => b.timestamp.toDate().getTime() - a.timestamp.toDate().getTime()
@@ -199,11 +205,11 @@ export default function DashboardPage() {
                         } else if (contactData.nombre && contactData.nombre.trim() && contactData.nombre.trim().length >=2) {
                             avatarFallbackText = contactData.nombre.trim().substring(0,2).toUpperCase();
                         } else if (contactData.nombre && contactData.nombre.trim()) {
-                            avatarFallbackText = contactData.nombre.trim().substring(0,1).toUpperCase();
+                           avatarFallbackText = contactData.nombre.trim().substring(0,1).toUpperCase();
                         } else if (contactData.empresa && contactData.empresa.trim() && contactData.empresa.trim().length >= 2) {
                             avatarFallbackText = contactData.empresa.trim().substring(0,2).toUpperCase();
                         } else if (contactData.empresa && contactData.empresa.trim()) {
-                            avatarFallbackText = contactData.empresa.trim().substring(0,1).toUpperCase();
+                           avatarFallbackText = contactData.empresa.trim().substring(0,1).toUpperCase();
                         }
                     }
                 }
@@ -261,7 +267,7 @@ export default function DashboardPage() {
     }
   }, [user]);
 
-  if (isLoading && !user) { // Added !user condition to prevent flicker if user is still loading
+  if (isLoading && !user) { 
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -441,10 +447,10 @@ export default function DashboardPage() {
                               {formatDistanceToNow(convo.lastMessageTimestamp, { addSuffix: true, locale: es })}
                             </p>
                           </div>
-                          <p className="text-xs text-muted-foreground truncate">
+                          <p className="text-xs text-muted-foreground">
                             <span className="font-medium">
                               {convo.lastMessageSender === 'User' ? 'Usuario' : convo.lastMessageSender === 'bot' ? 'Bot' : convo.lastMessageSender === 'agente' ? 'Agente' : 'Otro'}:
-                            </span> {convo.lastMessage}
+                            </span> {truncateText(convo.lastMessage, 70)}
                           </p>
                         </div>
                       </div>
@@ -459,5 +465,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
