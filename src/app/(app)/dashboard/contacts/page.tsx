@@ -5,7 +5,7 @@ import type { ChangeEvent } from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, doc, setDoc, addDoc, deleteDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, addDoc, deleteDoc, orderBy, setDoc } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,9 +14,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-
+import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Users, UserPlus, Edit3, Trash2, Building, Mail, Phone, UserCheck, Bot, UserRound, Briefcase, Star, MessageSquareDashed } from 'lucide-react';
 
@@ -31,10 +31,7 @@ interface ContactDetails {
   tipoCliente?: 'Prospecto' | 'Cliente' | 'Proveedor' | 'Otro';
   chatbotEnabledForContact?: boolean;
   userId: string;
-  _chatIdOriginal?: string; // If it was created from a chat
-  // Timestamps for sorting, could be added in Firestore via serverTimestamp
-  // createdAt?: Timestamp;
-  // updatedAt?: Timestamp;
+  _chatIdOriginal?: string; 
 }
 
 interface ContactStats {
@@ -60,14 +57,15 @@ const initialContactFormState: Omit<ContactDetails, 'id' | 'userId'> = {
 export default function ContactsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
 
   const [contacts, setContacts] = useState<ContactDetails[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [stats, setStats] = useState<ContactStats>({ total: 0, prospectos: 0, clientes: 0, proveedores: 0, otros: 0 });
   
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingContact, setEditingContact] = useState<Partial<ContactDetails> | null>(null);
-  const [currentContactData, setCurrentContactData] = useState<Partial<ContactDetails>>(initialContactFormState);
+  // editingContact state is removed as this dialog is only for adding.
+  const [currentContactData, setCurrentContactData] = useState<Omit<ContactDetails, 'id' | 'userId'>>(initialContactFormState);
   const [isSaving, setIsSaving] = useState(false);
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -86,9 +84,9 @@ export default function ContactsPage() {
       let proveedores = 0;
       let otros = 0;
 
-      querySnapshot.forEach((doc) => {
-        const data = doc.data() as Omit<ContactDetails, 'id'>;
-        fetchedContacts.push({ id: doc.id, ...data });
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data() as Omit<ContactDetails, 'id'>;
+        fetchedContacts.push({ id: docSnap.id, ...data });
         switch (data.tipoCliente) {
           case 'Prospecto': prospectos++; break;
           case 'Cliente': clientes++; break;
@@ -116,23 +114,21 @@ export default function ContactsPage() {
   };
 
   const handleSelectChange = (value: string) => {
-    setCurrentContactData(prev => prev ? { ...prev, tipoCliente: value as ContactDetails['tipoCliente'] } : null);
+    setCurrentContactData(prev => ({ ...prev, tipoCliente: value as ContactDetails['tipoCliente'] }));
   };
 
   const handleSwitchChange = (checked: boolean) => {
-    setCurrentContactData(prev => prev ? { ...prev, chatbotEnabledForContact: checked } : null);
+    setCurrentContactData(prev => ({ ...prev, chatbotEnabledForContact: checked }));
   };
 
   const handleAddNewContact = () => {
-    setEditingContact(null); // No existing contact being edited
-    setCurrentContactData({ ...initialContactFormState, userId: user?.uid }); // Reset form, ensure userId is set
+    setCurrentContactData({ ...initialContactFormState }); // Reset form for new contact
     setIsFormOpen(true);
   };
   
   const handleEditContact = (contact: ContactDetails) => {
-    setEditingContact(contact);
-    setCurrentContactData({ ...contact });
-    setIsFormOpen(true);
+    // Navigate to the dedicated contact detail page for editing
+    router.push(`/dashboard/contacts/${contact.id}`);
   };
 
   const handleDeleteContact = (contact: ContactDetails) => {
@@ -166,26 +162,16 @@ export default function ContactsPage() {
     setIsSaving(true);
     
     const contactDataToSave: Omit<ContactDetails, 'id'> & { userId: string } = {
-      nombre: currentContactData.nombre || "",
-      apellido: currentContactData.apellido || "",
-      email: currentContactData.email || "",
-      telefono: currentContactData.telefono || "",
-      empresa: currentContactData.empresa || "",
-      ubicacion: currentContactData.ubicacion || "",
-      tipoCliente: currentContactData.tipoCliente,
-      chatbotEnabledForContact: currentContactData.chatbotEnabledForContact ?? true,
+      ...currentContactData,
       userId: user.uid,
-      _chatIdOriginal: currentContactData._chatIdOriginal,
+      chatbotEnabledForContact: currentContactData.chatbotEnabledForContact ?? true,
     };
 
     try {
-      if (editingContact && editingContact.id) { // Editing existing contact
-        await setDoc(doc(db, 'contacts', editingContact.id), contactDataToSave, { merge: true });
-        toast({ title: "Contacto Actualizado", description: "La información del contacto ha sido guardada." });
-      } else { // Adding new contact
-        await addDoc(collection(db, 'contacts'), contactDataToSave);
-        toast({ title: "Contacto Creado", description: "El nuevo contacto ha sido guardado." });
-      }
+      // This form is only for adding new contacts
+      await addDoc(collection(db, 'contacts'), contactDataToSave);
+      toast({ title: "Contacto Creado", description: "El nuevo contacto ha sido guardado." });
+      
       setIsFormOpen(false);
       fetchContacts(); // Refresh list
     } catch (error) {
@@ -314,19 +300,18 @@ export default function ContactsPage() {
         </CardContent>
       </Card>
 
-      {/* Contact Form Dialog */}
+      {/* Contact Form Dialog - ONLY FOR ADDING NEW CONTACTS */}
       <Dialog open={isFormOpen} onOpenChange={(isOpen) => {
           setIsFormOpen(isOpen);
           if (!isOpen) {
-            setEditingContact(null);
-            setCurrentContactData(initialContactFormState);
+            setCurrentContactData(initialContactFormState); // Reset form when dialog closes
           }
         }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editingContact?.id ? "Editar Contacto" : "Añadir Nuevo Contacto"}</DialogTitle>
+            <DialogTitle>Añadir Nuevo Contacto</DialogTitle>
             <DialogDescription>
-              {editingContact?.id ? "Modifica los detalles del contacto." : "Ingresa los detalles del nuevo contacto."}
+              Ingresa los detalles del nuevo contacto.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmitForm} className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
@@ -353,7 +338,7 @@ export default function ContactsPage() {
               <Input id="empresa" name="empresa" value={currentContactData.empresa || ""} onChange={handleInputChange} placeholder="Tecnologías S.A."/>
             </div>
             <div>
-              <Label htmlFor="ubicacion" className="flex items-center text-sm text-muted-foreground"><UserCheck className="h-3 w-3 mr-1.5"/>Ubicación</Label>
+              <Label htmlFor="ubicacion" className="flex items-center text-sm text-muted-foreground"><UserCheck className="h-3 w-3 mr-1.5"/>Ubicación</Label> {/* Consider changing icon if UserCheck is for Tipo Cliente */}
               <Input id="ubicacion" name="ubicacion" value={currentContactData.ubicacion || ""} onChange={handleInputChange} placeholder="Ciudad, País"/>
             </div>
             <div>
@@ -397,7 +382,7 @@ export default function ContactsPage() {
               </Button>
               <Button type="submit" disabled={isSaving}>
                 {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {editingContact?.id ? "Guardar Cambios" : "Crear Contacto"}
+                Crear Contacto
               </Button>
             </DialogFooter>
           </form>
@@ -425,3 +410,6 @@ export default function ContactsPage() {
     </div>
   );
 }
+
+
+    
