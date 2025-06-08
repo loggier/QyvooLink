@@ -1,15 +1,38 @@
 
 "use client";
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wifi, WifiOff, BotMessageSquare, MessageCircleOff, FlaskConical, Users, MessageSquare, FileText, Loader2, AlertTriangle, HelpCircle, MessageSquareText, ListChecks } from "lucide-react";
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Wifi, WifiOff, BotMessageSquare, MessageCircleOff, FlaskConical, Users, FileText, Loader2, AlertTriangle, HelpCircle, ListChecks, MessagesSquare } from "lucide-react";
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, orderBy, limit, Timestamp as FirestoreTimestamp } from 'firebase/firestore';
 import type { WhatsAppInstance } from './configuration/page'; 
 import type { BotConfigData } from './bot-config/page'; 
-import type { ChatMessageDocument } from './chat/page'; // Asumiendo que esta interfaz puede ser importada
+import { formatDistanceToNow } from 'date-fns';
+import { es } from 'date-fns/locale';
+
+// Interfaces necesarias para el Dashboard
+interface ChatMessageDocument {
+  chat_id: string;
+  from: string;
+  instanceId: string;
+  mensaje: string;
+  timestamp: FirestoreTimestamp;
+  to: string;
+  user_name: 'User' | 'bot' | 'agente' | string;
+}
+
+interface ContactDetails {
+  id?: string;
+  nombre?: string;
+  apellido?: string;
+  empresa?: string;
+  // ...otros campos si son necesarios para el fallback del avatar o displayName
+}
 
 interface DashboardStats {
   instanceStatus: 'Conectado' | 'Desconectado' | 'Pendiente' | 'No Configurada' | 'Error' | 'Cargando';
@@ -18,6 +41,15 @@ interface DashboardStats {
   contactCount: number | string;
   conversationCount: number | string;
   isBotPromptConfigured?: boolean;
+}
+
+interface DashboardConversationSummary {
+  chat_id: string;
+  lastMessage: string;
+  lastMessageTimestamp: Date;
+  lastMessageSender: string;
+  displayName: string;
+  avatarFallback: string;
 }
 
 const initialStats: DashboardStats = {
@@ -29,10 +61,17 @@ const initialStats: DashboardStats = {
   isBotPromptConfigured: undefined,
 };
 
+const formatPhoneNumber = (chat_id: string | undefined): string => {
+  if (!chat_id) return "Desconocido";
+  return chat_id.split('@')[0];
+};
+
+const getContactDocId = (userId: string, chatId: string): string => `${userId}_${chatId.replace(/@/g, '_')}`;
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats>(initialStats);
+  const [recentConversations, setRecentConversations] = useState<DashboardConversationSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -47,7 +86,6 @@ export default function DashboardPage() {
           let conversationsVal: number | string = 0;
           let instanceIdForChats: string | null = null;
 
-          // Fetch instance data
           const instanceDocRef = doc(db, 'instances', user.uid);
           const instanceDocSnap = await getDoc(instanceDocRef);
 
@@ -56,11 +94,9 @@ export default function DashboardPage() {
             instanceStatusVal = instanceData.status || 'Pendiente';
             chatbotEnabledVal = instanceData.chatbotEnabled;
             demoModeVal = instanceData.demo;
-            instanceIdForChats = instanceData.id || instanceData.name; // Para la consulta de chats
-            // contactsVal y conversationsVal se calcularán a continuación desde Firestore
+            instanceIdForChats = instanceData.id || instanceData.name;
           }
 
-          // Fetch bot configuration data
           let botPromptConfiguredVal = false;
           const botConfigDocRef = doc(db, 'qybot', user.uid);
           const botConfigDocSnap = await getDoc(botConfigDocRef);
@@ -71,7 +107,6 @@ export default function DashboardPage() {
              }
           }
 
-          // Fetch contacts count from 'contacts' collection
           try {
             const contactsQuery = query(collection(db, 'contacts'), where('userId', '==', user.uid));
             const contactsSnapshot = await getDocs(contactsQuery);
@@ -81,48 +116,120 @@ export default function DashboardPage() {
             contactsVal = "Error";
           }
 
-          // Fetch active conversations count from 'chat' collection
+          let fetchedRecentConversations: DashboardConversationSummary[] = [];
           if (instanceIdForChats) {
             try {
               const chatQuery = query(
                 collection(db, 'chat'),
-                where('instanceId', '==', instanceIdForChats)
+                where('instanceId', '==', instanceIdForChats),
+                orderBy('timestamp', 'desc')
+                // Limit can be higher initially to ensure we get 5 unique chats
+                // limit(25) // Example: fetch more to filter down
               );
               const chatSnapshot = await getDocs(chatQuery);
-              const chatMessages: ChatMessageDocument[] = [];
+              const messages: ChatMessageDocument[] = [];
               chatSnapshot.forEach((doc) => {
-                chatMessages.push(doc.data() as ChatMessageDocument);
+                messages.push(doc.data() as ChatMessageDocument);
               });
 
-              const chatMap = new Map<string, any>();
-              chatMessages.forEach(msg => {
+              const chatMap = new Map<string, ChatMessageDocument>();
+              messages.forEach(msg => {
                 let currentChatId = msg.chat_id;
-                if (instanceIdForChats) { // Asegurar que instanceIdForChats no es null
+                if (instanceIdForChats) {
                     if (msg.from === instanceIdForChats) { 
                         currentChatId = msg.to;
                     } else if (msg.to === instanceIdForChats) { 
                         currentChatId = msg.from;
                     }
                 }
-                // Para grupos, el chat_id es el identificador del grupo
                 if (msg.chat_id.endsWith('@g.us')) { 
                     currentChatId = msg.chat_id;
                 }
-                // Solo se añade si no existe para contar conversaciones únicas
-                if (!chatMap.has(currentChatId)) {
-                  chatMap.set(currentChatId, {}); // El valor no importa, solo las claves
+
+                if (!chatMap.has(currentChatId) || msg.timestamp.toDate() > chatMap.get(currentChatId)!.timestamp.toDate()) {
+                  chatMap.set(currentChatId, msg);
                 }
               });
-              conversationsVal = chatMap.size;
+              
+              conversationsVal = chatMap.size; // Total unique conversations
+
+              const sortedUniqueMessages = Array.from(chatMap.values()).sort(
+                (a,b) => b.timestamp.toDate().getTime() - a.timestamp.toDate().getTime()
+              );
+
+              const top5Messages = sortedUniqueMessages.slice(0, 5);
+
+              const contactPromises = top5Messages.map(async (msg) => {
+                let currentChatId = msg.chat_id;
+                 if (instanceIdForChats) {
+                    if (msg.from === instanceIdForChats) currentChatId = msg.to;
+                    else if (msg.to === instanceIdForChats) currentChatId = msg.from;
+                 }
+                 if (msg.chat_id.endsWith('@g.us')) currentChatId = msg.chat_id;
+
+                const contactDocId = getContactDocId(user.uid, currentChatId);
+                let contactData: ContactDetails | null = null;
+                try {
+                    const contactDocRef = doc(db, 'contacts', contactDocId);
+                    const contactDocSnap = await getDoc(contactDocRef);
+                    if (contactDocSnap.exists()) {
+                        contactData = contactDocSnap.data() as ContactDetails;
+                    }
+                } catch (contactError) {
+                    console.warn(`Error fetching contact for ${currentChatId}:`, contactError);
+                }
+
+                let displayName = formatPhoneNumber(currentChatId);
+                let avatarFallbackText = displayName.length >= 2 ? displayName.slice(-2) : displayName;
+
+                if (contactData) {
+                    let nameParts = [];
+                    if (contactData.nombre && contactData.nombre.trim()) nameParts.push(contactData.nombre.trim());
+                    if (contactData.apellido && contactData.apellido.trim()) nameParts.push(contactData.apellido.trim());
+                    
+                    let tempDisplayName = nameParts.join(' ').trim();
+                    if (contactData.empresa && contactData.empresa.trim()) {
+                        tempDisplayName += ` [${contactData.empresa.trim()}]`;
+                    }
+                    
+                    if (tempDisplayName.trim()) {
+                        displayName = tempDisplayName.trim();
+                        if (contactData.nombre && contactData.nombre.trim() && contactData.apellido && contactData.apellido.trim()) {
+                            avatarFallbackText = `${contactData.nombre.trim()[0]}${contactData.apellido.trim()[0]}`.toUpperCase();
+                        } else if (contactData.nombre && contactData.nombre.trim() && contactData.nombre.trim().length >=2) {
+                            avatarFallbackText = contactData.nombre.trim().substring(0,2).toUpperCase();
+                        } else if (contactData.nombre && contactData.nombre.trim()) {
+                            avatarFallbackText = contactData.nombre.trim().substring(0,1).toUpperCase();
+                        } else if (contactData.empresa && contactData.empresa.trim() && contactData.empresa.trim().length >= 2) {
+                            avatarFallbackText = contactData.empresa.trim().substring(0,2).toUpperCase();
+                        } else if (contactData.empresa && contactData.empresa.trim()) {
+                            avatarFallbackText = contactData.empresa.trim().substring(0,1).toUpperCase();
+                        }
+                    }
+                }
+
+                return {
+                  chat_id: currentChatId,
+                  lastMessage: msg.mensaje,
+                  lastMessageTimestamp: msg.timestamp.toDate(),
+                  lastMessageSender: msg.user_name,
+                  displayName: displayName,
+                  avatarFallback: avatarFallbackText,
+                };
+              });
+              
+              fetchedRecentConversations = await Promise.all(contactPromises);
 
             } catch (e) {
-              console.error("Error fetching conversations count:", e);
+              console.error("Error fetching conversations:", e);
               conversationsVal = "Error";
+              fetchedRecentConversations = [];
             }
           } else {
-            conversationsVal = 0; // Si no hay instancia, no hay conversaciones
+            conversationsVal = 0;
+            fetchedRecentConversations = [];
           }
-
+          setRecentConversations(fetchedRecentConversations);
 
           setStats({
             instanceStatus: instanceStatusVal,
@@ -142,6 +249,7 @@ export default function DashboardPage() {
             isDemoMode: undefined,
             isBotPromptConfigured: false,
           });
+          setRecentConversations([]);
         } finally {
           setIsLoading(false);
         }
@@ -149,10 +257,11 @@ export default function DashboardPage() {
       fetchData();
     } else {
       setIsLoading(true); 
+      setRecentConversations([]);
     }
   }, [user]);
 
-  if (isLoading) {
+  if (isLoading && !user) { // Added !user condition to prevent flicker if user is still loading
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -214,11 +323,14 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Chatbot Global</CardTitle>
-            {stats.isChatbotGloballyEnabled === undefined && stats.instanceStatus !== 'No Configurada' && stats.instanceStatus !== 'Cargando' ? <HelpCircle className="h-5 w-5 text-slate-500" /> : 
-             stats.isChatbotGloballyEnabled ? <BotMessageSquare className="h-5 w-5 text-green-500" /> : <MessageCircleOff className="h-5 w-5 text-red-500" />}
+            {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' || stats.isChatbotGloballyEnabled === undefined 
+             ? <HelpCircle className="h-5 w-5 text-slate-500" /> 
+             : stats.isChatbotGloballyEnabled 
+               ? <BotMessageSquare className="h-5 w-5 text-green-500" /> 
+               : <MessageCircleOff className="h-5 w-5 text-red-500" />}
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${stats.isChatbotGloballyEnabled === undefined && stats.instanceStatus !== 'No Configurada' && stats.instanceStatus !== 'Cargando' ? 'text-slate-500' : stats.isChatbotGloballyEnabled ? 'text-green-500' : 'text-red-500'}`}>
+            <div className={`text-2xl font-bold ${stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' || stats.isChatbotGloballyEnabled === undefined ? 'text-slate-500' : stats.isChatbotGloballyEnabled ? 'text-green-500' : 'text-red-500'}`}>
               {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' ? "N/A" :
                stats.isChatbotGloballyEnabled === undefined ? "No Definido" : 
                stats.isChatbotGloballyEnabled ? "Activado" : "Desactivado"}
@@ -234,11 +346,14 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Modo Demo</CardTitle>
-             {stats.isDemoMode === undefined && stats.instanceStatus !== 'No Configurada' && stats.instanceStatus !== 'Cargando' ? <HelpCircle className="h-5 w-5 text-slate-500" /> : 
-              stats.isDemoMode ? <FlaskConical className="h-5 w-5 text-blue-500" /> : <FlaskConical className="h-5 w-5 text-slate-500 opacity-50" />}
+             {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' || stats.isDemoMode === undefined 
+              ? <HelpCircle className="h-5 w-5 text-slate-500" /> 
+              : stats.isDemoMode 
+                ? <FlaskConical className="h-5 w-5 text-blue-500" /> 
+                : <FlaskConical className="h-5 w-5 text-slate-500 opacity-50" />}
           </CardHeader>
           <CardContent>
-             <div className={`text-2xl font-bold ${stats.isDemoMode === undefined && stats.instanceStatus !== 'No Configurada' && stats.instanceStatus !== 'Cargando' ? 'text-slate-500' : stats.isDemoMode ? 'text-blue-500' : 'text-slate-700 dark:text-slate-300'}`}>
+             <div className={`text-2xl font-bold ${stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' || stats.isDemoMode === undefined ? 'text-slate-500' : stats.isDemoMode ? 'text-blue-500' : 'text-slate-700 dark:text-slate-300'}`}>
                 {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' ? "N/A" :
                  stats.isDemoMode === undefined ? "No Definido" : 
                  stats.isDemoMode ? "Activado" : "Desactivado"}
@@ -293,17 +408,56 @@ export default function DashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle>Actividad Reciente</CardTitle>
-          <CardDescription>Resumen de acciones y eventos recientes.</CardDescription>
+          <CardDescription>Últimas 5 conversaciones iniciadas o actualizadas.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex h-64 items-center justify-center rounded-md border border-dashed">
-            <p className="text-muted-foreground">La actividad reciente se mostrará aquí (Próximamente).</p>
-          </div>
+          {isLoading ? (
+            <div className="flex h-64 items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="ml-3 text-muted-foreground">Cargando actividad...</p>
+            </div>
+          ) : recentConversations.length === 0 ? (
+            <div className="flex h-64 flex-col items-center justify-center rounded-md border border-dashed">
+              <MessagesSquare className="h-12 w-12 text-muted-foreground/70" />
+              <p className="mt-4 text-center text-muted-foreground">
+                No hay actividad reciente para mostrar. <br />
+                Las nuevas conversaciones aparecerán aquí.
+              </p>
+            </div>
+          ) : (
+            <ScrollArea className="h-72">
+              <ul className="space-y-4 pr-3">
+                {recentConversations.map((convo) => (
+                  <li key={convo.chat_id}>
+                    <Link href={`/dashboard/chat?chatId=${convo.chat_id}`} className="block hover:bg-muted/50 p-3 rounded-md transition-colors">
+                      <div className="flex items-center space-x-3">
+                        <Avatar className="h-10 w-10">
+                          <AvatarFallback>{convo.avatarFallback}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-center">
+                            <p className="text-sm font-semibold text-foreground truncate">{convo.displayName}</p>
+                            <p className="text-xs text-muted-foreground whitespace-nowrap">
+                              {formatDistanceToNow(convo.lastMessageTimestamp, { addSuffix: true, locale: es })}
+                            </p>
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">
+                            <span className="font-medium">
+                              {convo.lastMessageSender === 'User' ? 'Usuario' : convo.lastMessageSender === 'bot' ? 'Bot' : convo.lastMessageSender === 'agente' ? 'Agente' : 'Otro'}:
+                            </span> {convo.lastMessage}
+                          </p>
+                        </div>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </ScrollArea>
+          )}
         </CardContent>
       </Card>
     </div>
   );
 }
-
 
     
