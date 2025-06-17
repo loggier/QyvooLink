@@ -40,7 +40,7 @@ const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Panel de Control', icon: Home },
   { href: '/dashboard/chat', label: 'Conversaciones', icon: MessageSquare },
   { href: '/dashboard/bot-config', label: 'Configurar Bot', icon: Bot },
-  { href: '/dashboard/contacts', label: 'Contactos', icon: Users }, // Added Contacts link
+  { href: '/dashboard/contacts', label: 'Contactos', icon: Users },
   { href: '/dashboard/configuration', label: 'Configuración General', icon: Settings },
   { href: '/dashboard/reports', label: 'Reportes', icon: BarChart2 },
 ];
@@ -118,9 +118,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <UserCircle className="mr-2 h-4 w-4" />
-                  Perfil
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/profile">
+                    <UserCircle className="mr-2 h-4 w-4" />
+                    Perfil
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem>
                   <Settings className="mr-2 h-4 w-4" />
