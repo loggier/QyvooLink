@@ -22,7 +22,6 @@ const nextConfig: NextConfig = {
   experimental: {
     allowedDevOrigins: [
       'https://6000-firebase-studio-1748046957632.cluster-hf4yr35cmnbd4vhbxvfvc6cp5q.cloudworkstations.dev',
-      // Adding the schemeless version as reported in the error log
       '6000-firebase-studio-1748046957632.cluster-hf4yr35cmnbd4vhbxvfvc6cp5q.cloudworkstations.dev',
     ],
   },
