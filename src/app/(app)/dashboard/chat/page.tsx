@@ -25,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
-import { useSearchParams } from 'next/navigation'; // Importar useSearchParams
+import { useSearchParams } from 'next/navigation';
 
 interface ChatMessageDocument {
   chat_id: string;
@@ -114,7 +114,7 @@ function formatWhatsAppMessage(text: string | undefined | null): React.ReactNode
 export default function ChatPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const searchParams = useSearchParams(); // Usar el hook
+  const searchParams = useSearchParams();
   const [whatsAppInstance, setWhatsAppInstance] = useState<WhatsAppInstance | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null); 
@@ -298,7 +298,6 @@ export default function ChatPage() {
     }
   }, [whatsAppInstance, user]); 
 
-  // useEffect para seleccionar el chat desde la URL
   useEffect(() => {
     const chatIdFromUrl = searchParams.get('chatId');
     if (chatIdFromUrl && !isLoadingChats && conversations.length > 0) {
@@ -307,13 +306,10 @@ export default function ChatPage() {
         if (selectedChatId !== chatIdFromUrl) {
            setSelectedChatId(chatIdFromUrl);
         }
-      } else {
-        // Opcional: Mostrar un toast si el chat ID de la URL no se encuentra
-        // toast({ variant: "destructive", title: "Chat no encontrado", description: `El chat con ID ${chatIdFromUrl} no fue encontrado.` });
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, isLoadingChats, conversations, selectedChatId]); // No agregamos toast aquí para evitar ciclos si el toast causa re-render
+  }, [searchParams, isLoadingChats, conversations, selectedChatId]);
 
 
   useEffect(() => {
@@ -578,10 +574,10 @@ export default function ChatPage() {
             <ul>
               {conversations.map((convo) => (
                 <li key={convo.chat_id}>
-                  <Button
-                    variant="ghost"
-                    onClick={() => setSelectedChatId(convo.chat_id)}
-                    className={`w-full h-auto justify-start text-left p-3 rounded-none border-b ${selectedChatId === convo.chat_id ? 'bg-muted' : 'hover:bg-muted/50'}`}
+                  <Link
+                    href={`/dashboard/chat?chatId=${convo.chat_id}`}
+                    scroll={false}
+                    className={`flex w-full h-auto items-center justify-start text-left p-3 rounded-none border-b ${selectedChatId === convo.chat_id ? 'bg-muted' : 'hover:bg-muted/50 transition-colors'}`}
                   >
                     <Avatar className="h-10 w-10 mr-3">
                        <AvatarFallback>
@@ -599,7 +595,7 @@ export default function ChatPage() {
                         <span className="truncate">{convo.lastMessage}</span>
                       </p>
                     </div>
-                  </Button>
+                  </Link>
                 </li>
               ))}
             </ul>
