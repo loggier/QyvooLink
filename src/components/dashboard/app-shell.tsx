@@ -124,10 +124,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                     Perfil
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Ajustes
-                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={logoutUser} className="cursor-pointer">
                   <LogOut className="mr-2 h-4 w-4" />
