@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EvolveLinkLogo } from '@/components/icons';
-import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Edit3, Save, XCircle, Building, MapPin, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed } from 'lucide-react';
+import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Edit3, Save, XCircle, Building, MapPin, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap } from 'lucide-react';
 import type { WhatsAppInstance } from '../configuration/page'; 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from '@/components/ui/button';
@@ -64,6 +64,13 @@ interface ContactDetails {
   userId?: string; 
   _chatIdOriginal?: string;
   chatbotEnabledForContact?: boolean;
+}
+
+interface QuickReply {
+  id: string;
+  userId: string;
+  tag: string;
+  message: string;
 }
 
 const getContactDocId = (userId: string, chatId: string): string => `${userId}_${chatId.replace(/@/g, '_')}`;
@@ -131,6 +138,9 @@ export default function ChatPage() {
   const [isEditingContact, setIsEditingContact] = useState(false);
   const [isLoadingContact, setIsLoadingContact] = useState(false);
   const [isSavingContact, setIsSavingContact] = useState(false);
+
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
+  const [isLoadingQuickReplies, setIsLoadingQuickReplies] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -390,6 +400,30 @@ export default function ChatPage() {
     }
   }, [selectedChatId, user, whatsAppInstance, toast]);
 
+  const fetchQuickReplies = useCallback(async () => {
+    if (!user) return;
+    setIsLoadingQuickReplies(true);
+    try {
+      const q = query(collection(db, 'quickReplies'), where('userId', '==', user.uid));
+      const querySnapshot = await getDocs(q);
+      const fetchedReplies: QuickReply[] = [];
+      querySnapshot.forEach((docSnap) => {
+        fetchedReplies.push({ id: docSnap.id, ...(docSnap.data() as Omit<QuickReply, 'id'|'userId'>) } as QuickReply);
+      });
+      setQuickReplies(fetchedReplies.sort((a,b) => a.tag.localeCompare(b.tag)));
+    } catch (error) {
+      console.error("Error fetching quick replies for chat:", error);
+      toast({ variant: "destructive", title: "Error", description: "No se pudieron cargar las respuestas rápidas para el chat." });
+    } finally {
+      setIsLoadingQuickReplies(false);
+    }
+  }, [user, toast]);
+
+  useEffect(() => {
+    fetchQuickReplies();
+  }, [fetchQuickReplies]);
+
+
   const handleSendMessage = async () => {
     if (!replyMessage.trim() || !selectedChatId || !whatsAppInstance || !user) return;
 
@@ -409,7 +443,7 @@ export default function ChatPage() {
     try {
       await addDoc(collection(db, 'chat'), newMessageData);
       setReplyMessage("");
-      toast({ title: "Mensaje Guardado", description: "Tu mensaje ha sido guardado en el chat." });
+      // toast({ title: "Mensaje Guardado", description: "Tu mensaje ha sido guardado en el chat." }); // Reduced verbosity
 
       const webhookPayload = [{
         chat_id: selectedChatId,
@@ -433,7 +467,7 @@ export default function ChatPage() {
 
         if (webhookResponse.ok) {
           console.log("Message successfully sent to webhook:", webhookPayload);
-          toast({ title: "Mensaje Enviado a Qyvoo", description: "El mensaje también fue enviado al sistema Qyvoo." });
+          // toast({ title: "Mensaje Enviado a Qyvoo", description: "El mensaje también fue enviado al sistema Qyvoo." }); // Reduced verbosity
         } else {
           const errorData = await webhookResponse.text();
           console.error("Error sending message to webhook:", webhookResponse.status, errorData);
@@ -493,6 +527,17 @@ export default function ChatPage() {
   
   const handleContactSelectChange = (value: string) => {
     setContactDetails(prev => prev ? { ...prev, tipoCliente: value as ContactDetails['tipoCliente'] } : null);
+  };
+
+  const handleQuickReplySelect = (tag: string) => {
+    if (tag === "none") {
+        // Optionally clear the message or do nothing
+        return;
+    }
+    const selectedReply = quickReplies.find(qr => qr.tag === tag);
+    if (selectedReply) {
+      setReplyMessage(prev => prev ? `${prev} ${selectedReply.message}` : selectedReply.message);
+    }
   };
 
   const formatTimestamp = (timestamp: FirestoreTimestamp | Date | undefined): string => {
@@ -701,7 +746,31 @@ export default function ChatPage() {
               )}
               <div ref={messagesEndRef} />
             </ScrollArea>
-            <CardFooter className="p-4 border-t bg-card">
+            <CardFooter className="p-4 border-t bg-card flex flex-col space-y-2">
+              <div className="w-full">
+                 <Select onValueChange={handleQuickReplySelect} disabled={isLoadingQuickReplies || quickReplies.length === 0}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder={
+                        isLoadingQuickReplies ? "Cargando respuestas..." :
+                        quickReplies.length === 0 ? "No hay respuestas rápidas" :
+                        "Seleccionar respuesta rápida..."
+                      } />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" disabled>Seleccionar respuesta rápida...</SelectItem>
+                      {quickReplies.map((qr) => (
+                        <SelectItem key={qr.id} value={qr.tag}>
+                          {qr.tag} - <span className="text-xs text-muted-foreground truncate max-w-[200px] inline-block">{qr.message}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1 text-right">
+                    <Link href="/dashboard/quick-replies" className="hover:underline">
+                        Gestionar respuestas rápidas <Zap className="inline h-3 w-3" />
+                    </Link>
+                  </p>
+              </div>
               <div className="flex w-full items-center space-x-2">
                 <Textarea
                   placeholder="Escribe tu mensaje como administrador..."

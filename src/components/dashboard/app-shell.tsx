@@ -28,7 +28,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare, Bot, Users } from 'lucide-react'; // Added Bot and Users
+import { Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare, Bot, Users, Zap } from 'lucide-react';
 
 interface NavItem {
   href: string;
@@ -41,6 +41,7 @@ const navItems: NavItem[] = [
   { href: '/dashboard/chat', label: 'Conversaciones', icon: MessageSquare },
   { href: '/dashboard/bot-config', label: 'Configurar Bot', icon: Bot },
   { href: '/dashboard/contacts', label: 'Contactos', icon: Users },
+  { href: '/dashboard/quick-replies', label: 'Respuestas Rápidas', icon: Zap },
   { href: '/dashboard/configuration', label: 'Configuración General', icon: Settings },
   { href: '/dashboard/reports', label: 'Reportes', icon: BarChart2 },
 ];
