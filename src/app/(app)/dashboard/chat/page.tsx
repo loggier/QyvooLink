@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -14,20 +13,22 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EvolveLinkLogo } from '@/components/icons';
-import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft } from 'lucide-react'; // Removed Edit3, XCircle, MapPin
+import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft } from 'lucide-react'; 
 import type { WhatsAppInstance } from '../configuration/page'; 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input'; // Kept for future use, not directly in this file now
+import { Input } from '@/components/ui/input'; 
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label'; // Kept for future use
+import { Label } from '@/components/ui/label'; 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
-import { useSearchParams, useRouter } from 'next/navigation'; // Added useRouter
+import { useSearchParams, useRouter } from 'next/navigation'; 
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import ContactDetailsPanel, { type ContactDetails } from '@/components/dashboard/chat/contact-details-panel'; // Import new component and its type
+import ContactDetailsPanel, { type ContactDetails } from '@/components/dashboard/chat/contact-details-panel'; 
+import { format, isToday, isYesterday, differenceInDays, parseISO } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 
 interface ChatMessageDocument {
@@ -53,8 +54,6 @@ interface ConversationSummary {
   displayName?: string; 
   avatarFallback?: string; 
 }
-
-// ContactDetails interface moved to contact-details-panel.tsx
 
 interface QuickReply {
   id: string;
@@ -107,12 +106,29 @@ function formatWhatsAppMessage(text: string | undefined | null): React.ReactNode
   return elements;
 }
 
+const formatConversationTimestamp = (timestampInput: Date | string | undefined): string => {
+  if (!timestampInput) return "";
+  const date = typeof timestampInput === 'string' ? parseISO(timestampInput) : timestampInput;
+
+  if (isToday(date)) {
+    return format(date, 'HH:mm', { locale: es });
+  }
+  if (isYesterday(date)) {
+    return `Ayer ${format(date, 'HH:mm', { locale: es })}`;
+  }
+  const now = new Date();
+  if (differenceInDays(now, date) < 7) {
+    return format(date, 'eee HH:mm', { locale: es }); // Capitalize first letter with CSS if needed
+  }
+  return format(date, 'dd/MM/yy HH:mm', { locale: es });
+};
+
 
 export default function ChatPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const searchParams = useSearchParams();
-  const router = useRouter(); // Added router
+  const router = useRouter(); 
   const isMobile = useIsMobile();
 
   const [whatsAppInstance, setWhatsAppInstance] = useState<WhatsAppInstance | null>(null);
@@ -321,7 +337,7 @@ export default function ChatPage() {
         // setSelectedChatId(null); // Optional: clear selection if URL is cleared
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, isLoadingChats, conversations]); // Removed selectedChatId from deps to avoid loop with setSelectedChatId
+  }, [searchParams, isLoadingChats, conversations]); 
 
 
   useEffect(() => {
@@ -544,10 +560,14 @@ export default function ChatPage() {
     }
   };
 
-  const formatTimestamp = (timestamp: FirestoreTimestamp | Date | undefined): string => {
-    if (!timestamp) return "";
-    const date = timestamp instanceof FirestoreTimestamp ? timestamp.toDate() : timestamp;
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const formatChatMessageTimestamp = (timestampInput: FirestoreTimestamp | Date | undefined): string => {
+    if (!timestampInput) return "";
+    const date = timestampInput instanceof FirestoreTimestamp ? timestampInput.toDate() : (typeof timestampInput === 'string' ? parseISO(timestampInput) : timestampInput);
+  
+    if (isToday(date)) {
+      return format(date, 'HH:mm', { locale: es });
+    }
+    return format(date, 'dd/MM/yy HH:mm', { locale: es });
   };
 
   if (isLoadingInstance) {
@@ -633,27 +653,27 @@ export default function ChatPage() {
                   <Link
                     href={`/dashboard/chat?chatId=${convo.chat_id}`}
                     scroll={false}
-                    onClick={() => {
-                        if (isMobile) {
-                            //setSelectedChatId(convo.chat_id); // Handled by useEffect for URL change
-                        }
-                    }}
-                    className={`flex w-full h-auto items-center justify-start text-left p-3 rounded-none border-b ${selectedChatId === convo.chat_id ? 'bg-muted' : 'hover:bg-muted/50 transition-colors'}`}
+                    className={`flex w-full h-auto items-start p-3 rounded-none border-b ${selectedChatId === convo.chat_id ? 'bg-muted' : 'hover:bg-muted/50 transition-colors'}`}
                   >
-                    <Avatar className="h-10 w-10 mr-3">
+                    <Avatar className="h-10 w-10 mr-3 mt-1 shrink-0">
                        <AvatarFallback>
                         {convo.avatarFallback || formatPhoneNumber(convo.chat_id).slice(-2)}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex-grow overflow-hidden">
-                      <p className="font-semibold truncate">{convo.displayName || formatPhoneNumber(convo.chat_id)}</p>
+                    <div className="flex-grow min-w-0"> {/* min-w-0 for truncation */}
+                      <div className="flex justify-between items-center">
+                        <p className="font-semibold truncate">{convo.displayName || formatPhoneNumber(convo.chat_id)}</p>
+                        <p className="text-xs text-muted-foreground whitespace-nowrap ml-2">
+                           {formatConversationTimestamp(convo.lastMessageTimestamp)}
+                        </p>
+                      </div>
                       <p className="text-xs text-muted-foreground truncate">
                         <span className="font-medium">
                           {convo.lastMessageSender?.toLowerCase() === 'bot' ? 'Bot' : 
                            convo.lastMessageSender?.toLowerCase() === 'agente' ? 'Agente' : 
                            convo.lastMessageSender?.toLowerCase() === 'user' ? 'Usuario' : 'Usuario'}: 
                         </span>
-                        <span className="truncate">{convo.lastMessage}</span>
+                        {convo.lastMessage}
                       </p>
                     </div>
                   </Link>
@@ -710,7 +730,7 @@ export default function ChatPage() {
                                 )}
                             </SheetContent>
                         </Sheet>
-                    ) : null // Desktop contact panel is separate
+                    ) : null 
                 )}
               </CardHeader>
               <ScrollArea className="flex-grow p-4 space-y-3">
@@ -784,7 +804,7 @@ export default function ChatPage() {
                                {formatWhatsAppMessage(msg.mensaje)}
                             </p>
                             <p className={`text-xs mt-1 ${timestampAlignmentClass}`}>
-                              {formatTimestamp(msg.timestamp)}
+                              {formatChatMessageTimestamp(msg.timestamp)}
                             </p>
                           </div>
 
@@ -847,7 +867,7 @@ export default function ChatPage() {
                 </div>
               </CardFooter>
             </>
-          ) : ( // No chat selected, show welcome only on desktop (mobile hides this whole section)
+          ) : ( 
             <div className={`
               ${isMobile ? 'hidden' : 'flex'} 
               flex-1 flex-col items-center justify-center p-6
@@ -870,7 +890,6 @@ export default function ChatPage() {
           )}
         </div>
         
-        {/* Contact Info Panel (Desktop only) */}
         {!isMobile && selectedChatId && contactDetails && initialContactDetails && (
           <div className="hidden md:flex w-full md:w-1/3 lg:w-1/4 md:min-w-[300px] md:max-w-[380px] border-l flex-col bg-card">
             <ContactDetailsPanel
