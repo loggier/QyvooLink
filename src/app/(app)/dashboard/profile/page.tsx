@@ -10,16 +10,31 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, UserCircle, Building, Phone, Mail, User } from 'lucide-react';
+import { Loader2, Save, UserCircle, Building, Phone, Mail, User, MapPin, Globe, Briefcase, Users } from 'lucide-react';
 
 interface UserProfileData {
   fullName?: string;
   company?: string;
   phone?: string;
-  email?: string; // Will be read-only from auth
-  username?: string; // Will be read-only from auth
+  email?: string; 
+  username?: string; 
+  country?: string;
+  city?: string;
+  sector?: string;
+  employeeCount?: string;
 }
+
+const sectorOptions = [
+  "Tecnología", "Salud", "Educación", "Finanzas", "Retail", 
+  "Manufactura", "Servicios Profesionales", "Consultoría", "Marketing/Publicidad", 
+  "Bienes Raíces", "Construcción", "Gobierno", "Otro"
+];
+
+const employeeCountOptions = [
+  "1-10", "11-50", "51-200", "201-500", "501-1000", "1000+"
+];
 
 export default function ProfilePage() {
   const { user, loading: authLoading } = useAuth();
@@ -31,6 +46,10 @@ export default function ProfilePage() {
     phone: '',
     email: '',
     username: '',
+    country: '',
+    city: '',
+    sector: '',
+    employeeCount: '',
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -42,21 +61,25 @@ export default function ProfilePage() {
         const userDocRef = doc(db, 'users', user.uid);
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
-          const dbData = userDocSnap.data();
+          const dbData = userDocSnap.data() as UserProfileData; // Cast to include new fields
           setFormData({
             fullName: dbData.fullName || '',
             company: dbData.company || '',
             phone: dbData.phone || '',
-            email: user.email || '', // From auth context
-            username: dbData.username || '', // Username from DB, as it was set during registration
+            email: user.email || '', 
+            username: user.username || dbData.username || '', 
+            country: dbData.country || '',
+            city: dbData.city || '',
+            sector: dbData.sector || '',
+            employeeCount: dbData.employeeCount || '',
           });
         } else {
-          // Fallback if somehow user doc doesn't exist but auth user does
-          setFormData({
+          setFormData(prev => ({
+            ...prev,
             email: user.email || '',
-            username: user.username || '', // username might be directly on user object if fetched differently
-          });
-          toast({ variant: "destructive", title: "Error", description: "No se encontraron datos de perfil detallados." });
+            username: user.username || '', 
+          }));
+          toast({ variant: "default", title: "Perfil Parcial", description: "Completa tu información de perfil." });
         }
       } catch (error) {
         console.error("Error fetching profile data:", error);
@@ -65,7 +88,6 @@ export default function ProfilePage() {
         setIsLoading(false);
       }
     } else if (!authLoading) {
-        // If auth is not loading and user is null, stop loading.
         setIsLoading(false);
     }
   }, [user, toast, authLoading]);
@@ -76,6 +98,10 @@ export default function ProfilePage() {
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSelectChange = (name: keyof UserProfileData, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
@@ -91,14 +117,16 @@ export default function ProfilePage() {
       fullName: formData.fullName,
       company: formData.company,
       phone: formData.phone,
-      // email and username are not saved back from here as they are read-only or managed elsewhere
+      country: formData.country,
+      city: formData.city,
+      sector: formData.sector,
+      employeeCount: formData.employeeCount,
+      // email and username are not saved back from here
     };
 
     try {
       await setDoc(doc(db, 'users', user.uid), dataToSave, { merge: true });
       toast({ title: "Perfil Actualizado", description: "Tu información ha sido guardada." });
-      // Optionally, re-fetch user from AuthContext if it holds a stale copy of these fields
-      // or update AuthContext's user state directly if it's designed to be mutable.
     } catch (error) {
       console.error("Error updating profile:", error);
       toast({ variant: "destructive", title: "Error", description: "No se pudo actualizar el perfil." });
@@ -168,6 +196,52 @@ export default function ProfilePage() {
                 placeholder="Tu número de teléfono"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="country" className="flex items-center"><Globe className="mr-2 h-4 w-4 text-muted-foreground"/>País</Label>
+              <Input 
+                id="country" 
+                name="country" 
+                value={formData.country || ''} 
+                onChange={handleInputChange} 
+                placeholder="País de residencia"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="city" className="flex items-center"><MapPin className="mr-2 h-4 w-4 text-muted-foreground"/>Ciudad</Label>
+              <Input 
+                id="city" 
+                name="city" 
+                value={formData.city || ''} 
+                onChange={handleInputChange} 
+                placeholder="Ciudad de residencia"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sector" className="flex items-center"><Briefcase className="mr-2 h-4 w-4 text-muted-foreground"/>Sector</Label>
+              <Select name="sector" value={formData.sector || ""} onValueChange={(value) => handleSelectChange('sector', value)}>
+                <SelectTrigger id="sector">
+                  <SelectValue placeholder="Selecciona tu sector" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sectorOptions.map(option => (
+                    <SelectItem key={option} value={option}>{option}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="employeeCount" className="flex items-center"><Users className="mr-2 h-4 w-4 text-muted-foreground"/>Número de Empleados</Label>
+              <Select name="employeeCount" value={formData.employeeCount || ""} onValueChange={(value) => handleSelectChange('employeeCount', value)}>
+                <SelectTrigger id="employeeCount">
+                  <SelectValue placeholder="Selecciona rango de empleados" />
+                </SelectTrigger>
+                <SelectContent>
+                  {employeeCountOptions.map(option => (
+                    <SelectItem key={option} value={option}>{option}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
              <div className="space-y-2">
               <Label htmlFor="email" className="flex items-center"><Mail className="mr-2 h-4 w-4 text-muted-foreground"/>Correo Electrónico (No editable)</Label>
               <Input 
@@ -202,3 +276,5 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+    

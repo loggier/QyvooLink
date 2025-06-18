@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { User as FirebaseUser } from 'firebase/auth';
@@ -22,6 +23,10 @@ interface UserProfile {
   company?: string;
   phone?: string;
   username?: string;
+  country?: string;
+  city?: string;
+  sector?: string;
+  employeeCount?: string;
 }
 
 interface AuthContextType {
@@ -65,13 +70,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const firebaseUser = userCredential.user;
       if (firebaseUser) {
-        const userProfileData = {
+        // Ensure all fields from UserProfile are considered, even if not all are in RegisterFormData
+        const userProfileData: UserProfile = {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
           fullName: data.fullName,
           company: data.company,
           phone: data.phone,
           username: data.username,
+          // Initialize new fields as empty or undefined if not part of registration
+          country: '', 
+          city: '',
+          sector: '',
+          employeeCount: '',
         };
         await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
         setUser(userProfileData);
@@ -90,7 +101,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else if (error.code === 'auth/configuration-not-found') {
         errorMessage = "Error de configuración de autenticación. Contacta al administrador.";
       }
-      // Firebase provides localized messages sometimes, but we override for consistency
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
@@ -157,3 +167,5 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
+
+    
