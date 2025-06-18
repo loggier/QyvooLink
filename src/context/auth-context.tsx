@@ -10,6 +10,9 @@ import {
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   UserCredential,
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import type { RegisterFormData } from '@/components/auth/register-form';
@@ -35,6 +38,7 @@ interface AuthContextType {
   registerUser: (data: RegisterFormData) => Promise<UserCredential | void>;
   loginUser: (data: LoginFormData) => Promise<UserCredential | void>;
   logoutUser: () => Promise<void>;
+  updateUserPassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -50,10 +54,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const userDocRef = doc(db, 'users', firebaseUser.uid);
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
-          setUser({ ...userDocSnap.data(), uid: firebaseUser.uid, email: firebaseUser.email } as UserProfile);
+          const dbData = userDocSnap.data();
+          setUser({ 
+            uid: firebaseUser.uid, 
+            email: firebaseUser.email,
+            fullName: dbData.fullName,
+            company: dbData.company,
+            phone: dbData.phone,
+            username: dbData.username,
+            country: dbData.country,
+            city: dbData.city,
+            sector: dbData.sector,
+            employeeCount: dbData.employeeCount,
+           } as UserProfile);
         } else {
-          // Basic profile if not found in Firestore (should ideally not happen if register creates it)
-          setUser({ uid: firebaseUser.uid, email: firebaseUser.email });
+          // Basic profile if not found in Firestore
+          setUser({ 
+            uid: firebaseUser.uid, 
+            email: firebaseUser.email,
+            username: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || undefined, // Extract username if possible
+          });
         }
       } else {
         setUser(null);
@@ -70,7 +90,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const firebaseUser = userCredential.user;
       if (firebaseUser) {
-        // Ensure all fields from UserProfile are considered, even if not all are in RegisterFormData
         const userProfileData: UserProfile = {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
@@ -78,7 +97,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           company: data.company,
           phone: data.phone,
           username: data.username,
-          // Initialize new fields as empty or undefined if not part of registration
           country: '', 
           city: '',
           sector: '',
@@ -116,9 +134,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const userDocRef = doc(db, 'users', firebaseUser.uid);
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
-          setUser({ ...userDocSnap.data(), uid: firebaseUser.uid, email: firebaseUser.email } as UserProfile);
+          const dbData = userDocSnap.data();
+          setUser({ 
+            uid: firebaseUser.uid, 
+            email: firebaseUser.email,
+            fullName: dbData.fullName,
+            company: dbData.company,
+            phone: dbData.phone,
+            username: dbData.username,
+            country: dbData.country,
+            city: dbData.city,
+            sector: dbData.sector,
+            employeeCount: dbData.employeeCount,
+          } as UserProfile);
         } else {
-          setUser({ uid: firebaseUser.uid, email: firebaseUser.email });
+           setUser({ 
+            uid: firebaseUser.uid, 
+            email: firebaseUser.email,
+            username: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || undefined,
+          });
         }
         router.push('/dashboard');
         return userCredential;
@@ -153,8 +187,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const updateUserPassword = async (currentPassword: string, newPassword: string) => {
+    const firebaseUser = auth.currentUser;
+    if (!firebaseUser || !firebaseUser.email) {
+      throw new Error("Usuario no autenticado o correo no disponible.");
+    }
+
+    try {
+      const credential = EmailAuthProvider.credential(firebaseUser.email, currentPassword);
+      await reauthenticateWithCredential(firebaseUser, credential);
+      await updatePassword(firebaseUser, newPassword);
+    } catch (error: any) {
+      console.error("Error al cambiar contraseña:", error);
+      if (error.code === 'auth/wrong-password') {
+        throw new Error("La contraseña actual es incorrecta.");
+      } else if (error.code === 'auth/weak-password') {
+        throw new Error("La nueva contraseña es demasiado débil.");
+      } else if (error.code === 'auth/requires-recent-login') {
+         throw new Error("Esta operación es sensible y requiere autenticación reciente. Por favor, inicia sesión de nuevo.");
+      }
+      throw new Error("No se pudo actualizar la contraseña. Inténtalo de nuevo.");
+    }
+  };
+
+
   return (
-    <AuthContext.Provider value={{ user, loading, registerUser, loginUser, logoutUser }}>
+    <AuthContext.Provider value={{ user, loading, registerUser, loginUser, logoutUser, updateUserPassword }}>
       {children}
     </AuthContext.Provider>
   );
@@ -167,5 +225,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-
-    

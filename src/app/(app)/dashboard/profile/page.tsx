@@ -12,7 +12,11 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, UserCircle, Building, Phone, Mail, User, MapPin, Globe, Briefcase, Users } from 'lucide-react';
+import { Loader2, Save, UserCircle, Building, Phone, Mail, User, MapPin, Globe, Briefcase, Users, Lock } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 
 interface UserProfileData {
   fullName?: string;
@@ -36,8 +40,19 @@ const employeeCountOptions = [
   "1-10", "11-50", "51-200", "201-500", "501-1000", "1000+"
 ];
 
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, { message: "La contraseña actual es obligatoria." }),
+  newPassword: z.string().min(6, { message: "La nueva contraseña debe tener al menos 6 caracteres." }),
+  confirmPassword: z.string(),
+}).refine(data => data.newPassword === data.confirmPassword, {
+  message: "Las nuevas contraseñas no coinciden.",
+  path: ["confirmPassword"],
+});
+
+type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
+
 export default function ProfilePage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, updateUserPassword } = useAuth();
   const { toast } = useToast();
 
   const [formData, setFormData] = useState<UserProfileData>({
@@ -53,6 +68,16 @@ export default function ProfilePage() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  const changePasswordForm = useForm<ChangePasswordFormData>({
+    resolver: zodResolver(changePasswordSchema),
+    defaultValues: {
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    },
+  });
 
   const fetchProfileData = useCallback(async () => {
     if (user) {
@@ -61,23 +86,30 @@ export default function ProfilePage() {
         const userDocRef = doc(db, 'users', user.uid);
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
-          const dbData = userDocSnap.data() as UserProfileData; // Cast to include new fields
+          const dbData = userDocSnap.data() as UserProfileData;
           setFormData({
-            fullName: dbData.fullName || '',
-            company: dbData.company || '',
-            phone: dbData.phone || '',
+            fullName: dbData.fullName || user.fullName || '',
+            company: dbData.company || user.company || '',
+            phone: dbData.phone || user.phone || '',
             email: user.email || '', 
-            username: user.username || dbData.username || '', 
-            country: dbData.country || '',
-            city: dbData.city || '',
-            sector: dbData.sector || '',
-            employeeCount: dbData.employeeCount || '',
+            username: user.username || '', 
+            country: dbData.country || user.country || '',
+            city: dbData.city || user.city || '',
+            sector: dbData.sector || user.sector || '',
+            employeeCount: dbData.employeeCount || user.employeeCount || '',
           });
         } else {
           setFormData(prev => ({
             ...prev,
+            fullName: user.fullName || '',
+            company: user.company || '',
+            phone: user.phone || '',
             email: user.email || '',
-            username: user.username || '', 
+            username: user.username || '',
+            country: user.country || '',
+            city: user.city || '',
+            sector: user.sector || '',
+            employeeCount: user.employeeCount || '',
           }));
           toast({ variant: "default", title: "Perfil Parcial", description: "Completa tu información de perfil." });
         }
@@ -105,7 +137,7 @@ export default function ProfilePage() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmitProfile = async (e: FormEvent) => {
     e.preventDefault();
     if (!user) {
       toast({ variant: "destructive", title: "Error", description: "Debes estar autenticado." });
@@ -121,7 +153,6 @@ export default function ProfilePage() {
       city: formData.city,
       sector: formData.sector,
       employeeCount: formData.employeeCount,
-      // email and username are not saved back from here
     };
 
     try {
@@ -134,6 +165,27 @@ export default function ProfilePage() {
       setIsSaving(false);
     }
   };
+
+  async function onSubmitChangePassword(values: ChangePasswordFormData) {
+    if (!user || !user.email) {
+      toast({ variant: "destructive", title: "Error", description: "No se puede cambiar la contraseña sin un correo electrónico asociado." });
+      return;
+    }
+    setIsChangingPassword(true);
+    try {
+      await updateUserPassword(values.currentPassword, values.newPassword);
+      toast({ title: "Contraseña Actualizada", description: "Tu contraseña ha sido cambiada exitosamente." });
+      changePasswordForm.reset();
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error al Cambiar Contraseña",
+        description: error.message || "Ocurrió un error inesperado.",
+      });
+    } finally {
+      setIsChangingPassword(false);
+    }
+  }
 
   if (authLoading || isLoading) {
     return (
@@ -153,7 +205,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="container mx-auto max-w-2xl py-8">
+    <div className="container mx-auto max-w-2xl py-8 space-y-8">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center text-2xl">
@@ -165,7 +217,7 @@ export default function ProfilePage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmitProfile} className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="fullName" className="flex items-center"><User className="mr-2 h-4 w-4 text-muted-foreground"/>Nombre Completo</Label>
               <Input 
@@ -267,14 +319,75 @@ export default function ProfilePage() {
             <div className="pt-4">
               <Button type="submit" className="w-full sm:w-auto" disabled={isSaving || authLoading || isLoading}>
                 {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                {isSaving ? "Guardando..." : "Guardar Cambios"}
+                {isSaving ? "Guardando..." : "Guardar Cambios de Perfil"}
               </Button>
             </div>
           </form>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center text-2xl">
+            <Lock className="mr-3 h-7 w-7 text-primary" />
+            Cambiar Contraseña
+          </CardTitle>
+          <CardDescription>
+            Actualiza tu contraseña. Asegúrate de elegir una contraseña segura.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...changePasswordForm}>
+            <form onSubmit={changePasswordForm.handleSubmit(onSubmitChangePassword)} className="space-y-6">
+              <FormField
+                control={changePasswordForm.control}
+                name="currentPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contraseña Actual</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="••••••••" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={changePasswordForm.control}
+                name="newPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nueva Contraseña</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="••••••••" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={changePasswordForm.control}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Confirmar Nueva Contraseña</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="••••••••" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="pt-4">
+                <Button type="submit" className="w-full sm:w-auto" disabled={isChangingPassword}>
+                  {isChangingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  {isChangingPassword ? "Actualizando..." : "Actualizar Contraseña"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
     </div>
   );
 }
-
-    
