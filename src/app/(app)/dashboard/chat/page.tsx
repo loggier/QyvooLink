@@ -14,18 +14,21 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EvolveLinkLogo } from '@/components/icons';
-import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Edit3, Save, XCircle, Building, MapPin, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap } from 'lucide-react';
+import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft } from 'lucide-react'; // Removed Edit3, XCircle, MapPin
 import type { WhatsAppInstance } from '../configuration/page'; 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Input } from '@/components/ui/input'; // Kept for future use, not directly in this file now
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
+import { Label } from '@/components/ui/label'; // Kept for future use
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation'; // Added useRouter
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import ContactDetailsPanel, { type ContactDetails } from '@/components/dashboard/chat/contact-details-panel'; // Import new component and its type
+
 
 interface ChatMessageDocument {
   chat_id: string;
@@ -51,20 +54,7 @@ interface ConversationSummary {
   avatarFallback?: string; 
 }
 
-interface ContactDetails {
-  id?: string; 
-  nombre?: string;
-  apellido?: string;
-  email?: string;
-  telefono?: string; 
-  empresa?: string;
-  ubicacion?: string;
-  tipoCliente?: 'Prospecto' | 'Cliente' | 'Proveedor' | 'Otro';
-  instanceId?: string; 
-  userId?: string; 
-  _chatIdOriginal?: string;
-  chatbotEnabledForContact?: boolean;
-}
+// ContactDetails interface moved to contact-details-panel.tsx
 
 interface QuickReply {
   id: string;
@@ -122,6 +112,9 @@ export default function ChatPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const searchParams = useSearchParams();
+  const router = useRouter(); // Added router
+  const isMobile = useIsMobile();
+
   const [whatsAppInstance, setWhatsAppInstance] = useState<WhatsAppInstance | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null); 
@@ -138,6 +131,8 @@ export default function ChatPage() {
   const [isEditingContact, setIsEditingContact] = useState(false);
   const [isLoadingContact, setIsLoadingContact] = useState(false);
   const [isSavingContact, setIsSavingContact] = useState(false);
+  const [isContactSheetOpen, setIsContactSheetOpen] = useState(false);
+
 
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [isLoadingQuickReplies, setIsLoadingQuickReplies] = useState(false);
@@ -316,10 +311,17 @@ export default function ChatPage() {
         if (selectedChatId !== chatIdFromUrl) {
            setSelectedChatId(chatIdFromUrl);
         }
+      } else if (selectedChatId && !conversationExists) {
+        // If current selectedChatId is not in the new list, clear it
+        // setSelectedChatId(null); // This might be too aggressive
       }
+    } else if (!chatIdFromUrl && selectedChatId) {
+        // If URL has no chatId but we have one selected, deselect it
+        // (This can happen if user manually clears URL param)
+        // setSelectedChatId(null); // Optional: clear selection if URL is cleared
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, isLoadingChats, conversations, selectedChatId]);
+  }, [searchParams, isLoadingChats, conversations]); // Removed selectedChatId from deps to avoid loop with setSelectedChatId
 
 
   useEffect(() => {
@@ -443,7 +445,6 @@ export default function ChatPage() {
     try {
       await addDoc(collection(db, 'chat'), newMessageData);
       setReplyMessage("");
-      // toast({ title: "Mensaje Guardado", description: "Tu mensaje ha sido guardado en el chat." }); // Reduced verbosity
 
       const webhookPayload = [{
         chat_id: selectedChatId,
@@ -467,7 +468,6 @@ export default function ChatPage() {
 
         if (webhookResponse.ok) {
           console.log("Message successfully sent to webhook:", webhookPayload);
-          // toast({ title: "Mensaje Enviado a Qyvoo", description: "El mensaje también fue enviado al sistema Qyvoo." }); // Reduced verbosity
         } else {
           const errorData = await webhookResponse.text();
           console.error("Error sending message to webhook:", webhookResponse.status, errorData);
@@ -525,13 +525,17 @@ export default function ChatPage() {
     setContactDetails(prev => prev ? { ...prev, [field]: value } : null);
   };
   
-  const handleContactSelectChange = (value: string) => {
-    setContactDetails(prev => prev ? { ...prev, tipoCliente: value as ContactDetails['tipoCliente'] } : null);
+  const handleContactSelectChange = (value: ContactDetails['tipoCliente']) => {
+    setContactDetails(prev => prev ? { ...prev, tipoCliente: value } : null);
   };
+  
+  const handleContactSwitchChange = (checked: boolean) => {
+     setContactDetails(prev => prev ? { ...prev, chatbotEnabledForContact: checked } : null);
+  };
+
 
   const handleQuickReplySelect = (tag: string) => {
     if (tag === "none") {
-        // Optionally clear the message or do nothing
         return;
     }
     const selectedReply = quickReplies.find(qr => qr.tag === tag);
@@ -593,9 +597,16 @@ export default function ChatPage() {
     );
   }
 
+  const currentChatName = conversations.find(c => c.chat_id === selectedChatId)?.displayName || formatPhoneNumber(selectedChatId);
+
   return (
     <div className="flex h-[calc(100vh-theme(spacing.16)-theme(spacing.12))] border bg-card text-card-foreground shadow-sm rounded-lg overflow-hidden">
-      <div className="w-full md:w-1/3 lg:w-1/4 md:min-w-[300px] md:max-w-[380px] border-r flex flex-col">
+      {/* Conversation List */}
+      <div className={`
+        ${isMobile && selectedChatId ? 'hidden' : 'flex'}
+        w-full ${isMobile ? '' : 'md:w-1/3 lg:w-1/4 md:min-w-[300px] md:max-w-[380px]'}
+        border-r flex-col
+      `}>
         <div className="p-4 border-b">
           <h2 className="text-xl font-semibold">Conversaciones Activas</h2>
         </div>
@@ -622,6 +633,11 @@ export default function ChatPage() {
                   <Link
                     href={`/dashboard/chat?chatId=${convo.chat_id}`}
                     scroll={false}
+                    onClick={() => {
+                        if (isMobile) {
+                            //setSelectedChatId(convo.chat_id); // Handled by useEffect for URL change
+                        }
+                    }}
                     className={`flex w-full h-auto items-center justify-start text-left p-3 rounded-none border-b ${selectedChatId === convo.chat_id ? 'bg-muted' : 'hover:bg-muted/50 transition-colors'}`}
                   >
                     <Avatar className="h-10 w-10 mr-3">
@@ -648,281 +664,232 @@ export default function ChatPage() {
         </ScrollArea>
       </div>
 
-      <div className="flex-1 flex flex-col bg-muted/30">
-        {selectedChatId ? (
-          <>
-            <CardHeader className="p-4 border-b bg-card">
-              <CardTitle className="text-lg">Chat con {
-                  conversations.find(c => c.chat_id === selectedChatId)?.displayName ||
-                  formatPhoneNumber(selectedChatId)
-              }</CardTitle>
-            </CardHeader>
-            <ScrollArea className="flex-grow p-4 space-y-3">
-              {isLoadingMessages ? (
-                <div className="flex justify-center items-center h-full">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      {/* Chat Area & Desktop Contact Info Container */}
+       <div className={`
+        ${isMobile && !selectedChatId ? 'hidden' : 'flex'}
+        flex-1 flex-col md:flex-row 
+      `}>
+        {/* Chat Area */}
+        <div className="flex-1 flex flex-col bg-muted/30">
+          {selectedChatId ? (
+            <>
+              <CardHeader className="p-4 border-b bg-card flex flex-row items-center justify-between">
+                <div className="flex items-center">
+                  {isMobile && (
+                    <Button variant="ghost" size="icon" className="mr-2" onClick={() => {
+                      setSelectedChatId(null);
+                      router.replace('/dashboard/chat', { scroll: false });
+                    }}>
+                      <ArrowLeft className="h-5 w-5" />
+                    </Button>
+                  )}
+                  <CardTitle className="text-lg truncate max-w-[calc(100%-40px)]">{currentChatName}</CardTitle>
                 </div>
-              ) : activeMessages.length === 0 ? (
-                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                    <MessageCircle className="h-16 w-16 mb-4" />
-                    <p>No hay mensajes en esta conversación.</p>
-                    <p className="text-sm">Envía un mensaje para comenzar.</p>
-                </div>
-              ) : (
-                activeMessages.map((msg) => {
-                  const userNameLower = msg.user_name?.toLowerCase();
-                  const isExternalUser = userNameLower === 'user'; 
+                {selectedChatId && (
+                    isMobile ? (
+                        <Sheet open={isContactSheetOpen} onOpenChange={setIsContactSheetOpen}>
+                            <SheetTrigger asChild>
+                                <Button variant="ghost" size="icon"> <Info className="h-5 w-5" /> </Button>
+                            </SheetTrigger>
+                            <SheetContent className="p-0 w-[85vw] max-w-sm flex flex-col">
+                                {contactDetails && initialContactDetails && (
+                                    <ContactDetailsPanel
+                                        contactDetails={contactDetails}
+                                        initialContactDetails={initialContactDetails}
+                                        isEditingContact={isEditingContact}
+                                        setIsEditingContact={setIsEditingContact}
+                                        isLoadingContact={isLoadingContact}
+                                        isSavingContact={isSavingContact}
+                                        onSave={handleSaveContactDetails}
+                                        onCancel={() => { setIsEditingContact(false); setContactDetails(initialContactDetails); }}
+                                        onInputChange={handleContactInputChange}
+                                        onSelectChange={handleContactSelectChange}
+                                        onSwitchChange={handleContactSwitchChange}
+                                        formatPhoneNumber={formatPhoneNumber}
+                                    />
+                                )}
+                            </SheetContent>
+                        </Sheet>
+                    ) : null // Desktop contact panel is separate
+                )}
+              </CardHeader>
+              <ScrollArea className="flex-grow p-4 space-y-3">
+                {isLoadingMessages ? (
+                  <div className="flex justify-center items-center h-full">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                ) : activeMessages.length === 0 ? (
+                   <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                      <MessageCircle className="h-16 w-16 mb-4" />
+                      <p>No hay mensajes en esta conversación.</p>
+                      <p className="text-sm">Envía un mensaje para comenzar.</p>
+                  </div>
+                ) : (
+                  activeMessages.map((msg) => {
+                    const userNameLower = msg.user_name?.toLowerCase();
+                    const isExternalUser = userNameLower === 'user'; 
 
-                  let alignmentClass: string;
-                  let bubbleClass: string;
-                  let timestampAlignmentClass: string;
-                  let IconComponent: React.ElementType | null = null;
-                  let avatarFallbackClass: string;
-                  
-                  if (isExternalUser) {
-                    alignmentClass = 'justify-start'; 
-                    bubbleClass = 'bg-muted dark:bg-slate-700'; 
-                    timestampAlignmentClass = 'text-muted-foreground text-left';
-                    IconComponent = UserRound; 
-                    avatarFallbackClass = "bg-gray-400 text-white";
-                  } else { 
-                    alignmentClass = 'justify-end'; 
-                    timestampAlignmentClass = 'text-right';
-
-                    if (userNameLower === 'bot') {
-                      bubbleClass = 'bg-primary text-primary-foreground';
-                      timestampAlignmentClass += ' text-primary-foreground/80';
-                      IconComponent = Bot;
-                      avatarFallbackClass = "bg-blue-500 text-white";
-                    } else if (userNameLower === 'agente') {
-                      bubbleClass = 'bg-secondary text-secondary-foreground dark:bg-slate-600 dark:text-slate-100';
-                      timestampAlignmentClass += ' text-secondary-foreground/80';
-                      IconComponent = User; 
-                      avatarFallbackClass = "bg-green-500 text-white";
+                    let alignmentClass: string;
+                    let bubbleClass: string;
+                    let timestampAlignmentClass: string;
+                    let IconComponent: React.ElementType | null = null;
+                    let avatarFallbackClass: string;
+                    
+                    if (isExternalUser) {
+                      alignmentClass = 'justify-start'; 
+                      bubbleClass = 'bg-muted dark:bg-slate-700'; 
+                      timestampAlignmentClass = 'text-muted-foreground text-left';
+                      IconComponent = UserRound; 
+                      avatarFallbackClass = "bg-gray-400 text-white";
                     } else { 
-                      bubbleClass = 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200';
-                      timestampAlignmentClass += ' text-gray-500 dark:text-gray-400';
-                      IconComponent = MessageCircle; 
-                      avatarFallbackClass = "bg-gray-300 dark:bg-gray-600 text-black dark:text-white";
-                    }
-                  }
+                      alignmentClass = 'justify-end'; 
+                      timestampAlignmentClass = 'text-right';
 
-                  return (
-                    <div
-                      key={msg.id}
-                      className={`flex w-full ${alignmentClass}`}
-                    >
-                      <div className={`flex items-end max-w-[75%] gap-2`}>
-                        {IconComponent && isExternalUser && (
-                          <Avatar className={`h-6 w-6 self-end mb-1`}>
-                            <AvatarFallback className={avatarFallbackClass}>
-                              <IconComponent className="h-4 w-4" />
-                            </AvatarFallback>
-                          </Avatar>
-                        )}
-                        
-                        <div
-                          className={`py-2 px-3 rounded-lg shadow-md ${bubbleClass}`}
-                        >
-                          <p className="text-sm break-all whitespace-pre-wrap">
-                             {formatWhatsAppMessage(msg.mensaje)}
-                          </p>
-                          <p className={`text-xs mt-1 ${timestampAlignmentClass}`}>
-                            {formatTimestamp(msg.timestamp)}
-                          </p>
+                      if (userNameLower === 'bot') {
+                        bubbleClass = 'bg-primary text-primary-foreground';
+                        timestampAlignmentClass += ' text-primary-foreground/80';
+                        IconComponent = Bot;
+                        avatarFallbackClass = "bg-blue-500 text-white";
+                      } else if (userNameLower === 'agente') {
+                        bubbleClass = 'bg-secondary text-secondary-foreground dark:bg-slate-600 dark:text-slate-100';
+                        timestampAlignmentClass += ' text-secondary-foreground/80';
+                        IconComponent = User; 
+                        avatarFallbackClass = "bg-green-500 text-white";
+                      } else { 
+                        bubbleClass = 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200';
+                        timestampAlignmentClass += ' text-gray-500 dark:text-gray-400';
+                        IconComponent = MessageCircle; 
+                        avatarFallbackClass = "bg-gray-300 dark:bg-gray-600 text-black dark:text-white";
+                      }
+                    }
+
+                    return (
+                      <div
+                        key={msg.id}
+                        className={`flex w-full ${alignmentClass}`}
+                      >
+                        <div className={`flex items-end max-w-[75%] gap-2`}>
+                          {IconComponent && isExternalUser && (
+                            <Avatar className={`h-6 w-6 self-end mb-1`}>
+                              <AvatarFallback className={avatarFallbackClass}>
+                                <IconComponent className="h-4 w-4" />
+                              </AvatarFallback>
+                            </Avatar>
+                          )}
+                          
+                          <div
+                            className={`py-2 px-3 rounded-lg shadow-md ${bubbleClass}`}
+                          >
+                            <p className="text-sm break-all whitespace-pre-wrap">
+                               {formatWhatsAppMessage(msg.mensaje)}
+                            </p>
+                            <p className={`text-xs mt-1 ${timestampAlignmentClass}`}>
+                              {formatTimestamp(msg.timestamp)}
+                            </p>
+                          </div>
+
+                          {IconComponent && !isExternalUser && (
+                            <Avatar className={`h-6 w-6 self-end mb-1`}>
+                               <AvatarFallback className={avatarFallbackClass}>
+                                <IconComponent className="h-4 w-4" />
+                              </AvatarFallback>
+                            </Avatar>
+                          )}
                         </div>
-
-                        {IconComponent && !isExternalUser && (
-                          <Avatar className={`h-6 w-6 self-end mb-1`}>
-                             <AvatarFallback className={avatarFallbackClass}>
-                              <IconComponent className="h-4 w-4" />
-                            </AvatarFallback>
-                          </Avatar>
-                        )}
                       </div>
-                    </div>
-                  );
-                })
-              )}
-              <div ref={messagesEndRef} />
-            </ScrollArea>
-            <CardFooter className="p-4 border-t bg-card flex flex-col space-y-2">
-              <div className="w-full">
-                 <Select onValueChange={handleQuickReplySelect} disabled={isLoadingQuickReplies || quickReplies.length === 0}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder={
-                        isLoadingQuickReplies ? "Cargando respuestas..." :
-                        quickReplies.length === 0 ? "No hay respuestas rápidas" :
-                        "Seleccionar respuesta rápida..."
-                      } />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none" disabled>Seleccionar respuesta rápida...</SelectItem>
-                      {quickReplies.map((qr) => (
-                        <SelectItem key={qr.id} value={qr.tag}>
-                          {qr.tag} - <span className="text-xs text-muted-foreground truncate max-w-[200px] inline-block">{qr.message}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground mt-1 text-right">
-                    <Link href="/dashboard/quick-replies" className="hover:underline">
-                        Gestionar respuestas rápidas <Zap className="inline h-3 w-3" />
-                    </Link>
-                  </p>
+                    );
+                  })
+                )}
+                <div ref={messagesEndRef} />
+              </ScrollArea>
+              <CardFooter className="p-4 border-t bg-card flex flex-col space-y-2">
+                <div className="w-full">
+                   <Select onValueChange={handleQuickReplySelect} disabled={isLoadingQuickReplies || quickReplies.length === 0}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder={
+                          isLoadingQuickReplies ? "Cargando respuestas..." :
+                          quickReplies.length === 0 ? "No hay respuestas rápidas" :
+                          "Seleccionar respuesta rápida..."
+                        } />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none" disabled>Seleccionar respuesta rápida...</SelectItem>
+                        {quickReplies.map((qr) => (
+                          <SelectItem key={qr.id} value={qr.tag}>
+                            {qr.tag} - <span className="text-xs text-muted-foreground truncate max-w-[200px] inline-block">{qr.message}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1 text-right">
+                      <Link href="/dashboard/quick-replies" className="hover:underline">
+                          Gestionar respuestas rápidas <Zap className="inline h-3 w-3" />
+                      </Link>
+                    </p>
+                </div>
+                <div className="flex w-full items-center space-x-2">
+                  <Textarea
+                    placeholder="Escribe tu mensaje como administrador..."
+                    value={replyMessage}
+                    onChange={(e) => setReplyMessage(e.target.value)}
+                    className="flex-grow resize-none"
+                    rows={1}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
+                  />
+                  <Button onClick={handleSendMessage} disabled={!replyMessage.trim() || isLoadingMessages}>
+                    <Send className="h-4 w-4 mr-2" /> Enviar
+                  </Button>
+                </div>
+              </CardFooter>
+            </>
+          ) : ( // No chat selected, show welcome only on desktop (mobile hides this whole section)
+            <div className={`
+              ${isMobile ? 'hidden' : 'flex'} 
+              flex-1 flex-col items-center justify-center p-6
+            `}>
+              <div className="text-center max-w-md">
+                <EvolveLinkLogo className="h-16 w-auto mx-auto mb-6 text-primary" data-ai-hint="company logo"/>
+                <h2 className="text-2xl font-semibold mb-2">Bienvenido a Qyvoo</h2>
+                <p className="text-muted-foreground mb-6">
+                  Selecciona una conversación de la lista de la izquierda para ver los mensajes.
+                </p>
+                <Alert className="bg-background border-border text-foreground">
+                  <MessageCircle className="h-5 w-5" />
+                  <AlertTitle className="font-semibold">Panel de Monitoreo</AlertTitle>
+                  <AlertDescription>
+                    Esta interfaz te permite monitorear las conversaciones de tus campañas y responder como administrador.
+                  </AlertDescription>
+                </Alert>
               </div>
-              <div className="flex w-full items-center space-x-2">
-                <Textarea
-                  placeholder="Escribe tu mensaje como administrador..."
-                  value={replyMessage}
-                  onChange={(e) => setReplyMessage(e.target.value)}
-                  className="flex-grow resize-none"
-                  rows={1}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage();
-                    }
-                  }}
-                />
-                <Button onClick={handleSendMessage} disabled={!replyMessage.trim() || isLoadingMessages}>
-                  <Send className="h-4 w-4 mr-2" /> Enviar
-                </Button>
-              </div>
-            </CardFooter>
-          </>
-        ) : (
-          <div className="hidden md:flex flex-1 flex-col items-center justify-center p-6">
-            <div className="text-center max-w-md">
-              <EvolveLinkLogo className="h-16 w-auto mx-auto mb-6 text-primary" data-ai-hint="company logo"/>
-              <h2 className="text-2xl font-semibold mb-2">Bienvenido a Qyvoo</h2>
-              <p className="text-muted-foreground mb-6">
-                Selecciona una conversación de la lista de la izquierda para ver los mensajes.
-              </p>
-              <Alert className="bg-background border-border text-foreground">
-                <MessageCircle className="h-5 w-5" />
-                <AlertTitle className="font-semibold">Panel de Monitoreo</AlertTitle>
-                <AlertDescription>
-                  Esta interfaz te permite monitorear las conversaciones de tus campañas y responder como administrador.
-                </AlertDescription>
-              </Alert>
             </div>
+          )}
+        </div>
+        
+        {/* Contact Info Panel (Desktop only) */}
+        {!isMobile && selectedChatId && contactDetails && initialContactDetails && (
+          <div className="hidden md:flex w-full md:w-1/3 lg:w-1/4 md:min-w-[300px] md:max-w-[380px] border-l flex-col bg-card">
+            <ContactDetailsPanel
+              contactDetails={contactDetails}
+              initialContactDetails={initialContactDetails}
+              isEditingContact={isEditingContact}
+              setIsEditingContact={setIsEditingContact}
+              isLoadingContact={isLoadingContact}
+              isSavingContact={isSavingContact}
+              onSave={handleSaveContactDetails}
+              onCancel={() => { setIsEditingContact(false); setContactDetails(initialContactDetails); }}
+              onInputChange={handleContactInputChange}
+              onSelectChange={handleContactSelectChange}
+              onSwitchChange={handleContactSwitchChange}
+              formatPhoneNumber={formatPhoneNumber}
+            />
           </div>
         )}
       </div>
-      
-      {selectedChatId && (
-        <div className="w-full md:w-1/3 lg:w-1/4 md:min-w-[300px] md:max-w-[380px] border-l flex flex-col bg-card">
-          <CardHeader className="p-4 border-b">
-            <div className="flex justify-between items-center">
-              <CardTitle className="text-lg">Información del Contacto</CardTitle>
-              {!isEditingContact && (
-                <Button variant="ghost" size="icon" onClick={() => setIsEditingContact(true)} disabled={isLoadingContact}>
-                  <Edit3 className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <ScrollArea className="flex-grow p-4">
-            {isLoadingContact ? (
-               <div className="flex items-center justify-center p-6">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            ) : contactDetails ? (
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="contactNombre" className="flex items-center text-sm text-muted-foreground"><UserRound className="h-4 w-4 mr-2"/>Nombre</Label>
-                  <Input id="contactNombre" value={contactDetails.nombre || ""} onChange={(e) => handleContactInputChange('nombre', e.target.value)} readOnly={!isEditingContact} placeholder="No disponible"/>
-                </div>
-                <div>
-                  <Label htmlFor="contactApellido" className="flex items-center text-sm text-muted-foreground"><UserRound className="h-4 w-4 mr-2"/>Apellido</Label>
-                  <Input id="contactApellido" value={contactDetails.apellido || ""} onChange={(e) => handleContactInputChange('apellido', e.target.value)} readOnly={!isEditingContact} placeholder="No disponible"/>
-                </div>
-                <div>
-                  <Label htmlFor="contactEmail" className="flex items-center text-sm text-muted-foreground"><Mail className="h-4 w-4 mr-2"/>Correo Electrónico</Label>
-                  <Input id="contactEmail" type="email" value={contactDetails.email || ""} onChange={(e) => handleContactInputChange('email', e.target.value)} readOnly={!isEditingContact} placeholder="No disponible"/>
-                </div>
-                <div>
-                  <Label htmlFor="contactTelefono" className="flex items-center text-sm text-muted-foreground"><Phone className="h-4 w-4 mr-2"/>Teléfono</Label>
-                  <Input 
-                    id="contactTelefono" 
-                    value={contactDetails.telefono || ""} 
-                    onChange={(e) => handleContactInputChange('telefono', e.target.value)} 
-                    readOnly={!isEditingContact} 
-                    placeholder="No disponible"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="contactEmpresa" className="flex items-center text-sm text-muted-foreground"><Building className="h-4 w-4 mr-2"/>Empresa</Label>
-                  <Input id="contactEmpresa" value={contactDetails.empresa || ""} onChange={(e) => handleContactInputChange('empresa', e.target.value)} readOnly={!isEditingContact} placeholder="No disponible"/>
-                </div>
-                <div>
-                  <Label htmlFor="contactUbicacion" className="flex items-center text-sm text-muted-foreground"><MapPin className="h-4 w-4 mr-2"/>Ubicación</Label>
-                  <Input id="contactUbicacion" value={contactDetails.ubicacion || ""} onChange={(e) => handleContactInputChange('ubicacion', e.target.value)} readOnly={!isEditingContact} placeholder="No disponible"/>
-                </div>
-                <div>
-                  <Label htmlFor="contactTipoCliente" className="flex items-center text-sm text-muted-foreground"><UserCheck className="h-4 w-4 mr-2"/>Tipo de Cliente</Label>
-                   <Select 
-                    value={contactDetails.tipoCliente || ""} 
-                    onValueChange={handleContactSelectChange}
-                    disabled={!isEditingContact}
-                  >
-                    <SelectTrigger id="contactTipoCliente">
-                      <SelectValue placeholder="Seleccionar tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Prospecto">Prospecto</SelectItem>
-                      <SelectItem value="Cliente">Cliente</SelectItem>
-                      <SelectItem value="Proveedor">Proveedor</SelectItem>
-                      <SelectItem value="Otro">Otro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <div className="flex items-center space-x-2 mt-2">
-                     <Switch
-                        id="chatbotEnabledForContact"
-                        checked={contactDetails.chatbotEnabledForContact ?? true}
-                        onCheckedChange={(checked) => {
-                          if (isEditingContact) {
-                            setContactDetails(prev => prev ? { ...prev, chatbotEnabledForContact: checked } : null);
-                          }
-                        }}
-                        disabled={!isEditingContact || isLoadingContact || isSavingContact}
-                      />
-                    <Label htmlFor="chatbotEnabledForContact" className="flex items-center text-sm text-muted-foreground">
-                      <Bot className="h-4 w-4 mr-2" />
-                      Chatbot Activo para este Contacto
-                    </Label>
-                  </div>
-                   {isEditingContact && !contactDetails.chatbotEnabledForContact && (
-                    <p className="text-xs text-amber-600 dark:text-amber-500 mt-1 flex items-center">
-                        <MessageSquareDashed className="h-3 w-3 mr-1" /> El bot no responderá automáticamente a este contacto.
-                    </p>
-                  )}
-                </div>
-                
-                {isEditingContact && (
-                  <div className="flex justify-end space-x-2 pt-4">
-                    <Button variant="outline" onClick={() => { setIsEditingContact(false); setContactDetails(initialContactDetails);}} disabled={isSavingContact}>
-                      <XCircle className="mr-2 h-4 w-4" /> Cancelar
-                    </Button>
-                    <Button onClick={handleSaveContactDetails} disabled={isSavingContact}>
-                      {isSavingContact ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                      Guardar
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-center">No hay información de contacto disponible para {formatPhoneNumber(selectedChatId)}.</p>
-            )}
-          </ScrollArea>
-           <CardFooter className="p-2 border-t">
-             <p className="text-xs text-muted-foreground text-center w-full">Información de contacto adicional.</p>
-          </CardFooter>
-        </div>
-      )}
     </div>
   );
 }
