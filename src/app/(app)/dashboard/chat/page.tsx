@@ -52,7 +52,8 @@ interface ConversationSummary {
   lastMessage: string;
   lastMessageTimestamp: Date;
   lastMessageSender: string;
-  displayName?: string; 
+  nameLine1: string;
+  nameLine2: string | null;
   avatarFallback?: string; 
 }
 
@@ -220,7 +221,13 @@ export default function ChatPage() {
             messages.push({ id: doc.id, ...(doc.data() as ChatMessageDocument) });
           });
           
-          const chatMap = new Map<string, Omit<ConversationSummary, 'displayName' | 'avatarFallback'>>();
+          const chatMap = new Map<string, {
+              chat_id: string;
+              lastMessage: string;
+              lastMessageTimestamp: Date;
+              lastMessageSender: string;
+          }>();
+
           messages.forEach(msg => {
             let currentChatId = msg.chat_id; 
              if (msg.from === instanceIdentifier) { 
@@ -266,45 +273,47 @@ export default function ChatPage() {
           });
 
           const enrichedConversations: ConversationSummary[] = [];
-          for (const [chat_id_key, summary] of chatMap.entries()) {
+          for (const [chat_id_key, summaryValue] of chatMap.entries()) {
               const contactData = contactsDataMap.get(chat_id_key);
-              let displayName = formatPhoneNumber(chat_id_key);
-              let avatarFallbackText = displayName.length >= 2 ? displayName.slice(-2) : displayName;
-
+              
+              let nameL1 = formatPhoneNumber(chat_id_key);
+              let nameL2: string | null = null;
+              let avatarFb = nameL1.length >= 2 ? nameL1.slice(-2) : nameL1;
 
               if (contactData) {
-                  let nameParts = [];
-                  if (contactData.nombre && contactData.nombre.trim()) nameParts.push(contactData.nombre.trim());
-                  if (contactData.apellido && contactData.apellido.trim()) nameParts.push(contactData.apellido.trim());
-                  
-                  let tempDisplayName = nameParts.join(' ').trim();
-                  
-                  // Adjusted to show "Nombre [Empresa]" or just "Nombre" or "Empresa"
-                  if (tempDisplayName && contactData.empresa && contactData.empresa.trim()) {
-                    displayName = `${tempDisplayName} [${contactData.empresa.trim()}]`;
-                  } else if (tempDisplayName) {
-                    displayName = tempDisplayName;
-                  } else if (contactData.empresa && contactData.empresa.trim()) {
-                    displayName = contactData.empresa.trim();
+                  const nombreCompleto = [contactData.nombre, contactData.apellido].filter(Boolean).join(' ').trim();
+                  const empresa = contactData.empresa?.trim();
+
+                  if (nombreCompleto) {
+                      nameL1 = nombreCompleto;
+                      if (empresa) {
+                          nameL2 = `[${empresa}]`;
+                      }
+                  } else if (empresa) {
+                      nameL1 = empresa;
                   }
                   
-                  // Avatar fallback logic
                   if (contactData.nombre && contactData.nombre.trim() && contactData.apellido && contactData.apellido.trim()) {
-                      avatarFallbackText = `${contactData.nombre.trim()[0]}${contactData.apellido.trim()[0]}`.toUpperCase();
-                  } else if (contactData.nombre && contactData.nombre.trim() && contactData.nombre.trim().length >=2) {
-                      avatarFallbackText = contactData.nombre.trim().substring(0,2).toUpperCase();
+                      avatarFb = `${contactData.nombre.trim()[0]}${contactData.apellido.trim()[0]}`.toUpperCase();
                   } else if (contactData.nombre && contactData.nombre.trim()) {
-                       avatarFallbackText = contactData.nombre.trim().substring(0,1).toUpperCase();
-                  } else if (contactData.empresa && contactData.empresa.trim() && contactData.empresa.trim().length >= 2) {
-                      avatarFallbackText = contactData.empresa.trim().substring(0,2).toUpperCase();
+                       avatarFb = contactData.nombre.trim().substring(0, Math.min(2, contactData.nombre.trim().length)).toUpperCase();
                   } else if (contactData.empresa && contactData.empresa.trim()) {
-                       avatarFallbackText = contactData.empresa.trim().substring(0,1).toUpperCase();
+                       avatarFb = contactData.empresa.trim().substring(0, Math.min(2, contactData.empresa.trim().length)).toUpperCase();
+                  } else if (nameL1.length >=2) {
+                     avatarFb = nameL1.substring(0,2).toUpperCase();
+                  } else if (nameL1.length === 1) {
+                     avatarFb = nameL1.toUpperCase();
                   }
               }
+
               enrichedConversations.push({
-                  ...summary,
-                  displayName: displayName,
-                  avatarFallback: avatarFallbackText
+                  chat_id: chat_id_key,
+                  lastMessage: summaryValue.lastMessage,
+                  lastMessageTimestamp: summaryValue.lastMessageTimestamp,
+                  lastMessageSender: summaryValue.lastMessageSender,
+                  nameLine1: nameL1,
+                  nameLine2: nameL2,
+                  avatarFallback: avatarFb
               });
           }
 
@@ -622,7 +631,7 @@ export default function ChatPage() {
     );
   }
 
-  const currentChatName = conversations.find(c => c.chat_id === selectedChatId)?.displayName || formatPhoneNumber(selectedChatId);
+  const currentConvoDetails = conversations.find(c => c.chat_id === selectedChatId);
 
   return (
     <div className="flex h-[calc(100vh-theme(spacing.16)-theme(spacing.12))] border bg-card text-card-foreground shadow-sm rounded-lg overflow-hidden">
@@ -666,10 +675,11 @@ export default function ChatPage() {
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-grow min-w-0">
-                      <div className="flex justify-between items-baseline">
-                        <p className="font-semibold truncate text-sm flex-grow">
-                          {convo.displayName || formatPhoneNumber(convo.chat_id)}
-                        </p>
+                       <div className="flex justify-between items-baseline">
+                        <div className="font-semibold text-sm flex-grow min-w-0">
+                            <p className="truncate">{convo.nameLine1}</p>
+                            {convo.nameLine2 && <p className="text-xs text-muted-foreground truncate">{convo.nameLine2}</p>}
+                        </div>
                         <p className="text-xs text-muted-foreground whitespace-nowrap ml-2 shrink-0">
                            {formatConversationTimestamp(convo.lastMessageTimestamp)}
                         </p>
@@ -701,7 +711,7 @@ export default function ChatPage() {
           {selectedChatId ? (
             <>
               <CardHeader className="p-4 border-b bg-card flex flex-row items-center justify-between">
-                <div className="flex items-center">
+                <div className="flex items-center min-w-0"> {/* Added min-w-0 for truncation */}
                   {isMobile && (
                     <Button variant="ghost" size="icon" className="mr-2" onClick={() => {
                       setSelectedChatId(null);
@@ -710,7 +720,22 @@ export default function ChatPage() {
                       <ArrowLeft className="h-5 w-5" />
                     </Button>
                   )}
-                  <CardTitle className="text-lg truncate max-w-[calc(100%-40px)]">{currentChatName}</CardTitle>
+                  <div className="text-lg min-w-0"> {/* Container for title lines */}
+                    {isLoadingMessages && !currentConvoDetails ? (
+                       <span className="text-muted-foreground">Cargando...</span>
+                    ) : currentConvoDetails ? (
+                        currentConvoDetails.nameLine2 ? (
+                        <div className="flex flex-col">
+                            <span className="font-semibold truncate leading-tight">{currentConvoDetails.nameLine1}</span>
+                            <span className="text-xs text-muted-foreground truncate leading-tight">{currentConvoDetails.nameLine2}</span>
+                        </div>
+                        ) : (
+                        <span className="font-semibold truncate">{currentConvoDetails.nameLine1}</span>
+                        )
+                    ) : (
+                        <span className="font-semibold truncate">{formatPhoneNumber(selectedChatId)}</span>
+                    )}
+                  </div>
                 </div>
                 {selectedChatId && (
                     isMobile ? (
