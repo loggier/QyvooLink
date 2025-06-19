@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -27,7 +28,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import ContactDetailsPanel, { type ContactDetails } from '@/components/dashboard/chat/contact-details-panel'; 
-import { format, isToday, isYesterday, differenceInDays, parseISO } from 'date-fns';
+import { format, isToday, isYesterday, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 
@@ -111,16 +112,12 @@ const formatConversationTimestamp = (timestampInput: Date | string | undefined):
   const date = typeof timestampInput === 'string' ? parseISO(timestampInput) : timestampInput;
 
   if (isToday(date)) {
-    return format(date, 'HH:mm', { locale: es });
+    return `hoy a las ${format(date, 'HH:mm', { locale: es })}`;
   }
   if (isYesterday(date)) {
-    return `Ayer ${format(date, 'HH:mm', { locale: es })}`;
+    return `ayer a las ${format(date, 'HH:mm', { locale: es })}`;
   }
-  const now = new Date();
-  if (differenceInDays(now, date) < 7) {
-    return format(date, 'eee HH:mm', { locale: es }); // Capitalize first letter with CSS if needed
-  }
-  return format(date, 'dd/MM/yy HH:mm', { locale: es });
+  return `${format(date, 'dd/MM/yyyy', { locale: es })} a las ${format(date, 'HH:mm', { locale: es })}`;
 };
 
 
@@ -660,14 +657,16 @@ export default function ChatPage() {
                         {convo.avatarFallback || formatPhoneNumber(convo.chat_id).slice(-2)}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex-grow min-w-0"> {/* min-w-0 for truncation */}
-                      <div className="flex justify-between items-center">
-                        <p className="font-semibold truncate">{convo.displayName || formatPhoneNumber(convo.chat_id)}</p>
-                        <p className="text-xs text-muted-foreground whitespace-nowrap ml-2">
+                    <div className="flex-grow min-w-0">
+                      <div className="flex justify-between items-baseline">
+                        <p className="font-semibold truncate text-sm flex-grow">
+                          {convo.displayName || formatPhoneNumber(convo.chat_id)}
+                        </p>
+                        <p className="text-xs text-muted-foreground whitespace-nowrap ml-2 shrink-0">
                            {formatConversationTimestamp(convo.lastMessageTimestamp)}
                         </p>
                       </div>
-                      <p className="text-xs text-muted-foreground truncate">
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">
                         <span className="font-medium">
                           {convo.lastMessageSender?.toLowerCase() === 'bot' ? 'Bot' : 
                            convo.lastMessageSender?.toLowerCase() === 'agente' ? 'Agente' : 
