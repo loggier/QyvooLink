@@ -120,7 +120,8 @@ const formatConversationTimestamp = (timestampInput: Date | string | undefined):
     return "Ayer";
   }
   if (differenceInCalendarDays(now, date) < 7) {
-    return format(date, 'EEE', { locale: es }).charAt(0).toUpperCase() + format(date, 'EEE', { locale: es }).slice(1) + '.';
+    const dayName = format(date, 'EEE', { locale: es });
+    return dayName.charAt(0).toUpperCase() + dayName.slice(1) + '.';
   }
   return format(date, 'dd/MM/yy', { locale: es });
 };
@@ -672,13 +673,13 @@ export default function ChatPage() {
                         {convo.avatarFallback || formatPhoneNumber(convo.chat_id).slice(-2)}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex-grow min-w-0 overflow-hidden">
-                       <div className="flex justify-between items-baseline"> 
-                        <div className="font-semibold text-sm min-w-0 overflow-hidden mr-2">
+                    <div className="flex-grow min-w-0 overflow-hidden"> {/* Ensures this div can shrink */}
+                       <div className="flex items-baseline"> {/* Use items-baseline for better alignment */}
+                        <div className="flex-grow font-semibold text-sm min-w-0 overflow-hidden mr-2"> {/* Name container takes available space and truncates */}
                             <p className="truncate">{convo.nameLine1}</p>
                             {convo.nameLine2 && <p className="text-xs text-muted-foreground truncate">{convo.nameLine2}</p>}
                         </div>
-                        <p className="text-xs text-muted-foreground whitespace-nowrap shrink-0"> 
+                        <p className="text-xs text-muted-foreground whitespace-nowrap shrink-0"> {/* Timestamp does not shrink */}
                            {formatConversationTimestamp(convo.lastMessageTimestamp)}
                         </p>
                       </div>
@@ -938,4 +939,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
