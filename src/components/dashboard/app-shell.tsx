@@ -62,11 +62,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <SidebarProvider defaultOpen>
       <Sidebar collapsible="icon">
-        <SidebarHeader className="p-4 flex flex-col items-center group-data-[collapsible=icon]:items-center">
-           <Link href="/dashboard" className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
+        <SidebarHeader className="p-4 flex flex-row items-center justify-between">
+           <Link href="/dashboard" className="flex items-center gap-2">
             <EvolveLinkLogo className="h-8 w-auto text-primary" data-ai-hint="company logo" />
             <span className="text-xl font-semibold text-primary group-data-[collapsible=icon]:hidden">Qyvoo</span>
           </Link>
+          <SidebarTrigger className="hidden md:flex" />
         </SidebarHeader>
         <SidebarContent>
           <SidebarMenu>
