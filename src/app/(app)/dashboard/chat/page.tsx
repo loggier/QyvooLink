@@ -666,24 +666,24 @@ export default function ChatPage() {
                   <Link
                     href={`/dashboard/chat?chatId=${convo.chat_id}`}
                     scroll={false}
-                    className={`flex w-full h-auto items-start p-3 rounded-none border-b overflow-hidden ${selectedChatId === convo.chat_id ? 'bg-muted' : 'hover:bg-muted/50 transition-colors'}`}
+                    className={`flex w-full items-start p-3 rounded-none border-b overflow-hidden ${selectedChatId === convo.chat_id ? 'bg-muted' : 'hover:bg-muted/50 transition-colors'}`}
                   >
                     <Avatar className="h-10 w-10 mr-3 mt-1 shrink-0">
                        <AvatarFallback>
                         {convo.avatarFallback || formatPhoneNumber(convo.chat_id).slice(-2)}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex-grow min-w-0 overflow-hidden"> 
-                       <div className="flex items-baseline min-w-0 overflow-hidden"> 
-                        <div className="flex-grow font-semibold text-sm min-w-0 overflow-hidden mr-2"> 
-                            <p className="truncate">{convo.nameLine1}</p>
+                    <div className="flex-1 min-w-0 overflow-hidden"> {/* Container for all text content */}
+                       <div className="flex justify-between items-baseline"> {/* Line 1: Name and Timestamp */}
+                        <div className="min-w-0 overflow-hidden mr-2"> {/* Name block, allows shrinking & truncation */}
+                            <p className="font-semibold text-sm truncate">{convo.nameLine1}</p>
                             {convo.nameLine2 && <p className="text-xs text-muted-foreground truncate">{convo.nameLine2}</p>}
                         </div>
-                        <p className="text-xs text-muted-foreground whitespace-nowrap shrink-0"> 
+                        <p className="text-xs text-muted-foreground whitespace-nowrap shrink-0"> {/* Timestamp */}
                            {formatConversationTimestamp(convo.lastMessageTimestamp)}
                         </p>
                       </div>
-                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5"> 
+                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5"> {/* Line 2: Message preview */}
                         <span className="font-medium">
                           {convo.lastMessageSender?.toLowerCase() === 'bot' ? 'Bot' : 
                            convo.lastMessageSender?.toLowerCase() === 'agente' ? 'Agente' : 
