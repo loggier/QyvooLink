@@ -28,7 +28,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import ContactDetailsPanel, { type ContactDetails } from '@/components/dashboard/chat/contact-details-panel'; 
-import { format, isToday, isYesterday, parseISO } from 'date-fns';
+import { format, isToday, isYesterday, parseISO, differenceInCalendarDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 
@@ -110,14 +110,18 @@ function formatWhatsAppMessage(text: string | undefined | null): React.ReactNode
 const formatConversationTimestamp = (timestampInput: Date | string | undefined): string => {
   if (!timestampInput) return "";
   const date = typeof timestampInput === 'string' ? parseISO(timestampInput) : timestampInput;
+  const now = new Date();
 
   if (isToday(date)) {
-    return `hoy a las ${format(date, 'HH:mm', { locale: es })}`;
+    return format(date, 'HH:mm', { locale: es });
   }
   if (isYesterday(date)) {
-    return `ayer a las ${format(date, 'HH:mm', { locale: es })}`;
+    return "Ayer";
   }
-  return `${format(date, 'dd/MM/yyyy', { locale: es })} a las ${format(date, 'HH:mm', { locale: es })}`;
+  if (differenceInCalendarDays(now, date) < 7) {
+    return format(date, 'EEE', { locale: es }); // E.g., "lun.", "mar."
+  }
+  return format(date, 'dd/MM/yy', { locale: es }); // E.g., "10/06/25"
 };
 
 
@@ -274,23 +278,27 @@ export default function ChatPage() {
                   if (contactData.apellido && contactData.apellido.trim()) nameParts.push(contactData.apellido.trim());
                   
                   let tempDisplayName = nameParts.join(' ').trim();
-                  if (contactData.empresa && contactData.empresa.trim()) {
-                      tempDisplayName += ` [${contactData.empresa.trim()}]`;
+                  
+                  // Adjusted to show "Nombre [Empresa]" or just "Nombre" or "Empresa"
+                  if (tempDisplayName && contactData.empresa && contactData.empresa.trim()) {
+                    displayName = `${tempDisplayName} [${contactData.empresa.trim()}]`;
+                  } else if (tempDisplayName) {
+                    displayName = tempDisplayName;
+                  } else if (contactData.empresa && contactData.empresa.trim()) {
+                    displayName = contactData.empresa.trim();
                   }
                   
-                  if (tempDisplayName.trim()) {
-                      displayName = tempDisplayName.trim();
-                      if (contactData.nombre && contactData.nombre.trim() && contactData.apellido && contactData.apellido.trim()) {
-                          avatarFallbackText = `${contactData.nombre.trim()[0]}${contactData.apellido.trim()[0]}`.toUpperCase();
-                      } else if (contactData.nombre && contactData.nombre.trim() && contactData.nombre.trim().length >=2) {
-                          avatarFallbackText = contactData.nombre.trim().substring(0,2).toUpperCase();
-                      } else if (contactData.nombre && contactData.nombre.trim()) {
-                           avatarFallbackText = contactData.nombre.trim().substring(0,1).toUpperCase();
-                      } else if (contactData.empresa && contactData.empresa.trim() && contactData.empresa.trim().length >= 2) {
-                          avatarFallbackText = contactData.empresa.trim().substring(0,2).toUpperCase();
-                      } else if (contactData.empresa && contactData.empresa.trim()) {
-                           avatarFallbackText = contactData.empresa.trim().substring(0,1).toUpperCase();
-                      }
+                  // Avatar fallback logic
+                  if (contactData.nombre && contactData.nombre.trim() && contactData.apellido && contactData.apellido.trim()) {
+                      avatarFallbackText = `${contactData.nombre.trim()[0]}${contactData.apellido.trim()[0]}`.toUpperCase();
+                  } else if (contactData.nombre && contactData.nombre.trim() && contactData.nombre.trim().length >=2) {
+                      avatarFallbackText = contactData.nombre.trim().substring(0,2).toUpperCase();
+                  } else if (contactData.nombre && contactData.nombre.trim()) {
+                       avatarFallbackText = contactData.nombre.trim().substring(0,1).toUpperCase();
+                  } else if (contactData.empresa && contactData.empresa.trim() && contactData.empresa.trim().length >= 2) {
+                      avatarFallbackText = contactData.empresa.trim().substring(0,2).toUpperCase();
+                  } else if (contactData.empresa && contactData.empresa.trim()) {
+                       avatarFallbackText = contactData.empresa.trim().substring(0,1).toUpperCase();
                   }
               }
               enrichedConversations.push({
@@ -666,7 +674,7 @@ export default function ChatPage() {
                            {formatConversationTimestamp(convo.lastMessageTimestamp)}
                         </p>
                       </div>
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">
+                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
                         <span className="font-medium">
                           {convo.lastMessageSender?.toLowerCase() === 'bot' ? 'Bot' : 
                            convo.lastMessageSender?.toLowerCase() === 'agente' ? 'Agente' : 
