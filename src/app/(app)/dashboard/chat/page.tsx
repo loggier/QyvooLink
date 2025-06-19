@@ -120,7 +120,7 @@ const formatConversationTimestamp = (timestampInput: Date | string | undefined):
     return "Ayer";
   }
   if (differenceInCalendarDays(now, date) < 7) {
-    return format(date, 'EEE', { locale: es }); // E.g., "lun.", "mar."
+    return format(date, 'EEE', { locale: es }).charAt(0).toUpperCase() + format(date, 'EEE', { locale: es }).slice(1) + '.'; // E.g., "Lun.", "Mar."
   }
   return format(date, 'dd/MM/yy', { locale: es }); // E.g., "10/06/25"
 };
@@ -278,7 +278,8 @@ export default function ChatPage() {
               
               let nameL1 = formatPhoneNumber(chat_id_key);
               let nameL2: string | null = null;
-              let avatarFb = nameL1.length >= 2 ? nameL1.slice(-2) : nameL1;
+              let avatarFb = nameL1.length >= 2 ? nameL1.slice(0,2).toUpperCase() : nameL1.toUpperCase();
+
 
               if (contactData) {
                   const nombreCompleto = [contactData.nombre, contactData.apellido].filter(Boolean).join(' ').trim();
@@ -299,12 +300,9 @@ export default function ChatPage() {
                        avatarFb = contactData.nombre.trim().substring(0, Math.min(2, contactData.nombre.trim().length)).toUpperCase();
                   } else if (contactData.empresa && contactData.empresa.trim()) {
                        avatarFb = contactData.empresa.trim().substring(0, Math.min(2, contactData.empresa.trim().length)).toUpperCase();
-                  } else if (nameL1.length >=2) {
-                     avatarFb = nameL1.substring(0,2).toUpperCase();
-                  } else if (nameL1.length === 1) {
-                     avatarFb = nameL1.toUpperCase();
                   }
               }
+
 
               enrichedConversations.push({
                   chat_id: chat_id_key,
@@ -674,17 +672,17 @@ export default function ChatPage() {
                         {convo.avatarFallback || formatPhoneNumber(convo.chat_id).slice(-2)}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex-grow min-w-0"> {/* This div allows text content to shrink and truncate */}
-                       <div className="flex justify-between items-baseline"> {/* Name and Timestamp line */}
-                        <div className="font-semibold text-sm flex-grow min-w-0"> {/* Name block, allows growth and truncation */}
+                    <div className="flex-grow min-w-0 overflow-hidden"> {/* Added overflow-hidden */}
+                       <div className="flex justify-between items-baseline"> 
+                        <div className="font-semibold text-sm flex-grow min-w-0 overflow-hidden"> {/* Added overflow-hidden */}
                             <p className="truncate">{convo.nameLine1}</p>
                             {convo.nameLine2 && <p className="text-xs text-muted-foreground truncate">{convo.nameLine2}</p>}
                         </div>
-                        <p className="text-xs text-muted-foreground whitespace-nowrap ml-2 shrink-0"> {/* Timestamp, does not shrink */}
+                        <p className="text-xs text-muted-foreground whitespace-nowrap ml-2 shrink-0"> 
                            {formatConversationTimestamp(convo.lastMessageTimestamp)}
                         </p>
                       </div>
-                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5"> {/* Message preview */}
+                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5"> 
                         <span className="font-medium">
                           {convo.lastMessageSender?.toLowerCase() === 'bot' ? 'Bot' : 
                            convo.lastMessageSender?.toLowerCase() === 'agente' ? 'Agente' : 
@@ -711,7 +709,7 @@ export default function ChatPage() {
           {selectedChatId ? (
             <>
               <CardHeader className="p-4 border-b bg-card flex flex-row items-center justify-between">
-                <div className="flex items-center min-w-0"> {/* Added min-w-0 for truncation */}
+                <div className="flex items-center min-w-0"> 
                   {isMobile && (
                     <Button variant="ghost" size="icon" className="mr-2" onClick={() => {
                       setSelectedChatId(null);
@@ -720,18 +718,14 @@ export default function ChatPage() {
                       <ArrowLeft className="h-5 w-5" />
                     </Button>
                   )}
-                  <div className="text-lg min-w-0"> {/* Container for title lines */}
+                  <div className="text-lg min-w-0"> 
                     {isLoadingMessages && !currentConvoDetails ? (
                        <span className="text-muted-foreground">Cargando...</span>
                     ) : currentConvoDetails ? (
-                        currentConvoDetails.nameLine2 ? (
                         <div className="flex flex-col">
                             <span className="font-semibold truncate leading-tight">{currentConvoDetails.nameLine1}</span>
-                            <span className="text-xs text-muted-foreground truncate leading-tight">{currentConvoDetails.nameLine2}</span>
+                            {currentConvoDetails.nameLine2 && <span className="text-xs text-muted-foreground truncate leading-tight">{currentConvoDetails.nameLine2}</span>}
                         </div>
-                        ) : (
-                        <span className="font-semibold truncate">{currentConvoDetails.nameLine1}</span>
-                        )
                     ) : (
                         <span className="font-semibold truncate">{formatPhoneNumber(selectedChatId)}</span>
                     )}
