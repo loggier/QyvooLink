@@ -667,24 +667,24 @@ export default function ChatPage() {
                   <Link
                     href={`/dashboard/chat?chatId=${convo.chat_id}`}
                     scroll={false}
-                    className={`flex w-full h-auto items-start p-3 rounded-none border-b ${selectedChatId === convo.chat_id ? 'bg-muted' : 'hover:bg-muted/50 transition-colors'}`}
+                    className={`flex w-full h-auto items-start p-3 rounded-none border-b overflow-hidden ${selectedChatId === convo.chat_id ? 'bg-muted' : 'hover:bg-muted/50 transition-colors'}`}
                   >
                     <Avatar className="h-10 w-10 mr-3 mt-1 shrink-0">
                        <AvatarFallback>
                         {convo.avatarFallback || formatPhoneNumber(convo.chat_id).slice(-2)}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex-grow min-w-0">
-                       <div className="flex justify-between items-baseline">
-                        <div className="font-semibold text-sm flex-grow min-w-0">
+                    <div className="flex-grow min-w-0"> {/* This div allows text content to shrink and truncate */}
+                       <div className="flex justify-between items-baseline"> {/* Name and Timestamp line */}
+                        <div className="font-semibold text-sm flex-grow min-w-0"> {/* Name block, allows growth and truncation */}
                             <p className="truncate">{convo.nameLine1}</p>
                             {convo.nameLine2 && <p className="text-xs text-muted-foreground truncate">{convo.nameLine2}</p>}
                         </div>
-                        <p className="text-xs text-muted-foreground whitespace-nowrap ml-2 shrink-0">
+                        <p className="text-xs text-muted-foreground whitespace-nowrap ml-2 shrink-0"> {/* Timestamp, does not shrink */}
                            {formatConversationTimestamp(convo.lastMessageTimestamp)}
                         </p>
                       </div>
-                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5"> {/* Message preview */}
                         <span className="font-medium">
                           {convo.lastMessageSender?.toLowerCase() === 'bot' ? 'Bot' : 
                            convo.lastMessageSender?.toLowerCase() === 'agente' ? 'Agente' : 
