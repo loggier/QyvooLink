@@ -71,11 +71,11 @@ const initialBusinessContext: BusinessContext = {
 };
 const initialServiceCatalog: ServiceCategory[] = [ 
   {
-    id: crypto.randomUUID(),
+    id:generateSafeUUID(), 
     categoryName: "Servicios de Consultoría",
     services: [
-      { id: crypto.randomUUID(), name: "Consultoría Estratégica", price: "$150/hora", notes: "Análisis de negocio, planificación y optimización de procesos." },
-      { id: crypto.randomUUID(), name: "Consultoría Tecnológica", price: "$180/hora", notes: "Asesoramiento en infraestructura, software y transformación digital." },
+      { id: generateSafeUUID(), name: "Consultoría Estratégica", price: "$150/hora", notes: "Análisis de negocio, planificación y optimización de procesos." },
+      { id: generateSafeUUID(), name: "Consultoría Tecnológica", price: "$180/hora", notes: "Asesoramiento en infraestructura, software y transformación digital." },
     ],
   },
 ];
@@ -101,6 +101,16 @@ function escapeXml(unsafe: string): string {
       default: return c;
     }
   });
+}
+function generateSafeUUID(): string {
+  try {
+    return generateSafeUUID();
+  } catch (e) {
+    console.error("Error generating UUID on server:", e);
+    // Fallback a un método menos ideal pero seguro para el servidor si es necesario,
+    // o si es un entorno muy específico sin generateSafeUUID()
+    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  }
 }
 
 export default function BotConfigPage() {
@@ -136,10 +146,10 @@ export default function BotConfigPage() {
             
             // --- CAMBIO CLAVE AQUÍ: Aseguramos que las propiedades de serviceCatalog sean strings ---
             const loadedCatalog = (data.serviceCatalog || []).map(cat => ({ 
-              id: cat.id || crypto.randomUUID(),
+              id: cat.id || generateSafeUUID(),
               categoryName: cat.categoryName || "", // Asegura que categoryName sea string
               services: (cat.services || []).map(srv => ({
-                id: srv.id || crypto.randomUUID(),
+                id: srv.id || generateSafeUUID(),
                 name: srv.name || "",   // Asegura que name sea string
                 price: srv.price || "", // Asegura que price sea string
                 notes: srv.notes || "", // Asegura que notes sea string
@@ -305,7 +315,7 @@ ${notificationConfig.trim() ? notificationConfig.trim() : ''}
   const handleAddCategory = () => {
     setServiceCatalog(prev => [
       ...prev,
-      { id: crypto.randomUUID(), categoryName: "Nueva Categoría", services: [] }
+      { id: generateSafeUUID(), categoryName: "Nueva Categoría", services: [] }
     ]);
   };
 
@@ -340,7 +350,7 @@ ${notificationConfig.trim() ? notificationConfig.trim() : ''}
     setServiceCatalog(prev =>
       prev.map((cat, cIdx) =>
         cIdx === categoryIndex
-          ? { ...cat, services: [...cat.services, { id: crypto.randomUUID(), name: "", price: "", notes: "" }] }
+          ? { ...cat, services: [...cat.services, { id: generateSafeUUID(), name: "", price: "", notes: "" }] }
           : cat
       )
     );
