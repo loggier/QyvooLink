@@ -1,10 +1,4 @@
 "use client";
-// Elimina cualquier exportación problemática de revalidate
-export const revalidate = 0; // Número (segundos) o false
-
-// O si necesitas renderizado completamente dinámico:
-export const dynamic = 'force-dynamic';
-
 import type { ChangeEvent } from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
