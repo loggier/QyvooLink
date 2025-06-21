@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -30,7 +29,6 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import ContactDetailsPanel, { type ContactDetails } from '@/components/dashboard/chat/contact-details-panel'; 
 import { format, isToday, isYesterday, parseISO, differenceInCalendarDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-
 
 interface ChatMessageDocument {
   chat_id: string;
@@ -65,7 +63,6 @@ interface QuickReply {
 }
 
 const getContactDocId = (userId: string, chatId: string): string => `${userId}_${chatId.replace(/@/g, '_')}`;
-
 
 function formatWhatsAppMessage(text: string | undefined | null): React.ReactNode[] {
   if (typeof text !== 'string' || !text) {
@@ -126,6 +123,15 @@ const formatConversationTimestamp = (timestampInput: Date | string | undefined):
   return format(date, 'dd/MM/yy', { locale: es });
 };
 
+const formatChatMessageTimestamp = (timestampInput: FirestoreTimestamp | Date | undefined): string => {
+  if (!timestampInput) return "";
+  const date = timestampInput instanceof FirestoreTimestamp ? timestampInput.toDate() : (typeof timestampInput === 'string' ? parseISO(timestampInput) : timestampInput);
+
+  if (isToday(date)) {
+    return format(date, 'HH:mm', { locale: es });
+  }
+  return format(date, 'dd/MM/yy HH:mm', { locale: es });
+};
 
 export default function ChatPage() {
   const { user } = useAuth();
@@ -152,11 +158,15 @@ export default function ChatPage() {
   const [isSavingContact, setIsSavingContact] = useState(false);
   const [isContactSheetOpen, setIsContactSheetOpen] = useState(false);
 
-
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [isLoadingQuickReplies, setIsLoadingQuickReplies] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Mobile layout controls
+  const showConversationList = isMobile ? !selectedChatId : true;
+  const showChatArea = isMobile ? !!selectedChatId : true;
+  const showContactPanelDesktop = !isMobile && selectedChatId && contactDetails && initialContactDetails;
 
   const formatPhoneNumber = (chat_id: string | undefined): string => {
     if (!chat_id) return "Desconocido";
@@ -281,7 +291,6 @@ export default function ChatPage() {
               let nameL2: string | null = null;
               let avatarFb = nameL1.length >= 2 ? nameL1.slice(0,2).toUpperCase() : nameL1.toUpperCase();
 
-
               if (contactData) {
                   const nombreCompleto = [contactData.nombre, contactData.apellido].filter(Boolean).join(' ').trim();
                   const empresa = contactData.empresa?.trim();
@@ -303,7 +312,6 @@ export default function ChatPage() {
                        avatarFb = contactData.empresa.trim().substring(0, Math.min(2, contactData.empresa.trim().length)).toUpperCase();
                   }
               }
-
 
               enrichedConversations.push({
                   chat_id: chat_id_key,
@@ -340,18 +348,9 @@ export default function ChatPage() {
         if (selectedChatId !== chatIdFromUrl) {
            setSelectedChatId(chatIdFromUrl);
         }
-      } else if (selectedChatId && !conversationExists) {
-        // If current selectedChatId is not in the new list, clear it
-        // setSelectedChatId(null); // This might be too aggressive
       }
-    } else if (!chatIdFromUrl && selectedChatId) {
-        // If URL has no chatId but we have one selected, deselect it
-        // (This can happen if user manually clears URL param)
-        // setSelectedChatId(null); // Optional: clear selection if URL is cleared
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, isLoadingChats, conversations]); 
-
+  }, [searchParams, isLoadingChats, conversations, selectedChatId]); 
 
   useEffect(() => {
     if (selectedChatId && whatsAppInstance) {
@@ -453,7 +452,6 @@ export default function ChatPage() {
   useEffect(() => {
     fetchQuickReplies();
   }, [fetchQuickReplies]);
-
 
   const handleSendMessage = async () => {
     if (!replyMessage.trim() || !selectedChatId || !whatsAppInstance || !user) return;
@@ -562,7 +560,6 @@ export default function ChatPage() {
      setContactDetails(prev => prev ? { ...prev, chatbotEnabledForContact: checked } : null);
   };
 
-
   const handleQuickReplySelect = (tag: string) => {
     if (tag === "none") {
         return;
@@ -571,16 +568,6 @@ export default function ChatPage() {
     if (selectedReply) {
       setReplyMessage(prev => prev ? `${prev} ${selectedReply.message}` : selectedReply.message);
     }
-  };
-
-  const formatChatMessageTimestamp = (timestampInput: FirestoreTimestamp | Date | undefined): string => {
-    if (!timestampInput) return "";
-    const date = timestampInput instanceof FirestoreTimestamp ? timestampInput.toDate() : (typeof timestampInput === 'string' ? parseISO(timestampInput) : timestampInput);
-  
-    if (isToday(date)) {
-      return format(date, 'HH:mm', { locale: es });
-    }
-    return format(date, 'dd/MM/yy HH:mm', { locale: es });
   };
 
   if (isLoadingInstance) {
@@ -634,309 +621,322 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-[calc(100vh-theme(spacing.16)-theme(spacing.12))] border bg-card text-card-foreground shadow-sm rounded-lg overflow-hidden">
-      {/* Conversation List */}
-      <div className={`
-        ${isMobile && selectedChatId ? 'hidden' : 'flex'}
-        w-full ${isMobile ? '' : 'md:w-1/3 lg:w-1/4 md:min-w-[300px] md:max-w-[380px]'}
-        border-r flex-col
-      `}>
-        <div className="p-4 border-b">
-          <h2 className="text-xl font-semibold">Conversaciones Activas</h2>
-        </div>
-        <ScrollArea className="flex-grow">
-          {isLoadingChats ? (
-             <div className="flex items-center justify-center p-6">
+      {/* Conversation List - Always visible on desktop, conditionally on mobile */}
+      {showConversationList && (
+        <div className={`
+          w-full ${isMobile ? '' : 'md:w-1/3 lg:w-1/4 md:min-w-[300px] md:max-w-[380px]'}
+          border-r flex flex-col
+        `}>
+          <div className="p-4 border-b">
+            <h2 className="text-xl font-semibold">Conversaciones Activas</h2>
+          </div>
+          <ScrollArea className="flex-grow">
+            {isLoadingChats ? (
+              <div className="flex items-center justify-center p-6">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <span className="ml-3 text-muted-foreground">Cargando chats...</span>
-            </div>
-          ) : conversations.length === 0 && !error ? (
-            <div className="p-6 text-center text-muted-foreground">
-              <MessageCircle className="mx-auto h-12 w-12 text-gray-400 mb-2" />
-              No hay conversaciones activas.
-            </div>
-          ) : error && !isLoadingChats ? ( 
-             <div className="p-6 text-center text-destructive">
-              <AlertTriangle className="mx-auto h-12 w-12 mb-2" />
-              {error}
-            </div>
-          ) : (
-            <ul>
-              {conversations.map((convo) => (
-                <li key={convo.chat_id}>
-                  <Link
-                    href={`/dashboard/chat?chatId=${convo.chat_id}`}
-                    scroll={false}
-                    className={`flex w-full items-start p-3 rounded-none border-b overflow-hidden ${selectedChatId === convo.chat_id ? 'bg-muted' : 'hover:bg-muted/50 transition-colors'}`}
-                  >
-                    <Avatar className="h-10 w-10 mr-3 mt-1 shrink-0">
-                       <AvatarFallback>
-                        {convo.avatarFallback || formatPhoneNumber(convo.chat_id).slice(-2)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0 overflow-hidden"> {/* Container for all text content */}
-                       <div className="flex justify-between items-baseline"> {/* Line 1: Name and Timestamp */}
-                        <div className="min-w-0 overflow-hidden mr-2"> {/* Name block, allows shrinking & truncation */}
+              </div>
+            ) : conversations.length === 0 && !error ? (
+              <div className="p-6 text-center text-muted-foreground">
+                <MessageCircle className="mx-auto h-12 w-12 text-gray-400 mb-2" />
+                No hay conversaciones activas.
+              </div>
+            ) : error && !isLoadingChats ? ( 
+              <div className="p-6 text-center text-destructive">
+                <AlertTriangle className="mx-auto h-12 w-12 mb-2" />
+                {error}
+              </div>
+            ) : (
+              <ul>
+                {conversations.map((convo) => (
+                  <li key={convo.chat_id}>
+                    <Link
+                      href={`/dashboard/chat?chatId=${convo.chat_id}`}
+                      scroll={false}
+                      className={`flex w-full items-start p-3 rounded-none border-b overflow-hidden ${selectedChatId === convo.chat_id ? 'bg-muted' : 'hover:bg-muted/50 transition-colors'}`}
+                    >
+                      <Avatar className="h-10 w-10 mr-3 mt-1 shrink-0">
+                        <AvatarFallback>
+                          {convo.avatarFallback || formatPhoneNumber(convo.chat_id).slice(-2)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <div className="flex justify-between items-baseline">
+                          <div className="min-w-0 overflow-hidden mr-2">
                             <p className="font-semibold text-sm truncate">{convo.nameLine1}</p>
                             {convo.nameLine2 && <p className="text-xs text-muted-foreground truncate">{convo.nameLine2}</p>}
+                          </div>
+                          <p className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                            {formatConversationTimestamp(convo.lastMessageTimestamp)}
+                          </p>
                         </div>
-                        <p className="text-xs text-muted-foreground whitespace-nowrap shrink-0"> {/* Timestamp */}
-                           {formatConversationTimestamp(convo.lastMessageTimestamp)}
+                        <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                          <span className="font-medium">
+                            {convo.lastMessageSender?.toLowerCase() === 'bot' ? 'Bot' : 
+                             convo.lastMessageSender?.toLowerCase() === 'agente' ? 'Agente' : 
+                             convo.lastMessageSender?.toLowerCase() === 'user' ? 'Usuario' : 'Usuario'}: 
+                          </span>
+                          {convo.lastMessage}
                         </p>
                       </div>
-                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5"> {/* Line 2: Message preview */}
-                        <span className="font-medium">
-                          {convo.lastMessageSender?.toLowerCase() === 'bot' ? 'Bot' : 
-                           convo.lastMessageSender?.toLowerCase() === 'agente' ? 'Agente' : 
-                           convo.lastMessageSender?.toLowerCase() === 'user' ? 'Usuario' : 'Usuario'}: 
-                        </span>
-                        {convo.lastMessage}
-                      </p>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </ScrollArea>
-      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </ScrollArea>
+        </div>
+      )}
 
-      {/* Chat Area & Desktop Contact Info Container */}
-       <div className={`
-        ${isMobile && !selectedChatId ? 'hidden' : 'flex'}
-        flex-1 flex-col md:flex-row 
-      `}>
-        {/* Chat Area */}
-        <div className="flex-1 flex flex-col bg-muted/30">
-          {selectedChatId ? (
-            <>
-              <CardHeader className="p-4 border-b bg-card flex flex-row items-center justify-between">
-                <div className="flex items-center min-w-0"> 
-                  {isMobile && (
-                    <Button variant="ghost" size="icon" className="mr-2" onClick={() => {
+      {/* Main Chat Area */}
+      <div className={`flex-1 flex flex-col ${showChatArea ? 'flex' : 'hidden'}`}>
+        {selectedChatId ? (
+          <>
+            {/* Chat Header with mobile back button */}
+            <div className="p-4 border-b bg-card flex flex-row items-center justify-between sticky top-0 z-10">
+              <div className="flex items-center min-w-0"> 
+                {isMobile && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="mr-2"
+                    onClick={() => {
                       setSelectedChatId(null);
                       router.replace('/dashboard/chat', { scroll: false });
-                    }}>
-                      <ArrowLeft className="h-5 w-5" />
-                    </Button>
-                  )}
-                  <div className="text-lg min-w-0"> 
-                    {isLoadingMessages && !currentConvoDetails ? (
-                       <span className="text-muted-foreground">Cargando...</span>
-                    ) : currentConvoDetails ? (
-                        <div className="flex flex-col">
-                            <span className="font-semibold truncate leading-tight">{currentConvoDetails.nameLine1}</span>
-                            {currentConvoDetails.nameLine2 && <span className="text-xs text-muted-foreground truncate leading-tight">{currentConvoDetails.nameLine2}</span>}
-                        </div>
-                    ) : (
-                        <span className="font-semibold truncate">{formatPhoneNumber(selectedChatId)}</span>
-                    )}
-                  </div>
-                </div>
-                {selectedChatId && (
-                    isMobile ? (
-                        <Sheet open={isContactSheetOpen} onOpenChange={setIsContactSheetOpen}>
-                            <SheetTrigger asChild>
-                                <Button variant="ghost" size="icon"> <Info className="h-5 w-5" /> </Button>
-                            </SheetTrigger>
-                            <SheetContent className="p-0 w-[85vw] max-w-sm flex flex-col">
-                                {contactDetails && initialContactDetails && (
-                                    <ContactDetailsPanel
-                                        contactDetails={contactDetails}
-                                        initialContactDetails={initialContactDetails}
-                                        isEditingContact={isEditingContact}
-                                        setIsEditingContact={setIsEditingContact}
-                                        isLoadingContact={isLoadingContact}
-                                        isSavingContact={isSavingContact}
-                                        onSave={handleSaveContactDetails}
-                                        onCancel={() => { setIsEditingContact(false); setContactDetails(initialContactDetails); }}
-                                        onInputChange={handleContactInputChange}
-                                        onSelectChange={handleContactSelectChange}
-                                        onSwitchChange={handleContactSwitchChange}
-                                        formatPhoneNumber={formatPhoneNumber}
-                                    />
-                                )}
-                            </SheetContent>
-                        </Sheet>
-                    ) : null 
-                )}
-              </CardHeader>
-              <ScrollArea className="flex-grow p-4 space-y-3">
-                {isLoadingMessages ? (
-                  <div className="flex justify-center items-center h-full">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  </div>
-                ) : activeMessages.length === 0 ? (
-                   <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                      <MessageCircle className="h-16 w-16 mb-4" />
-                      <p>No hay mensajes en esta conversación.</p>
-                      <p className="text-sm">Envía un mensaje para comenzar.</p>
-                  </div>
-                ) : (
-                  activeMessages.map((msg) => {
-                    const userNameLower = msg.user_name?.toLowerCase();
-                    const isExternalUser = userNameLower === 'user'; 
-
-                    let alignmentClass: string;
-                    let bubbleClass: string;
-                    let timestampAlignmentClass: string;
-                    let IconComponent: React.ElementType | null = null;
-                    let avatarFallbackClass: string;
-                    
-                    if (isExternalUser) {
-                      alignmentClass = 'justify-start'; 
-                      bubbleClass = 'bg-muted dark:bg-slate-700'; 
-                      timestampAlignmentClass = 'text-muted-foreground text-left';
-                      IconComponent = UserRound; 
-                      avatarFallbackClass = "bg-gray-400 text-white";
-                    } else { 
-                      alignmentClass = 'justify-end'; 
-                      timestampAlignmentClass = 'text-right';
-
-                      if (userNameLower === 'bot') {
-                        bubbleClass = 'bg-primary text-primary-foreground';
-                        timestampAlignmentClass += ' text-primary-foreground/80';
-                        IconComponent = Bot;
-                        avatarFallbackClass = "bg-blue-500 text-white";
-                      } else if (userNameLower === 'agente') {
-                        bubbleClass = 'bg-secondary text-secondary-foreground dark:bg-slate-600 dark:text-slate-100';
-                        timestampAlignmentClass += ' text-secondary-foreground/80';
-                        IconComponent = User; 
-                        avatarFallbackClass = "bg-green-500 text-white";
-                      } else { 
-                        bubbleClass = 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200';
-                        timestampAlignmentClass += ' text-gray-500 dark:text-gray-400';
-                        IconComponent = MessageCircle; 
-                        avatarFallbackClass = "bg-gray-300 dark:bg-gray-600 text-black dark:text-white";
-                      }
-                    }
-
-                    return (
-                      <div
-                        key={msg.id}
-                        className={`flex w-full ${alignmentClass}`}
-                      >
-                        <div className={`flex items-end max-w-[75%] gap-2`}>
-                          {IconComponent && isExternalUser && (
-                            <Avatar className={`h-6 w-6 self-end mb-1`}>
-                              <AvatarFallback className={avatarFallbackClass}>
-                                <IconComponent className="h-4 w-4" />
-                              </AvatarFallback>
-                            </Avatar>
-                          )}
-                          
-                          <div
-                            className={`py-2 px-3 rounded-lg shadow-md ${bubbleClass}`}
-                          >
-                            <p className="text-sm break-all whitespace-pre-wrap">
-                               {formatWhatsAppMessage(msg.mensaje)}
-                            </p>
-                            <p className={`text-xs mt-1 ${timestampAlignmentClass}`}>
-                              {formatChatMessageTimestamp(msg.timestamp)}
-                            </p>
-                          </div>
-
-                          {IconComponent && !isExternalUser && (
-                            <Avatar className={`h-6 w-6 self-end mb-1`}>
-                               <AvatarFallback className={avatarFallbackClass}>
-                                <IconComponent className="h-4 w-4" />
-                              </AvatarFallback>
-                            </Avatar>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-                <div ref={messagesEndRef} />
-              </ScrollArea>
-              <CardFooter className="p-4 border-t bg-card flex flex-col space-y-2">
-                <div className="w-full">
-                   <Select onValueChange={handleQuickReplySelect} disabled={isLoadingQuickReplies || quickReplies.length === 0}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder={
-                          isLoadingQuickReplies ? "Cargando respuestas..." :
-                          quickReplies.length === 0 ? "No hay respuestas rápidas" :
-                          "Seleccionar respuesta rápida..."
-                        } />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none" disabled>Seleccionar respuesta rápida...</SelectItem>
-                        {quickReplies.map((qr) => (
-                          <SelectItem key={qr.id} value={qr.tag}>
-                            {qr.tag} - <span className="text-xs text-muted-foreground truncate max-w-[200px] inline-block">{qr.message}</span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground mt-1 text-right">
-                      <Link href="/dashboard/quick-replies" className="hover:underline">
-                          Gestionar respuestas rápidas <Zap className="inline h-3 w-3" />
-                      </Link>
-                    </p>
-                </div>
-                <div className="flex w-full items-center space-x-2">
-                  <Textarea
-                    placeholder="Escribe tu mensaje como administrador..."
-                    value={replyMessage}
-                    onChange={(e) => setReplyMessage(e.target.value)}
-                    className="flex-grow resize-none"
-                    rows={1}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendMessage();
-                      }
                     }}
-                  />
-                  <Button onClick={handleSendMessage} disabled={!replyMessage.trim() || isLoadingMessages}>
-                    <Send className="h-4 w-4 mr-2" /> Enviar
+                  >
+                    <ArrowLeft className="h-5 w-5" />
                   </Button>
+                )}
+                <div className="text-lg min-w-0"> 
+                  {isLoadingMessages && !currentConvoDetails ? (
+                    <span className="text-muted-foreground">Cargando...</span>
+                  ) : currentConvoDetails ? (
+                    <div className="flex flex-col">
+                      <span className="font-semibold truncate leading-tight">{currentConvoDetails.nameLine1}</span>
+                      {currentConvoDetails.nameLine2 && (
+                        <span className="text-xs text-muted-foreground truncate leading-tight">
+                          {currentConvoDetails.nameLine2}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="font-semibold truncate">{formatPhoneNumber(selectedChatId)}</span>
+                  )}
                 </div>
-              </CardFooter>
-            </>
-          ) : ( 
-            <div className={`
-              ${isMobile ? 'hidden' : 'flex'} 
-              flex-1 flex-col items-center justify-center p-6
-            `}>
-              <div className="text-center max-w-md">
-                <EvolveLinkLogo className="h-16 w-auto mx-auto mb-6 text-primary" data-ai-hint="company logo"/>
-                <h2 className="text-2xl font-semibold mb-2">Bienvenido a Qyvoo</h2>
-                <p className="text-muted-foreground mb-6">
-                  Selecciona una conversación de la lista de la izquierda para ver los mensajes.
+              </div>
+              
+              {/* Mobile contact info button */}
+              {isMobile && (
+                <Sheet open={isContactSheetOpen} onOpenChange={setIsContactSheetOpen}>
+                  <SheetTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                      <Info className="h-5 w-5" />
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent className="p-0 w-[85vw] max-w-sm flex flex-col">
+                    {contactDetails && initialContactDetails && (
+                      <ContactDetailsPanel
+                        contactDetails={contactDetails}
+                        initialContactDetails={initialContactDetails}
+                        isEditingContact={isEditingContact}
+                        setIsEditingContact={setIsEditingContact}
+                        isLoadingContact={isLoadingContact}
+                        isSavingContact={isSavingContact}
+                        onSave={handleSaveContactDetails}
+                        onCancel={() => { setIsEditingContact(false); setContactDetails(initialContactDetails); }}
+                        onInputChange={handleContactInputChange}
+                        onSelectChange={handleContactSelectChange}
+                        onSwitchChange={handleContactSwitchChange}
+                        formatPhoneNumber={formatPhoneNumber}
+                      />
+                    )}
+                  </SheetContent>
+                </Sheet>
+              )}
+            </div>
+
+            {/* Messages Area */}
+            <ScrollArea className="flex-grow p-4 space-y-3 bg-muted/30">
+              {isLoadingMessages ? (
+                <div className="flex justify-center items-center h-full">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : activeMessages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                  <MessageCircle className="h-16 w-16 mb-4" />
+                  <p>No hay mensajes en esta conversación.</p>
+                  <p className="text-sm">Envía un mensaje para comenzar.</p>
+                </div>
+              ) : (
+                activeMessages.map((msg) => {
+                  const userNameLower = msg.user_name?.toLowerCase();
+                  const isExternalUser = userNameLower === 'user'; 
+
+                  let alignmentClass: string;
+                  let bubbleClass: string;
+                  let timestampAlignmentClass: string;
+                  let IconComponent: React.ElementType | null = null;
+                  let avatarFallbackClass: string;
+                  
+                  if (isExternalUser) {
+                    alignmentClass = 'justify-start'; 
+                    bubbleClass = 'bg-muted dark:bg-slate-700'; 
+                    timestampAlignmentClass = 'text-muted-foreground text-left';
+                    IconComponent = UserRound; 
+                    avatarFallbackClass = "bg-gray-400 text-white";
+                  } else { 
+                    alignmentClass = 'justify-end'; 
+                    timestampAlignmentClass = 'text-right';
+
+                    if (userNameLower === 'bot') {
+                      bubbleClass = 'bg-primary text-primary-foreground';
+                      timestampAlignmentClass += ' text-primary-foreground/80';
+                      IconComponent = Bot;
+                      avatarFallbackClass = "bg-blue-500 text-white";
+                    } else if (userNameLower === 'agente') {
+                      bubbleClass = 'bg-secondary text-secondary-foreground dark:bg-slate-600 dark:text-slate-100';
+                      timestampAlignmentClass += ' text-secondary-foreground/80';
+                      IconComponent = User; 
+                      avatarFallbackClass = "bg-green-500 text-white";
+                    } else { 
+                      bubbleClass = 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200';
+                      timestampAlignmentClass += ' text-gray-500 dark:text-gray-400';
+                      IconComponent = MessageCircle; 
+                      avatarFallbackClass = "bg-gray-300 dark:bg-gray-600 text-black dark:text-white";
+                    }
+                  }
+
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`flex w-full ${alignmentClass}`}
+                    >
+                      <div className={`flex items-end max-w-[75%] gap-2`}>
+                        {IconComponent && isExternalUser && (
+                          <Avatar className={`h-6 w-6 self-end mb-1`}>
+                            <AvatarFallback className={avatarFallbackClass}>
+                              <IconComponent className="h-4 w-4" />
+                            </AvatarFallback>
+                          </Avatar>
+                        )}
+                        
+                        <div
+                          className={`py-2 px-3 rounded-lg shadow-md ${bubbleClass}`}
+                        >
+                          <p className="text-sm break-all whitespace-pre-wrap">
+                            {formatWhatsAppMessage(msg.mensaje)}
+                          </p>
+                          <p className={`text-xs mt-1 ${timestampAlignmentClass}`}>
+                            {formatChatMessageTimestamp(msg.timestamp)}
+                          </p>
+                        </div>
+
+                        {IconComponent && !isExternalUser && (
+                          <Avatar className={`h-6 w-6 self-end mb-1`}>
+                            <AvatarFallback className={avatarFallbackClass}>
+                              <IconComponent className="h-4 w-4" />
+                            </AvatarFallback>
+                          </Avatar>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <div ref={messagesEndRef} />
+            </ScrollArea>
+
+            {/* Message Input Area */}
+            <div className="p-4 border-t bg-card flex flex-col space-y-2 sticky bottom-0">
+              <div className="w-full">
+                <Select onValueChange={handleQuickReplySelect} disabled={isLoadingQuickReplies || quickReplies.length === 0}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={
+                      isLoadingQuickReplies ? "Cargando respuestas..." :
+                      quickReplies.length === 0 ? "No hay respuestas rápidas" :
+                      "Seleccionar respuesta rápida..."
+                    } />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none" disabled>Seleccionar respuesta rápida...</SelectItem>
+                    {quickReplies.map((qr) => (
+                      <SelectItem key={qr.id} value={qr.tag}>
+                        {qr.tag} - <span className="text-xs text-muted-foreground truncate max-w-[200px] inline-block">{qr.message}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1 text-right">
+                  <Link href="/dashboard/quick-replies" className="hover:underline">
+                    Gestionar respuestas rápidas <Zap className="inline h-3 w-3" />
+                  </Link>
                 </p>
-                <Alert className="bg-background border-border text-foreground">
-                  <MessageCircle className="h-5 w-5" />
-                  <AlertTitle className="font-semibold">Panel de Monitoreo</AlertTitle>
-                  <AlertDescription>
-                    Esta interfaz te permite monitorear las conversaciones de tus campañas y responder como administrador.
-                  </AlertDescription>
-                </Alert>
+              </div>
+              <div className="flex w-full items-center space-x-2">
+                <Textarea
+                  placeholder="Escribe tu mensaje como administrador..."
+                  value={replyMessage}
+                  onChange={(e) => setReplyMessage(e.target.value)}
+                  className="flex-grow resize-none"
+                  rows={1}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                />
+                <Button 
+                  onClick={handleSendMessage} 
+                  disabled={!replyMessage.trim() || isLoadingMessages}
+                  className="shrink-0"
+                >
+                  <Send className="h-4 w-4" />
+                  {!isMobile && <span className="ml-2">Enviar</span>}
+                </Button>
               </div>
             </div>
-          )}
-        </div>
-        
-        {!isMobile && selectedChatId && contactDetails && initialContactDetails && (
-          <div className="hidden md:flex w-full md:w-1/3 lg:w-1/4 md:min-w-[300px] md:max-w-[380px] border-l flex-col bg-card">
-            <ContactDetailsPanel
-              contactDetails={contactDetails}
-              initialContactDetails={initialContactDetails}
-              isEditingContact={isEditingContact}
-              setIsEditingContact={setIsEditingContact}
-              isLoadingContact={isLoadingContact}
-              isSavingContact={isSavingContact}
-              onSave={handleSaveContactDetails}
-              onCancel={() => { setIsEditingContact(false); setContactDetails(initialContactDetails); }}
-              onInputChange={handleContactInputChange}
-              onSelectChange={handleContactSelectChange}
-              onSwitchChange={handleContactSwitchChange}
-              formatPhoneNumber={formatPhoneNumber}
-            />
+          </>
+        ) : ( 
+          <div className={`${isMobile ? 'hidden' : 'flex'} flex-1 flex-col items-center justify-center p-6`}>
+            <div className="text-center max-w-md">
+              <EvolveLinkLogo className="h-16 w-auto mx-auto mb-6 text-primary" data-ai-hint="company logo"/>
+              <h2 className="text-2xl font-semibold mb-2">Bienvenido a Qyvoo</h2>
+              <p className="text-muted-foreground mb-6">
+                Selecciona una conversación de la lista de la izquierda para ver los mensajes.
+              </p>
+              <Alert className="bg-background border-border text-foreground">
+                <MessageCircle className="h-5 w-5" />
+                <AlertTitle className="font-semibold">Panel de Monitoreo</AlertTitle>
+                <AlertDescription>
+                  Esta interfaz te permite monitorear las conversaciones de tus campañas y responder como administrador.
+                </AlertDescription>
+              </Alert>
+            </div>
           </div>
         )}
       </div>
+
+      {/* Desktop Contact Panel - Only visible on desktop when chat is selected */}
+      {showContactPanelDesktop && (
+        <div className="hidden md:flex w-full md:w-1/3 lg:w-1/4 md:min-w-[300px] md:max-w-[380px] border-l flex-col bg-card">
+          <ContactDetailsPanel
+            contactDetails={contactDetails}
+            initialContactDetails={initialContactDetails}
+            isEditingContact={isEditingContact}
+            setIsEditingContact={setIsEditingContact}
+            isLoadingContact={isLoadingContact}
+            isSavingContact={isSavingContact}
+            onSave={handleSaveContactDetails}
+            onCancel={() => { setIsEditingContact(false); setContactDetails(initialContactDetails); }}
+            onInputChange={handleContactInputChange}
+            onSelectChange={handleContactSelectChange}
+            onSwitchChange={handleContactSwitchChange}
+            formatPhoneNumber={formatPhoneNumber}
+          />
+        </div>
+      )}
     </div>
   );
 }
-
