@@ -72,11 +72,18 @@ const initialBusinessContext: BusinessContext = {
 };
 
 // Helper function to generate UUIDs
-const generateUUID = () => {
+const generateUUID = (): string => {
+  // Verifica si estamos en un entorno con crypto disponible (navegador o Node.js 15+)
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+
+  // Fallback seguro para entornos sin crypto
+  let dt = new Date().getTime();
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
+    const r = (dt + Math.random() * 16) % 16 | 0;
+    dt = Math.floor(dt / 16);
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
   });
 };
 
