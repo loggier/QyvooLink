@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/context/auth-context';
@@ -18,7 +18,6 @@ export const metadata: Metadata = {
   title: 'Qyvoo - Gestión de Evolución de WhatsApp',
   description: 'Gestiona tu instancia de WhatsApp Evolution con Qyvoo.',
   manifest: '/manifest.json',
-  themeColor: '#F44336',
   icons: [
     {
       src: '/icons/icon-192x192.png',
@@ -31,6 +30,10 @@ export const metadata: Metadata = {
       type: 'image/png',
     },
   ],
+};
+
+export const viewport: Viewport = {
+  themeColor: '#F44336',
 };
 
 export default function RootLayout({
