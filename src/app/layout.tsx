@@ -15,9 +15,22 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Qyvoo - Gestión de Evolución de WhatsApp',
-  description: 'Gestiona tu instancia de WhatsApp Evolution con Qyvoo.',
+  title: 'Qyvoo - Gestión de WhatsApp',
+  description: 'Sistema de gestión para WhatsApp Business',
+  manifest: '/manifest.json',
+  themeColor: '#F44336',
+  viewport: 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no',
+  icons: {
+    icon: '/icons/icon-192x192.png',
+    apple: '/icons/icon-192x192.png'
+  },
+  appleWebApp: {
+    capable: true,
+    title: 'Qyvoo',
+    statusBarStyle: 'black-translucent'
+  }
 };
+
 
 export const viewport: Viewport = {
   themeColor: '#3F51B5', // Updated to PRD primary color: Saturated Blue
