@@ -17,7 +17,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Qyvoo - Gestión de Evolución de WhatsApp',
   description: 'Gestiona tu instancia de WhatsApp Evolution con Qyvoo.',
-  manifest: '/manifest.json',
   icons: [
     {
       src: '/icons/icon-192x192.png',
@@ -33,7 +32,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#F44336',
+  themeColor: '#3F51B5', // Updated to PRD primary color: Saturated Blue
 };
 
 export default function RootLayout({

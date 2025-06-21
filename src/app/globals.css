@@ -8,8 +8,8 @@ body {
 
 @layer base {
   :root {
-    --background: 0 0% 96.1%; /* #F5F5F5 Light Gray */
-    --foreground: 216 30% 18%;   /* #1E2A3B Dark Blue/Grey from Qyvoo logo text */
+    --background: 0 0% 96.1%; /* #F5F5F5 Light Gray - Matches PRD */
+    --foreground: 216 30% 18%;   /* #1E2A3B Dark Blue/Grey from Qyvoo logo text (Kept as is, as PRD doesn't specify foreground) */
 
     --card: 0 0% 100%; /* White cards */
     --card-foreground: 216 30% 18%; /* Dark text on cards */
@@ -17,7 +17,7 @@ body {
     --popover: 0 0% 100%; /* White popovers */
     --popover-foreground: 216 30% 18%; /* Dark text on popovers */
 
-    --primary: 220 100% 50%; /* #0057FF Vibrant Blue from Qyvoo logo */
+    --primary: 231 48% 48%; /* #3F51B5 Saturated Blue - PRD Primary */
     --primary-foreground: 0 0% 98%; /* White/very light gray for text on primary */
 
     --secondary: 0 0% 90%; /* #E6E6E6 Slightly darker gray */
@@ -26,7 +26,7 @@ body {
     --muted: 0 0% 93%; /* #EDEDED Muted gray */
     --muted-foreground: 0 0% 40%; /* #666666 Muted text color */
 
-    --accent: 160 100% 42%; /* #00D49B Teal/Green from Qyvoo logo gradient */
+    --accent: 36 100% 50%; /* #FF9800 Warm Orange - PRD Accent */
     --accent-foreground: 0 0% 10%; /* #1A1A1A Dark text for accent */
 
     --destructive: 0 84.2% 60.2%; /* Standard destructive */
@@ -34,24 +34,24 @@ body {
 
     --border: 0 0% 89.8%; /* #E5E5E5 Border color */
     --input: 0 0% 100%; /* White input background, with border */
-    --ring: 220 100% 50%; /* Primary color for focus rings */
+    --ring: 231 48% 48%; /* Primary color for focus rings - PRD Primary */
 
-    --chart-1: 220 100% 50%; /* Primary Blue */
-    --chart-2: 160 100% 42%;  /* Accent Teal/Green */
-    --chart-3: 197 37% 24%; /* A complementary darker teal/blue */
-    --chart-4: 210 60% 65%; /* A lighter, softer blue */
-    --chart-5: 140 50% 55%; /* A complementary green */
+    --chart-1: 231 48% 48%; /* Primary Blue - PRD Primary */
+    --chart-2: 36 100% 50%;  /* Accent Orange - PRD Accent */
+    --chart-3: 210 30% 40%; /* A complementary darker blue - Adjusted for new theme */
+    --chart-4: 231 40% 70%; /* A lighter, softer blue from primary - Adjusted for new theme */
+    --chart-5: 36 80% 65%; /* A complementary softer orange - Adjusted for new theme */
     --radius: 0.5rem;
 
     /* Sidebar specific colors */
     --sidebar-background: 0 0% 100%; /* White sidebar */
     --sidebar-foreground: 216 30% 18%; /* Dark text */
-    --sidebar-primary: 220 100% 50%; /* Vibrant Blue */
+    --sidebar-primary: 231 48% 48%; /* Saturated Blue - PRD Primary */
     --sidebar-primary-foreground: 0 0% 98%; /* Light text on primary */
     --sidebar-accent: 0 0% 94%; /* Light gray for hover/active items */
-    --sidebar-accent-foreground: 220 100% 50%; /* Primary color for text on accent */
+    --sidebar-accent-foreground: 231 48% 48%; /* Primary color for text on accent - PRD Primary */
     --sidebar-border: 0 0% 89.8%; /* Border color */
-    --sidebar-ring: 220 100% 50%; /* Focus ring */
+    --sidebar-ring: 231 48% 48%; /* Focus ring - PRD Primary */
   }
 
   .dark {
@@ -63,7 +63,7 @@ body {
     --popover: 220 15% 15%;
     --popover-foreground: 0 0% 95%;
     
-    --primary: 220 100% 60%; /* Lighter vibrant blue for dark mode */
+    --primary: 231 48% 58%; /* Lighter saturated blue for dark mode */
     --primary-foreground: 216 30% 12%; /* Dark text on primary for dark mode */
     
     --secondary: 220 10% 25%; /* Darker secondary */
@@ -72,30 +72,30 @@ body {
     --muted: 220 10% 25%;
     --muted-foreground: 0 0% 60%;
     
-    --accent: 160 100% 50%; /* Lighter teal/green for dark mode */
-    --accent-foreground: 216 30% 12%; /* Dark text on accent for dark mode */
+    --accent: 36 100% 60%; /* Lighter warm orange for dark mode */
+    --accent-foreground: 0 0% 10%; /* Dark text on accent for dark mode */
     
     --destructive: 0 70% 50%; /* Standard destructive for dark */
     --destructive-foreground: 0 0% 98%;
     
     --border: 220 10% 30%;
     --input: 220 10% 25%;
-    --ring: 220 100% 60%; /* Lighter primary for focus rings */
+    --ring: 231 48% 58%; /* Lighter primary for focus rings */
 
-    --chart-1: 220 100% 60%;
-    --chart-2: 160 100% 50%;
-    --chart-3: 197 50% 40%;
-    --chart-4: 210 70% 70%;
-    --chart-5: 140 60% 60%;
+    --chart-1: 231 48% 58%;
+    --chart-2: 36 100% 60%;
+    --chart-3: 210 40% 50%;
+    --chart-4: 231 50% 75%;
+    --chart-5: 36 90% 70%;
 
     --sidebar-background: 220 12% 12%; /* Dark sidebar */
     --sidebar-foreground: 0 0% 92%;
-    --sidebar-primary: 220 100% 60%;
+    --sidebar-primary: 231 48% 58%;
     --sidebar-primary-foreground: 216 30% 10%;
     --sidebar-accent: 220 10% 20%;
     --sidebar-accent-foreground: 0 0% 92%;
     --sidebar-border: 220 10% 25%;
-    --sidebar-ring: 220 100% 60%;
+    --sidebar-ring: 231 48% 58%;
   }
 }
 
