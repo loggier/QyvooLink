@@ -27,9 +27,14 @@ const actionTypes = {
 
 let count = 0
 
-function genId() {
-  count = (count + 1) % Number.MAX_SAFE_INTEGER
-  return count.toString()
+export function genId() {
+  // Usa crypto.randomUUID() cuando esté disponible
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  
+  // Fallback para entornos sin crypto
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
 type ActionType = typeof actionTypes
