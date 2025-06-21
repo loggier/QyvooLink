@@ -1,5 +1,5 @@
+
 "use client";
-export const dynamic = 'force-dynamic';
 
 import type { ChangeEvent } from 'react';
 import { useState, useEffect, useCallback } from 'react';
@@ -25,7 +25,7 @@ interface Service {
   notes: string;
 }
 
-interface ServiceCategory { 
+interface ServiceCategory {
   id: string;
   categoryName: string;
   services: Service[];
@@ -70,34 +70,16 @@ const initialBusinessContext: BusinessContext = {
   location: "[Ciudad, País]",
   mission: "Nuestra misión es [Declaración de Misión de la Empresa].",
 };
-
-// Helper function to generate UUIDs
-const generateUUID = (): string => {
-  // Verifica si estamos en un entorno con crypto disponible (navegador o Node.js 15+)
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-
-  // Fallback seguro para entornos sin crypto
-  let dt = new Date().getTime();
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = (dt + Math.random() * 16) % 16 | 0;
-    dt = Math.floor(dt / 16);
-    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-  });
-};
-
 const initialServiceCatalog: ServiceCategory[] = [ 
   {
-    id: generateUUID(),
+    id: crypto.randomUUID(),
     categoryName: "Servicios de Consultoría",
     services: [
-      { id: generateUUID(), name: "Consultoría Estratégica", price: "$150/hora", notes: "Análisis de negocio, planificación y optimización de procesos." },
-      { id: generateUUID(), name: "Consultoría Tecnológica", price: "$180/hora", notes: "Asesoramiento en infraestructura, software y transformación digital." },
+      { id: crypto.randomUUID(), name: "Consultoría Estratégica", price: "$150/hora", notes: "Análisis de negocio, planificación y optimización de procesos." },
+      { id: crypto.randomUUID(), name: "Consultoría Tecnológica", price: "$180/hora", notes: "Asesoramiento en infraestructura, software y transformación digital." },
     ],
   },
 ];
-
 const initialContactDetails: BotContactDetails = {
   phone: "+1-234-567-8900",
   email: "ventas@[dominioempresa].com",
@@ -106,6 +88,7 @@ const initialContactDetails: BotContactDetails = {
 const initialClosingMessage = "¿Te gustaría agendar una llamada para discutir esto más a fondo o prefieres que te envíe una propuesta directamente? También puedes visitar nuestro sitio web para más información.";
 const initialNotificationPhoneNumber = "";
 const initialNotificationRule = "";
+
 
 function escapeXml(unsafe: string): string {
   if (typeof unsafe !== 'string') return '';
@@ -151,10 +134,10 @@ export default function BotConfigPage() {
             setBusinessContext(data.businessContext || initialBusinessContext);
             const loadedCatalog = (data.serviceCatalog || []).map(cat => ({ 
               ...cat,
-              id: cat.id || generateUUID(),
+              id: cat.id || crypto.randomUUID(),
               services: (cat.services || []).map(srv => ({
                 ...srv,
-                id: srv.id || generateUUID()
+                id: srv.id || crypto.randomUUID()
               }))
             }));
             setServiceCatalog(loadedCatalog);
@@ -167,7 +150,7 @@ export default function BotConfigPage() {
             setSelectedRules([]);
             setAgentRole(initialAgentRole);
             setBusinessContext(initialBusinessContext);
-            setServiceCatalog(initialServiceCatalog); 
+            setServiceCatalog([]); 
             setContactDetails(initialContactDetails);
             setClosingMessage(initialClosingMessage);
             setNotificationPhoneNumber(initialNotificationPhoneNumber);
@@ -276,7 +259,7 @@ ${notificationConfig.trim() ? notificationConfig.trim() : ''}
   const handleAddCategory = () => {
     setServiceCatalog(prev => [
       ...prev,
-      { id: generateUUID(), categoryName: "Nueva Categoría", services: [] }
+      { id: crypto.randomUUID(), categoryName: "Nueva Categoría", services: [] }
     ]);
   };
 
@@ -311,7 +294,7 @@ ${notificationConfig.trim() ? notificationConfig.trim() : ''}
     setServiceCatalog(prev =>
       prev.map((cat, cIdx) =>
         cIdx === categoryIndex
-          ? { ...cat, services: [...cat.services, { id: generateUUID(), name: "", price: "", notes: "" }] }
+          ? { ...cat, services: [...cat.services, { id: crypto.randomUUID(), name: "", price: "", notes: "" }] }
           : cat
       )
     );
@@ -359,7 +342,7 @@ ${notificationConfig.trim() ? notificationConfig.trim() : ''}
         serviceCatalog,
         contact: contactDetails,
         closingMessage,
-        promptXml: generatedPromptConfig,
+        promptXml: generatedPromptConfig, // This field name in Firestore remains promptXml
         instanceIdAssociated,
         notificationPhoneNumber,
         notificationRule,
@@ -385,6 +368,7 @@ ${notificationConfig.trim() ? notificationConfig.trim() : ''}
   const handleContactDetailsChange = (field: keyof BotContactDetails, value: string) => {
     setContactDetails(prev => ({ ...prev, [field]: value }));
   };
+
 
   if (isLoading) {
     return (
@@ -592,3 +576,4 @@ ${notificationConfig.trim() ? notificationConfig.trim() : ''}
     </div>
   );
 }
+
