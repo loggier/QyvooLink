@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -111,6 +110,7 @@ export default function BotConfigPage() {
   const [selectedRules, setSelectedRules] = useState<string[]>([]);
   const [agentRole, setAgentRole] = useState<string>(initialAgentRole);
   const [businessContext, setBusinessContext] = useState<BusinessContext>(initialBusinessContext);
+  // Inicializamos serviceCatalog con un array vacío, pero lo poblamos con initialServiceCatalog si no hay datos de Firebase
   const [serviceCatalog, setServiceCatalog] = useState<ServiceCategory[]>([]); 
   const [contactDetails, setContactDetails] = useState<BotContactDetails>(initialContactDetails);
   const [closingMessage, setClosingMessage] = useState<string>(initialClosingMessage);
@@ -129,28 +129,36 @@ export default function BotConfigPage() {
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             const data = docSnap.data() as BotConfigData;
+            // Aseguramos que los arrays y strings tengan valores por defecto seguros
             setSelectedRules(data.rules || []);
             setAgentRole(data.agentRole || initialAgentRole);
             setBusinessContext(data.businessContext || initialBusinessContext);
+            
+            // --- CAMBIO CLAVE AQUÍ: Aseguramos que las propiedades de serviceCatalog sean strings ---
             const loadedCatalog = (data.serviceCatalog || []).map(cat => ({ 
-              ...cat,
               id: cat.id || crypto.randomUUID(),
+              categoryName: cat.categoryName || "", // Asegura que categoryName sea string
               services: (cat.services || []).map(srv => ({
-                ...srv,
-                id: srv.id || crypto.randomUUID()
-              }))
+                id: srv.id || crypto.randomUUID(),
+                name: srv.name || "",   // Asegura que name sea string
+                price: srv.price || "", // Asegura que price sea string
+                notes: srv.notes || "", // Asegura que notes sea string
+              })),
             }));
             setServiceCatalog(loadedCatalog);
+            // -------------------------------------------------------------------------------------
+
             setContactDetails(data.contact || initialContactDetails);
             setClosingMessage(data.closingMessage || initialClosingMessage);
             setNotificationPhoneNumber(data.notificationPhoneNumber || initialNotificationPhoneNumber);
             setNotificationRule(data.notificationRule || initialNotificationRule);
             if (data.promptXml) setGeneratedPromptConfig(data.promptXml);
           } else {
+            // Si el documento no existe, inicializa con los valores por defecto definidos
             setSelectedRules([]);
             setAgentRole(initialAgentRole);
             setBusinessContext(initialBusinessContext);
-            setServiceCatalog([]); 
+            setServiceCatalog(initialServiceCatalog); // Utiliza el initialServiceCatalog si no hay datos
             setContactDetails(initialContactDetails);
             setClosingMessage(initialClosingMessage);
             setNotificationPhoneNumber(initialNotificationPhoneNumber);
@@ -169,19 +177,41 @@ export default function BotConfigPage() {
     }
   }, [user, toast]);
 
+  // Este useEffect se encarga de generar el XML cuando los datos estén listos
   useEffect(() => {
     const generate = () => {
-      const businessContextIsEmpty = !businessContext.description?.trim() && !businessContext.location?.trim() && !businessContext.mission?.trim();
-      const contactDetailsIsEmpty = !contactDetails.phone?.trim() && !contactDetails.email?.trim() && !contactDetails.website?.trim();
+      // --- CAMBIOS EN LA FUNCIÓN GENERATE PARA MAYOR ROBUSTEZ ---
+      // Aseguramos que las propiedades de businessContext sean strings antes de trim()
+      const safeBusinessContextDescription = businessContext.description || "";
+      const safeBusinessContextLocation = businessContext.location || "";
+      const safeBusinessContextMission = businessContext.mission || "";
+
+      const businessContextIsEmpty = !safeBusinessContextDescription.trim() && 
+                                     !safeBusinessContextLocation.trim() && 
+                                     !safeBusinessContextMission.trim();
+
+      // Aseguramos que las propiedades de contactDetails sean strings antes de trim()
+      const safeContactPhone = contactDetails.phone || "";
+      const safeContactEmail = contactDetails.email || "";
+      const safeContactWebsite = contactDetails.website || "";
+
+      const contactDetailsIsEmpty = !safeContactPhone.trim() && 
+                                    !safeContactEmail.trim() && 
+                                    !safeContactWebsite.trim();
       
+      // Filtramos categorías para asegurar que sean válidas y tengan al menos un nombre o servicio
       const activeCategories = serviceCatalog.filter(
-        category => category.categoryName.trim() !== "" || category.services.length > 0
+        category => category && (category.categoryName?.trim() !== "" || (category.services && category.services.length > 0))
       );
       const serviceCatalogIsEmpty = activeCategories.length === 0;
 
-      let allRulesForConfig = [...selectedRules];
-      if (notificationRule.trim()) {
-        allRulesForConfig.push(notificationRule.trim());
+      // Aseguramos que las reglas seleccionadas y la de notificación sean strings
+      const safeSelectedRules = selectedRules.filter(rule => typeof rule === 'string');
+      const safeNotificationRule = notificationRule || ""; // Valor por defecto para notificationRule
+
+      let allRulesForConfig = [...safeSelectedRules];
+      if (safeNotificationRule.trim()) {
+        allRulesForConfig.push(safeNotificationRule.trim());
       }
 
       let rulesConfig = '';
@@ -196,9 +226,9 @@ export default function BotConfigPage() {
       if (!businessContextIsEmpty) {
         businessContextConfig = `
   <businessContext>
-    <description>${escapeXml(businessContext.description)}</description>
-    <location>${escapeXml(businessContext.location)}</location>
-    <mission>${escapeXml(businessContext.mission)}</mission>
+    <description>${escapeXml(safeBusinessContextDescription)}</description>
+    <location>${escapeXml(safeBusinessContextLocation)}</location>
+    <mission>${escapeXml(safeBusinessContextMission)}</mission>
   </businessContext>`;
       }
 
@@ -206,15 +236,26 @@ export default function BotConfigPage() {
       if (!serviceCatalogIsEmpty) {
         serviceCatalogConfigSection = `
   <serviceCatalog>
-    ${activeCategories.map(category => `
-    <category name="${escapeXml(category.categoryName)}">
-      ${category.services.map(service => `
+    ${activeCategories.map(category => {
+      // Aseguramos que el nombre de la categoría sea una cadena válida
+      const categoryNameForXml = category.categoryName || ''; 
+      // Filtramos servicios nulos/undefined y mapeamos sus propiedades a strings
+      const servicesForXml = (category.services || []).filter(srv => srv).map(service => { 
+          const serviceNameForXml = service.name || '';
+          const servicePriceForXml = service.price || '';
+          const serviceNotesForXml = service.notes || '';
+          return `
       <service>
-        <name>${escapeXml(service.name)}</name>
-        <price>${escapeXml(service.price)}</price>
-        <notes>${escapeXml(service.notes)}</notes>
-      </service>`).join('\n      ')}
-    </category>`).join('\n    ')}
+        <name>${escapeXml(serviceNameForXml)}</name>
+        <price>${escapeXml(servicePriceForXml)}</price>
+        <notes>${escapeXml(serviceNotesForXml)}</notes>
+      </service>`;
+      }).join('\n      ');
+      return `
+    <category name="${escapeXml(categoryNameForXml)}">
+      ${servicesForXml}
+    </category>`;
+    }).join('\n    ')}
   </serviceCatalog>`;
       }
 
@@ -222,33 +263,38 @@ export default function BotConfigPage() {
       if (!contactDetailsIsEmpty) {
         contactConfig = `
   <contact>
-    <phone>${escapeXml(contactDetails.phone)}</phone>
-    <email>${escapeXml(contactDetails.email)}</email>
-    <website>${escapeXml(contactDetails.website)}</website>
+    <phone>${escapeXml(safeContactPhone)}</phone>
+    <email>${escapeXml(safeContactEmail)}</email>
+    <website>${escapeXml(safeContactWebsite)}</website>
   </contact>`;
       }
       
       let notificationConfig = '';
-      if (notificationPhoneNumber.trim()) {
+      const safeNotificationPhoneNumber = notificationPhoneNumber || ""; // Valor por defecto
+      if (safeNotificationPhoneNumber.trim()) {
         notificationConfig = `
-  <notification>${escapeXml(notificationPhoneNumber.trim())}</notification>`;
+  <notification>${escapeXml(safeNotificationPhoneNumber.trim())}</notification>`;
       }
+
+      const safeAgentRole = agentRole || ""; // Asegura que agentRole sea string
+      const safeClosingMessage = closingMessage || ""; // Asegura que closingMessage sea string
 
       const finalPromptConfig = `
 ${rulesConfig.trim() ? rulesConfig.trim() : ''}
-${agentRole.trim() ? `<agentRole>${escapeXml(agentRole)}</agentRole>` : ''}
+${safeAgentRole.trim() ? `<agentRole>${escapeXml(safeAgentRole)}</agentRole>` : ''}
 ${businessContextConfig.trim() ? businessContextConfig.trim() : ''}
 ${serviceCatalogConfigSection.trim() ? serviceCatalogConfigSection.trim() : ''}
 ${contactConfig.trim() ? contactConfig.trim() : ''}
-${closingMessage.trim() ? `<closingMessage>${escapeXml(closingMessage)}</closingMessage>` : ''}
+${safeClosingMessage.trim() ? `<closingMessage>${escapeXml(safeClosingMessage)}</closingMessage>` : ''}
 ${notificationConfig.trim() ? notificationConfig.trim() : ''}
       `.trim().replace(/^\s*\n/gm, ""); 
       setGeneratedPromptConfig(finalPromptConfig);
     };
+    // Solo generamos el prompt si los datos ya se cargaron (isLoading es false)
     if (!isLoading) { 
         generate();
     }
-  }, [selectedRules, agentRole, businessContext, serviceCatalog, contactDetails, closingMessage, notificationPhoneNumber, notificationRule, isLoading]);
+  }, [selectedRules, agentRole, businessContext, serviceCatalog, contactDetails, closingMessage, notificationPhoneNumber, notificationRule, isLoading]); // Dependencias
 
   const handleRuleChange = (rule: string) => {
     setSelectedRules(prev =>
@@ -576,4 +622,3 @@ ${notificationConfig.trim() ? notificationConfig.trim() : ''}
     </div>
   );
 }
-
