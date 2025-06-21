@@ -25,7 +25,7 @@ interface Service {
   notes: string;
 }
 
-interface ServiceCategory {
+interface ServiceCategory { 
   id: string;
   categoryName: string;
   services: Service[];
