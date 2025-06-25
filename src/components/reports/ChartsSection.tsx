@@ -1,58 +1,85 @@
 
-"use client"; // ¡Importante!
+"use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, ChartConfig } from "@/components/ui/chart" // Importa ChartConfig
-import { Bar, Pie, Cell, ResponsiveContainer, BarChart as RechartsBarChart, PieChart as RechartsPieChart } from "recharts";
+import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, ChartConfig } from "@/components/ui/chart";
+import { Bar, Pie, Cell, ResponsiveContainer, BarChart as RechartsBarChart, PieChart as RechartsPieChart, XAxis, YAxis, CartesianGrid } from "recharts";
 
-interface MessageStatsData {
-  type: string;
+interface MessageDistributionData {
+  name: string;
   count: number;
   fill: string;
 }
 
-interface UserActivityData {
+interface MessageTrendData {
   date: string;
-  activeUsers: number;
-  newUsers: number;
+  total: number;
 }
 
 interface ChartsSectionProps {
-  messageStatsData: MessageStatsData[];
-  chartConfigMessages: ChartConfig; // Usa el tipo ChartConfig
-  userActivityData: UserActivityData[];
-  chartConfigUsers: ChartConfig; // Usa el tipo ChartConfig
+  messageDistributionData: MessageDistributionData[];
+  chartConfigMessages: ChartConfig;
+  messageTrendData: MessageTrendData[];
+  chartConfigTrend: ChartConfig;
 }
 
 export default function ChartsSection({
-  messageStatsData,
+  messageDistributionData,
   chartConfigMessages,
-  userActivityData,
-  chartConfigUsers,
+  messageTrendData,
+  chartConfigTrend,
 }: ChartsSectionProps) {
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle>Estadísticas de Mensajes</CardTitle>
-          <CardDescription>Resumen de mensajes enviados, recibidos y automatizados.</CardDescription>
+          <CardTitle>Distribución de Mensajes</CardTitle>
+          <CardDescription>Proporción de mensajes por tipo de remitente.</CardDescription>
         </CardHeader>
         <CardContent>
           <ChartContainer config={chartConfigMessages} className="mx-auto aspect-square max-h-[300px]">
             <RechartsPieChart>
-              <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+              <ChartTooltip 
+                cursor={false}
+                content={<ChartTooltipContent hideLabel />} 
+              />
               <Pie
-                data={messageStatsData}
+                data={messageDistributionData}
                 dataKey="count"
-                nameKey="type"
+                nameKey="name"
                 innerRadius={60}
                 strokeWidth={5}
+                labelLine={false}
+                label={({
+                    cy,
+                    midAngle,
+                    innerRadius,
+                    outerRadius,
+                    percent,
+                }) => {
+                    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                    const x = cy + radius * Math.cos(-midAngle * (Math.PI / 180));
+                    const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
+                    if (percent < 0.05) return null;
+                    return (
+                        <text
+                          x={x}
+                          y={y}
+                          fill="white"
+                          textAnchor={x > cy ? "start" : "end"}
+                          dominantBaseline="central"
+                          className="text-xs font-bold"
+                        >
+                          {`${(percent * 100).toFixed(0)}%`}
+                        </text>
+                    );
+                }}
               >
-                {messageStatsData.map((entry) => (
-                   <Cell key={`cell-${entry.type}`} fill={entry.fill} />
+                {messageDistributionData.map((entry) => (
+                   <Cell key={`cell-${entry.name}`} fill={entry.fill} />
                 ))}
               </Pie>
-              <ChartLegend content={<ChartLegendContent nameKey="type" />} />
+              <ChartLegend content={<ChartLegendContent nameKey="name" />} />
             </RechartsPieChart>
           </ChartContainer>
         </CardContent>
@@ -60,18 +87,34 @@ export default function ChartsSection({
 
       <Card>
         <CardHeader>
-          <CardTitle>Actividad de Usuarios a lo Largo del Tiempo</CardTitle>
-          <CardDescription>Usuarios activos y nuevos diariamente.</CardDescription>
+          <CardTitle>Tendencia de Mensajes (Últimos 7 Días)</CardTitle>
+          <CardDescription>Volumen total de mensajes diarios.</CardDescription>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={chartConfigUsers} className="h-[300px] w-full">
-            <RechartsBarChart accessibilityLayer data={userActivityData}>
+          <ChartContainer config={chartConfigTrend} className="h-[300px] w-full">
+            <RechartsBarChart
+              accessibilityLayer
+              data={messageTrendData}
+              margin={{ top: 20, right: 20, left: -10, bottom: 0 }}
+            >
+              <CartesianGrid vertical={false} />
+              <XAxis
+                dataKey="date"
+                tickLine={false}
+                tickMargin={10}
+                axisLine={false}
+                tickFormatter={(value) => value.slice(0, 6)}
+              />
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                tickMargin={10}
+              />
               <ChartTooltip
                 cursor={false}
                 content={<ChartTooltipContent indicator="dashed" />}
               />
-              <Bar dataKey="activeUsers" fill="var(--color-activeUsers)" radius={4} />
-              <Bar dataKey="newUsers" fill="var(--color-newUsers)" radius={4} />
+              <Bar dataKey="total" fill="var(--color-total)" radius={8} />
               <ChartLegend content={<ChartLegendContent />} />
             </RechartsBarChart>
           </ChartContainer>
