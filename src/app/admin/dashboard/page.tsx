@@ -5,12 +5,22 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, getDoc, updateDoc, Timestamp, query, where } from 'firebase/firestore';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Shield, Wifi, Bot, Users, MessagesSquare } from 'lucide-react';
+import { Loader2, Shield, Wifi, Bot, Users, MessagesSquare, CalendarDays } from 'lucide-react';
 
 interface AdminViewUser {
   uid: string;
@@ -31,6 +41,11 @@ export default function AdminDashboardPage() {
   const { toast } = useToast();
   const [users, setUsers] = useState<AdminViewUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  const [isDateDialogOpen, setIsDateDialogOpen] = useState(false);
+  const [selectedUserForDateChange, setSelectedUserForDateChange] = useState<AdminViewUser | null>(null);
+  const [newRegistrationDate, setNewRegistrationDate] = useState<Date | undefined>(undefined);
+  const [isSavingDate, setIsSavingDate] = useState(false);
 
   const fetchAllUsersData = useCallback(async () => {
     if (!user || user.role !== 'admin') {
@@ -161,6 +176,37 @@ export default function AdminDashboardPage() {
       });
     }
   };
+
+  const handleOpenDateDialog = (userToEdit: AdminViewUser) => {
+    setSelectedUserForDateChange(userToEdit);
+    setNewRegistrationDate(userToEdit.createdAt ? userToEdit.createdAt.toDate() : new Date());
+    setIsDateDialogOpen(true);
+  };
+  
+  const handleUpdateRegistrationDate = async () => {
+    if (!selectedUserForDateChange || !newRegistrationDate) {
+      toast({ variant: "destructive", title: "Error", description: "No se ha seleccionado un usuario o una fecha." });
+      return;
+    }
+    setIsSavingDate(true);
+    try {
+      const userDocRef = doc(db, 'users', selectedUserForDateChange.uid);
+      await updateDoc(userDocRef, {
+        createdAt: Timestamp.fromDate(newRegistrationDate),
+      });
+      toast({
+        title: "Fecha Actualizada",
+        description: `La fecha de registro de ${selectedUserForDateChange.email} ha sido actualizada.`,
+      });
+      setIsDateDialogOpen(false);
+      fetchAllUsersData(); // Refresh data in the table
+    } catch (error) {
+      console.error("Error updating registration date:", error);
+      toast({ variant: "destructive", title: "Error", description: "No se pudo actualizar la fecha de registro." });
+    } finally {
+      setIsSavingDate(false);
+    }
+  };
   
   const formatDate = (timestamp?: Timestamp) => {
     if (!timestamp) return 'N/A';
@@ -212,7 +258,7 @@ export default function AdminDashboardPage() {
                 <TableHead>Usuario</TableHead>
                 <TableHead>Estadísticas de la Instancia</TableHead>
                 <TableHead>Estado General</TableHead>
-                <TableHead className="text-right">Cuenta Activa</TableHead>
+                <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -248,12 +294,15 @@ export default function AdminDashboardPage() {
                           )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right space-x-2">
                        <Switch
                         checked={u.isActive}
                         onCheckedChange={() => handleToggleUserStatus(u.uid, u.isActive)}
                         aria-label={`Activar o desactivar la cuenta de ${u.email}`}
                       />
+                      <Button variant="outline" size="icon" onClick={() => handleOpenDateDialog(u)} title="Cambiar fecha de registro">
+                        <CalendarDays className="h-4 w-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))
@@ -268,6 +317,36 @@ export default function AdminDashboardPage() {
           </Table>
         </CardContent>
       </Card>
+      
+      <Dialog open={isDateDialogOpen} onOpenChange={setIsDateDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cambiar Fecha de Registro</DialogTitle>
+            <DialogDescription>
+              Selecciona la nueva fecha de registro para el usuario {selectedUserForDateChange?.email}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center py-4">
+            <Calendar
+                mode="single"
+                selected={newRegistrationDate}
+                onSelect={setNewRegistrationDate}
+                disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
+                initialFocus
+             />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDateDialogOpen(false)} disabled={isSavingDate}>
+              Cancelar
+            </Button>
+            <Button onClick={handleUpdateRegistrationDate} disabled={isSavingDate || !newRegistrationDate}>
+              {isSavingDate ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Guardar Fecha
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
