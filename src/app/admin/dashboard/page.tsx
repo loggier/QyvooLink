@@ -36,10 +36,18 @@ interface AdminViewUser {
   botMessages: number;
 }
 
+interface DashboardStats {
+  totalUsers: number;
+  activeInstances: number;
+  totalMessages: number;
+  configuredBots: number;
+}
+
 export default function AdminDashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [users, setUsers] = useState<AdminViewUser[]>([]);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
   const [isDateDialogOpen, setIsDateDialogOpen] = useState(false);
@@ -127,6 +135,20 @@ export default function AdminDashboardPage() {
       const filteredUsers = allUserData.filter(u => u.uid !== user.uid);
       
       setUsers(filteredUsers);
+      
+      // Calculate aggregate stats
+      const totalUsers = filteredUsers.length;
+      const activeInstances = filteredUsers.filter(u => u.instanceStatus === 'Conectado').length;
+      const totalMessages = filteredUsers.reduce((sum, u) => sum + u.totalMessages, 0);
+      const configuredBots = filteredUsers.filter(u => u.botConfigured).length;
+
+      setStats({
+        totalUsers,
+        activeInstances,
+        totalMessages,
+        configuredBots,
+      });
+
     } catch (error) {
       console.error("Error fetching users data:", error);
       toast({
@@ -241,14 +263,63 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center">
+        <Shield className="mr-3 h-8 w-8 text-primary" />
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight text-foreground">Panel de Administración</h2>
+          <p className="text-muted-foreground">Visión general y gestión de la plataforma Qyvoo.</p>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total de Usuarios</CardTitle>
+            <Users className="h-5 w-5 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.totalUsers ?? <Loader2 className="h-6 w-6 animate-spin" />}</div>
+            <p className="text-xs text-muted-foreground">Cuentas registradas en la plataforma</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Instancias Activas</CardTitle>
+            <Wifi className="h-5 w-5 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.activeInstances ?? <Loader2 className="h-6 w-6 animate-spin" />}</div>
+            <p className="text-xs text-muted-foreground">Instancias en estado "Conectado"</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Mensajes Totales</CardTitle>
+            <MessagesSquare className="h-5 w-5 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.totalMessages.toLocaleString('es-ES') ?? <Loader2 className="h-6 w-6 animate-spin" />}</div>
+            <p className="text-xs text-muted-foreground">Procesados en toda la plataforma</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Bots Configurados</CardTitle>
+            <Bot className="h-5 w-5 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.configuredBots ?? <Loader2 className="h-6 w-6 animate-spin" />}</div>
+            <p className="text-xs text-muted-foreground">Usuarios con un prompt de bot activo</p>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center">
-            <Shield className="mr-2 h-6 w-6 text-primary" />
-            Panel de Administración de Usuarios
-          </CardTitle>
+          <CardTitle>Gestión de Cuentas de Usuario</CardTitle>
           <CardDescription>
-            Gestiona usuarios, visualiza el estado de sus servicios y activa o desactiva cuentas.
+            Activa/desactiva cuentas, visualiza el estado de sus servicios y gestiona fechas de registro.
           </CardDescription>
         </CardHeader>
         <CardContent>
