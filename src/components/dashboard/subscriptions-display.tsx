@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
@@ -8,7 +7,7 @@ import { collection, getDocs, doc, getDoc, query, where, onSnapshot } from 'fire
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, CheckCircle, CreditCard, Sparkles } from 'lucide-react';
+import { Loader2, CheckCircle, CreditCard, Sparkles, MessageSquare } from 'lucide-react';
 import { Switch } from '../ui/switch';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
@@ -60,6 +59,8 @@ export default function SubscriptionManager() {
         querySnapshot.forEach((doc) => {
           fetchedPlans.push({ id: doc.id, ...doc.data() } as SubscriptionPlan);
         });
+        // Sort plans by monthly price, lowest to highest
+        fetchedPlans.sort((a, b) => a.priceMonthly - b.priceMonthly);
         setPlans(fetchedPlans);
       } catch (error) {
         console.error("Error fetching plans:", error);
@@ -215,10 +216,18 @@ export default function SubscriptionManager() {
                  {plan.name}
               </CardTitle>
               <CardDescription>
-                <span className="text-3xl font-bold text-foreground">
-                    ${billingCycle === 'monthly' ? plan.priceMonthly : plan.priceYearly}
-                </span>
-                /{billingCycle === 'monthly' ? 'mes' : 'año'}
+                {plan.priceMonthly === 0 && plan.priceYearly === 0 ? (
+                    <span className="text-3xl font-bold text-foreground">
+                        Personalizado
+                    </span>
+                ) : (
+                    <>
+                        <span className="text-3xl font-bold text-foreground">
+                            ${billingCycle === 'monthly' ? plan.priceMonthly : plan.priceYearly}
+                        </span>
+                        /{billingCycle === 'monthly' ? 'mes' : 'año'}
+                    </>
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex-grow">
@@ -232,14 +241,27 @@ export default function SubscriptionManager() {
               </ul>
             </CardContent>
             <CardFooter>
-              <Button 
-                className="w-full" 
-                onClick={() => handleSubscribe(plan)}
-                disabled={isProcessing[plan.id]}
-              >
-                {isProcessing[plan.id] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CreditCard className="mr-2 h-4 w-4" />}
-                Suscribirse al Plan {plan.name}
-              </Button>
+              {plan.priceMonthly === 0 && plan.priceYearly === 0 ? (
+                 <Button asChild className="w-full" variant="outline">
+                   <a 
+                     href={`https://wa.me/528118627025?text=${encodeURIComponent('quiero plan personalizado de qyvoo')}`}
+                     target="_blank"
+                     rel="noopener noreferrer"
+                   >
+                     <MessageSquare className="mr-2 h-4 w-4" />
+                     Contactar a Venta
+                   </a>
+                 </Button>
+              ) : (
+                <Button 
+                  className="w-full" 
+                  onClick={() => handleSubscribe(plan)}
+                  disabled={isProcessing[plan.id]}
+                >
+                  {isProcessing[plan.id] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CreditCard className="mr-2 h-4 w-4" />}
+                  Suscribirse al Plan {plan.name}
+                </Button>
+              )}
             </CardFooter>
           </Card>
         ))}
