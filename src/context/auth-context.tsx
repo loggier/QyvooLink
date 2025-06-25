@@ -3,7 +3,7 @@
 
 import type { User as FirebaseUser } from 'firebase/auth';
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { auth, db } from '@/lib/firebase';
+import { auth, db, serverTimestamp } from '@/lib/firebase'; // Import serverTimestamp
 import {
   onAuthStateChanged,
   createUserWithEmailAndPassword,
@@ -15,7 +15,7 @@ import {
   reauthenticateWithCredential,
   sendPasswordResetEmail,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, Timestamp } from 'firebase/firestore'; // Import Timestamp
 import type { RegisterFormData } from '@/components/auth/register-form';
 import type { LoginFormData } from '@/components/auth/login-form';
 import { useRouter } from 'next/navigation';
@@ -31,6 +31,9 @@ interface UserProfile {
   city?: string;
   sector?: string;
   employeeCount?: string;
+  role?: 'admin' | 'user'; // User role
+  createdAt?: Timestamp; // Registration date
+  isActive?: boolean; // Account status
 }
 
 interface AuthContextType {
@@ -57,6 +60,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
           const dbData = userDocSnap.data();
+          
+          if (dbData.isActive === false) {
+             await firebaseSignOut(auth);
+             setUser(null);
+             setLoading(false);
+             // Optionally, show a toast message here before redirecting.
+             router.push('/login?error=account-disabled');
+             return;
+          }
+          
           setUser({ 
             uid: firebaseUser.uid, 
             email: firebaseUser.email,
@@ -68,13 +81,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             city: dbData.city,
             sector: dbData.sector,
             employeeCount: dbData.employeeCount,
+            role: dbData.role || 'user', // Set role, default to 'user'
+            createdAt: dbData.createdAt,
+            isActive: dbData.isActive ?? true,
            } as UserProfile);
         } else {
           // Basic profile if not found in Firestore
           setUser({ 
             uid: firebaseUser.uid, 
             email: firebaseUser.email,
-            username: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || undefined, // Extract username if possible
+            username: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || undefined,
+            role: 'user',
+            isActive: true,
           });
         }
       } else {
@@ -84,7 +102,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [router]);
 
   const registerUser = async (data: RegisterFormData) => {
     setLoading(true);
@@ -92,7 +110,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const firebaseUser = userCredential.user;
       if (firebaseUser) {
-        const userProfileData: UserProfile = {
+        const userProfileData = {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
           fullName: data.fullName,
@@ -103,9 +121,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           city: '',
           sector: '',
           employeeCount: '',
+          role: 'user', // Default role for new users
+          createdAt: serverTimestamp(), // Set registration timestamp
+          isActive: true, // Default account status
         };
         await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
-        setUser(userProfileData);
+        
+        // We need to refetch the data to get the server-generated timestamp
+        const newUserDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+        setUser(newUserDoc.data() as UserProfile);
+
         router.push('/dashboard');
         return userCredential;
       }
@@ -137,7 +162,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
           const dbData = userDocSnap.data();
-          setUser({ 
+          if (dbData.isActive === false) {
+             await firebaseSignOut(auth);
+             throw new Error("Tu cuenta ha sido desactivada por un administrador.");
+          }
+          const userProfile: UserProfile = { 
             uid: firebaseUser.uid, 
             email: firebaseUser.email,
             fullName: dbData.fullName,
@@ -148,20 +177,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             city: dbData.city,
             sector: dbData.sector,
             employeeCount: dbData.employeeCount,
-          } as UserProfile);
+            role: dbData.role || 'user',
+            createdAt: dbData.createdAt,
+            isActive: dbData.isActive ?? true,
+          };
+          setUser(userProfile);
+          if (userProfile.role === 'admin') {
+            router.push('/admin/dashboard');
+          } else {
+            router.push('/dashboard');
+          }
         } else {
-           setUser({ 
+           const basicProfile: UserProfile = { 
             uid: firebaseUser.uid, 
             email: firebaseUser.email,
             username: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || undefined,
-          });
+            role: 'user',
+            isActive: true,
+          };
+           setUser(basicProfile);
+           router.push('/dashboard');
         }
-        router.push('/dashboard');
         return userCredential;
       }
     } catch (error: any) {
       console.error("Error de inicio de sesión:", error);
-      let errorMessage = "Correo electrónico o contraseña inválidos. Por favor, inténtalo de nuevo.";
+      let errorMessage = error.message || "Correo electrónico o contraseña inválidos. Por favor, inténtalo de nuevo.";
        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         errorMessage = "Correo electrónico o contraseña incorrectos.";
       } else if (error.code === 'auth/invalid-email') {
@@ -218,9 +259,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error: any) {
       console.error("Error sending password reset email:", error);
       let errorMessage = "Ocurrió un error al enviar el correo de restablecimiento.";
-      // Firebase already abstracts this; it won't tell you if the user doesn't exist for security reasons.
-      // So, we just show a generic success message on the UI side regardless.
-      // We will only throw an error for truly exceptional cases like network issues, etc.
       if (error.code === 'auth/invalid-email') {
         errorMessage = "El formato del correo electrónico no es válido.";
       } else if (error.code === 'auth/configuration-not-found') {

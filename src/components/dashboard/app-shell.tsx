@@ -28,12 +28,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare, Bot, Users, Zap } from 'lucide-react';
+import { Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare, Bot, Users, Zap, Shield } from 'lucide-react';
 
 interface NavItem {
   href: string;
   label: string;
   icon: React.ElementType;
+  adminOnly?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -44,6 +45,7 @@ const navItems: NavItem[] = [
   { href: '/dashboard/quick-replies', label: 'Respuestas Rápidas', icon: Zap },
   { href: '/dashboard/configuration', label: 'Configuración General', icon: Settings },
   { href: '/dashboard/reports', label: 'Reportes', icon: BarChart2 },
+  { href: '/admin/dashboard', label: 'Admin Panel', icon: Shield, adminOnly: true },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -59,11 +61,23 @@ export function AppShell({ children }: { children: ReactNode }) {
     return name.substring(0, 2).toUpperCase();
   };
 
+  const visibleNavItems = navItems.filter(item => {
+    // Hide admin-only items from non-admins
+    if (item.adminOnly && user?.role !== 'admin') {
+      return false;
+    }
+    return true;
+  });
+  
+  // Determine the correct home for the logo link
+  const homeUrl = user?.role === 'admin' ? '/admin/dashboard' : '/dashboard';
+
+
   return (
     <SidebarProvider defaultOpen>
       <Sidebar collapsible="icon">
         <SidebarHeader className="p-4 flex flex-row items-center justify-between">
-           <Link href="/dashboard" className="flex items-center gap-2" aria-label="Dashboard">
+           <Link href={homeUrl} className="flex items-center gap-2" aria-label="Dashboard">
             <EvolveLinkLogo className="h-8 w-auto text-primary transition-all duration-200 group-data-[collapsible=icon]:h-7 group-data-[collapsible=icon]:w-7" data-ai-hint="company logo" />
             <span className="text-xl font-semibold text-primary group-data-[collapsible=icon]:hidden">Qyvoo</span>
           </Link>
@@ -71,11 +85,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         </SidebarHeader>
         <SidebarContent>
           <SidebarMenu>
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <SidebarMenuItem key={item.href}>
                 <Link href={item.href} legacyBehavior passHref>
                   <SidebarMenuButton
-                    isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
+                    isActive={pathname === item.href || (item.href !== homeUrl && pathname.startsWith(item.href))}
                     tooltip={{ children: item.label, className: "ml-2" }}
                     className="justify-start"
                   >
