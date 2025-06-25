@@ -1,6 +1,7 @@
+import type { NextConfig } from 'next';
 
 /** @type {import('next').NextConfig} */
-const nextConfig = {
+const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -28,6 +29,17 @@ const nextConfig = {
         pathname: '/**',
       }
     ],
+  },
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        stream: require.resolve('stream-browserify'),
+        crypto: require.resolve('crypto-browserify'),
+        buffer: require.resolve('buffer/'),
+      };
+    }
+    return config;
   },
 };
 
