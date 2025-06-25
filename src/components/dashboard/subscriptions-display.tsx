@@ -59,8 +59,21 @@ export default function SubscriptionManager() {
         querySnapshot.forEach((doc) => {
           fetchedPlans.push({ id: doc.id, ...doc.data() } as SubscriptionPlan);
         });
-        // Sort plans by monthly price, lowest to highest
-        fetchedPlans.sort((a, b) => a.priceMonthly - b.priceMonthly);
+        
+        fetchedPlans.sort((a, b) => {
+          const aIsFree = a.priceMonthly === 0 && a.priceYearly === 0;
+          const bIsFree = b.priceMonthly === 0 && b.priceYearly === 0;
+
+          if (aIsFree && !bIsFree) {
+            return 1; // a (free) comes after b (paid)
+          }
+          if (!aIsFree && bIsFree) {
+            return -1; // a (paid) comes before b (free)
+          }
+          // If both are free or both are paid, sort by price
+          return a.priceMonthly - b.priceMonthly;
+        });
+
         setPlans(fetchedPlans);
       } catch (error) {
         console.error("Error fetching plans:", error);
