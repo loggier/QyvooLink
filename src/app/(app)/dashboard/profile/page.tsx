@@ -12,11 +12,12 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, UserCircle, Building, Phone, Mail, User, MapPin, Globe, Briefcase, Users, Lock } from 'lucide-react';
+import { Loader2, Save, UserCircle, Building, Phone, Mail, User, MapPin, Globe, Briefcase, Users, Lock, CreditCard } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import SubscriptionManager from '@/components/dashboard/subscriptions-display';
 
 interface UserProfileData {
   fullName?: string;
@@ -323,6 +324,21 @@ export default function ProfilePage() {
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+      
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center text-2xl">
+            <CreditCard className="mr-3 h-7 w-7 text-primary" />
+            Suscripción y Pagos
+          </CardTitle>
+           <CardDescription>
+            Visualiza tu plan actual, elige uno nuevo o gestiona tu suscripción.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+            <SubscriptionManager />
         </CardContent>
       </Card>
 

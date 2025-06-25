@@ -29,6 +29,8 @@ interface SubscriptionPlan {
   isTrial: boolean;
   trialDays: number;
   isActive: boolean;
+  monthlyPriceId?: string; // Stripe Price ID for monthly plan
+  yearlyPriceId?: string;  // Stripe Price ID for yearly plan
 }
 
 const initialFormState: Omit<SubscriptionPlan, 'id'> = {
@@ -39,6 +41,8 @@ const initialFormState: Omit<SubscriptionPlan, 'id'> = {
   isTrial: false,
   trialDays: 0,
   isActive: true,
+  monthlyPriceId: '',
+  yearlyPriceId: '',
 };
 
 export default function SubscriptionsPage() {
@@ -94,7 +98,7 @@ export default function SubscriptionsPage() {
   const handleOpenFormDialog = (plan: SubscriptionPlan | null = null) => {
     if (plan) {
       setEditingPlan(plan);
-      setCurrentFormData({ ...plan, features: plan.features || [] });
+      setCurrentFormData({ ...initialFormState, ...plan, features: plan.features || [] });
     } else {
       setEditingPlan(null);
       setCurrentFormData(initialFormState);
@@ -243,7 +247,7 @@ export default function SubscriptionsPage() {
           <DialogHeader>
             <DialogTitle>{editingPlan ? 'Editar Plan de Suscripción' : 'Crear Nuevo Plan de Suscripción'}</DialogTitle>
             <DialogDescription>
-              Define los detalles y características del plan.
+              Define los detalles, precios y características del plan. Asegúrate de crear los precios en tu dashboard de Stripe primero.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmitForm}>
@@ -253,17 +257,26 @@ export default function SubscriptionsPage() {
                   <Label htmlFor="name">Nombre del Plan</Label>
                   <Input id="name" name="name" value={currentFormData.name} onChange={handleInputChange} placeholder="Ej: Plan Básico" required />
                 </div>
+                
+                <div>
+                  <Label htmlFor="monthlyPriceId">ID del Precio Mensual de Stripe</Label>
+                  <Input id="monthlyPriceId" name="monthlyPriceId" value={currentFormData.monthlyPriceId || ''} onChange={handleInputChange} placeholder="price_..." />
+                </div>
+                 <div>
+                  <Label htmlFor="yearlyPriceId">ID del Precio Anual de Stripe</Label>
+                  <Input id="yearlyPriceId" name="yearlyPriceId" value={currentFormData.yearlyPriceId || ''} onChange={handleInputChange} placeholder="price_..." />
+                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="priceMonthly">Precio Mensual</Label>
+                    <Label htmlFor="priceMonthly">Precio Mensual (Display)</Label>
                     <div className="relative">
                        <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                        <Input id="priceMonthly" name="priceMonthly" type="number" value={currentFormData.priceMonthly} onChange={handleInputChange} placeholder="29.99" required className="pl-8"/>
                     </div>
                   </div>
                    <div>
-                    <Label htmlFor="priceYearly">Precio Anual</Label>
+                    <Label htmlFor="priceYearly">Precio Anual (Display)</Label>
                      <div className="relative">
                        <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                        <Input id="priceYearly" name="priceYearly" type="number" value={currentFormData.priceYearly} onChange={handleInputChange} placeholder="299.99" required className="pl-8"/>
