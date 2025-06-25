@@ -17,7 +17,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Qyvoo - Gestión de WhatsApp',
   description: 'Sistema de gestión para WhatsApp Business',
-  manifest: '/manifest.json',
   themeColor: '#F44336',
   viewport: 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no',
   icons: {
