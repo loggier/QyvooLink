@@ -19,40 +19,38 @@ import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
-const loginSchema = z.object({
+const forgotPasswordSchema = z.object({
   email: z.string().email({ message: "Dirección de correo electrónico inválida." }),
-  password: z.string().min(1, { message: "La contraseña es obligatoria." }),
 });
 
-export type LoginFormData = z.infer<typeof loginSchema>;
+export type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>;
 
-export function LoginForm() {
+export function ForgotPasswordForm() {
   const [isLoading, setIsLoading] = useState(false);
-  const form = useForm<LoginFormData>({
-    resolver: zodResolver(loginSchema),
+  const form = useForm<ForgotPasswordFormData>({
+    resolver: zodResolver(forgotPasswordSchema),
     defaultValues: {
       email: "",
-      password: "",
     },
   });
 
-  const { loginUser } = useAuth();
+  const { sendPasswordReset } = useAuth();
   const { toast } = useToast();
 
-  async function onSubmit(values: LoginFormData) {
+  async function onSubmit(values: ForgotPasswordFormData) {
     setIsLoading(true);
     try {
-      await loginUser(values);
+      await sendPasswordReset(values.email);
       toast({
-        title: "Inicio de Sesión Exitoso",
-        description: "¡Bienvenido de nuevo a Qyvoo!",
+        title: "Correo Enviado",
+        description: "Si existe una cuenta con ese correo, recibirás un enlace para restablecer tu contraseña.",
       });
-      // Redirect is handled by AuthContext
+      form.reset();
     } catch (error: any) {
       toast({
         variant: "destructive",
-        title: "Falló el Inicio de Sesión",
-        description: error.message || "Correo electrónico o contraseña inválidos. Por favor, inténtalo de nuevo.",
+        title: "Error",
+        description: error.message || "No se pudo enviar el correo de restablecimiento.",
       });
     } finally {
       setIsLoading(false);
@@ -75,35 +73,14 @@ export function LoginForm() {
             </FormItem>
           )}
         />
-        <FormField
-          control={form.control}
-          name="password"
-          render={({ field }) => (
-            <FormItem>
-               <div className="flex items-center justify-between">
-                <FormLabel>Contraseña</FormLabel>
-                <Link
-                  href="/forgot-password"
-                  className="text-sm font-medium text-primary hover:underline"
-                >
-                  ¿Olvidaste tu contraseña?
-                </Link>
-              </div>
-              <FormControl>
-                <Input type="password" placeholder="••••••••" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
         <Button type="submit" className="w-full" disabled={isLoading}>
            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Iniciar Sesión
+          Enviar Enlace
         </Button>
         <p className="text-center text-sm text-muted-foreground">
-          ¿No tienes una cuenta?{' '}
-          <Link href="/register" className="font-medium text-primary hover:underline">
-            Regístrate
+          ¿Recordaste tu contraseña?{' '}
+          <Link href="/login" className="font-medium text-primary hover:underline">
+            Iniciar Sesión
           </Link>
         </p>
       </form>

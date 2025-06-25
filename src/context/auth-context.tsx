@@ -13,6 +13,7 @@ import {
   updatePassword,
   EmailAuthProvider,
   reauthenticateWithCredential,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import type { RegisterFormData } from '@/components/auth/register-form';
@@ -39,6 +40,7 @@ interface AuthContextType {
   loginUser: (data: LoginFormData) => Promise<UserCredential | void>;
   logoutUser: () => Promise<void>;
   updateUserPassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -210,9 +212,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const sendPasswordReset = async (email: string) => {
+    try {
+      await sendPasswordResetEmail(auth, email);
+    } catch (error: any) {
+      console.error("Error sending password reset email:", error);
+      let errorMessage = "Ocurrió un error al enviar el correo de restablecimiento.";
+      // Firebase already abstracts this; it won't tell you if the user doesn't exist for security reasons.
+      // So, we just show a generic success message on the UI side regardless.
+      // We will only throw an error for truly exceptional cases like network issues, etc.
+      if (error.code === 'auth/invalid-email') {
+        errorMessage = "El formato del correo electrónico no es válido.";
+      } else if (error.code === 'auth/configuration-not-found') {
+        errorMessage = "Error de configuración de autenticación. Contacta al administrador.";
+      }
+      throw new Error(errorMessage);
+    }
+  };
+
 
   return (
-    <AuthContext.Provider value={{ user, loading, registerUser, loginUser, logoutUser, updateUserPassword }}>
+    <AuthContext.Provider value={{ user, loading, registerUser, loginUser, logoutUser, updateUserPassword, sendPasswordReset }}>
       {children}
     </AuthContext.Provider>
   );
