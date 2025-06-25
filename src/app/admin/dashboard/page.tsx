@@ -4,15 +4,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, updateDoc, Timestamp, query, where } from 'firebase/firestore';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Shield, Wifi, Bot, CheckCircle, XCircle } from 'lucide-react';
+import { Loader2, Shield, Wifi, Bot, Users, MessagesSquare } from 'lucide-react';
 
-// Combined interface for displaying user data in the admin panel
 interface AdminViewUser {
   uid: string;
   fullName?: string;
@@ -21,6 +20,10 @@ interface AdminViewUser {
   isActive: boolean;
   instanceStatus?: 'Conectado' | 'Desconectado' | 'Pendiente' | 'No Configurada';
   botConfigured: boolean;
+  instanceName?: string;
+  contactCount: number;
+  totalMessages: number;
+  botMessages: number;
 }
 
 export default function AdminDashboardPage() {
@@ -38,36 +41,73 @@ export default function AdminDashboardPage() {
     setIsLoading(true);
     try {
       const usersQuerySnapshot = await getDocs(collection(db, 'users'));
-      const allUserData = await Promise.all(
-        usersQuerySnapshot.docs.map(async (userDoc) => {
-          const userData = userDoc.data();
-          const uid = userDoc.id;
+      const allUserDataPromises = usersQuerySnapshot.docs.map(async (userDoc) => {
+        const userData = userDoc.data();
+        const uid = userDoc.id;
 
-          // Fetch instance data
-          const instanceDocRef = doc(db, 'instances', uid);
-          const instanceDocSnap = await getDoc(instanceDocRef);
-          let instanceStatus: AdminViewUser['instanceStatus'] = 'No Configurada';
-          if (instanceDocSnap.exists()) {
-            instanceStatus = instanceDocSnap.data().status || 'Pendiente';
+        // --- Fetch Additional Data ---
+        let instanceName: string | undefined = undefined;
+        let instanceStatus: AdminViewUser['instanceStatus'] = 'No Configurada';
+        let contactCount = 0;
+        let totalMessages = 0;
+        let botMessages = 0;
+
+        // Fetch instance data
+        const instanceDocRef = doc(db, 'instances', uid);
+        const instanceDocSnap = await getDoc(instanceDocRef);
+        if (instanceDocSnap.exists()) {
+          const instanceData = instanceDocSnap.data();
+          instanceStatus = instanceData.status || 'Pendiente';
+          instanceName = instanceData.name;
+          const instanceId = instanceData.id || instanceData.name;
+
+          // Fetch message counts if instanceId exists
+          if (instanceId) {
+            try {
+              const messagesQuery = query(collection(db, 'chat'), where('instanceId', '==', instanceId));
+              const messagesSnapshot = await getDocs(messagesQuery);
+              totalMessages = messagesSnapshot.size;
+              messagesSnapshot.forEach(msgDoc => {
+                if (msgDoc.data().user_name?.toLowerCase() === 'bot') {
+                  botMessages++;
+                }
+              });
+            } catch (e) {
+              console.error(`Error fetching chat data for instance ${instanceId}`, e);
+            }
           }
+        }
 
-          // Fetch bot config data
-          const botDocRef = doc(db, 'qybot', uid);
-          const botDocSnap = await getDoc(botDocRef);
-          const botConfigured = botDocSnap.exists() && !!botDocSnap.data().promptXml;
+        // Fetch contact count
+        try {
+          const contactsQuery = query(collection(db, 'contacts'), where('userId', '==', uid));
+          const contactsSnapshot = await getDocs(contactsQuery);
+          contactCount = contactsSnapshot.size;
+        } catch (e) {
+          console.error(`Error fetching contact count for user ${uid}`, e);
+        }
 
-          return {
-            uid,
-            fullName: userData.fullName || 'N/A',
-            email: userData.email,
-            createdAt: userData.createdAt,
-            isActive: userData.isActive ?? true,
-            instanceStatus,
-            botConfigured,
-          };
-        })
-      );
+        // Fetch bot config data
+        const botDocRef = doc(db, 'qybot', uid);
+        const botDocSnap = await getDoc(botDocRef);
+        const botConfigured = botDocSnap.exists() && !!botDocSnap.data().promptXml;
 
+        return {
+          uid,
+          fullName: userData.fullName || 'N/A',
+          email: userData.email,
+          createdAt: userData.createdAt,
+          isActive: userData.isActive ?? true,
+          instanceStatus,
+          botConfigured,
+          instanceName,
+          contactCount,
+          totalMessages,
+          botMessages,
+        };
+      });
+      
+      const allUserData = await Promise.all(allUserDataPromises);
       // Filter out the current admin user from the list
       const filteredUsers = allUserData.filter(u => u.uid !== user.uid);
       
@@ -170,9 +210,8 @@ export default function AdminDashboardPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Usuario</TableHead>
-                <TableHead>Fecha de Registro</TableHead>
-                <TableHead>Instancia</TableHead>
-                <TableHead>Bot</TableHead>
+                <TableHead>Estadísticas de la Instancia</TableHead>
+                <TableHead>Estado General</TableHead>
                 <TableHead className="text-right">Cuenta Activa</TableHead>
               </TableRow>
             </TableHeader>
@@ -183,15 +222,31 @@ export default function AdminDashboardPage() {
                     <TableCell>
                       <div className="font-medium">{u.fullName}</div>
                       <div className="text-sm text-muted-foreground">{u.email}</div>
+                      <div className="text-xs text-muted-foreground mt-1">Registrado: {formatDate(u.createdAt)}</div>
                     </TableCell>
-                    <TableCell>{formatDate(u.createdAt)}</TableCell>
-                    <TableCell>{getInstanceStatusBadge(u.instanceStatus)}</TableCell>
                     <TableCell>
-                      {u.botConfigured ? (
-                        <Badge className="bg-blue-500 text-white"><Bot className="h-3 w-3 mr-1"/>Configurado</Badge>
-                      ) : (
-                        <Badge variant="outline">Pendiente</Badge>
-                      )}
+                      <div className="flex flex-col space-y-1">
+                        <div className="font-semibold text-sm">{u.instanceName || 'Sin Nombre'}</div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                           <Users className="h-3 w-3" /> Contactos: <span className="font-bold">{u.contactCount}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                           <MessagesSquare className="h-3 w-3" /> Msjs Totales: <span className="font-bold">{u.totalMessages}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                           <Bot className="h-3 w-3" /> Msjs del Bot: <span className="font-bold">{u.botMessages}</span>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col space-y-2 items-start">
+                          {getInstanceStatusBadge(u.instanceStatus)}
+                          {u.botConfigured ? (
+                          <Badge className="bg-blue-500 text-white"><Bot className="h-3 w-3 mr-1"/>Bot Configurado</Badge>
+                          ) : (
+                          <Badge variant="outline"><Bot className="h-3 w-3 mr-1"/>Bot Pendiente</Badge>
+                          )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                        <Switch
