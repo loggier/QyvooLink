@@ -28,7 +28,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare, Bot, Users, Zap, Shield } from 'lucide-react';
+import { Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare, Bot, Users, Zap, Shield, CreditCard } from 'lucide-react';
 
 interface NavItem {
   href: string;
@@ -46,6 +46,7 @@ const navItems: NavItem[] = [
   { href: '/dashboard/configuration', label: 'Configuración General', icon: Settings },
   { href: '/dashboard/reports', label: 'Reportes', icon: BarChart2 },
   { href: '/admin/dashboard', label: 'Admin Panel', icon: Shield, adminOnly: true },
+  { href: '/admin/subscriptions', label: 'Suscripciones', icon: CreditCard, adminOnly: true },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
