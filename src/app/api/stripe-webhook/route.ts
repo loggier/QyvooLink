@@ -13,6 +13,13 @@ const relevantEvents = new Set([
 ]);
 
 export async function POST(req: Request) {
+  if (!stripe) {
+    return new NextResponse(
+      'Stripe is not configured on the server. Missing STRIPE_SECRET_KEY.',
+      { status: 500 }
+    );
+  }
+  
   const body = await req.text();
   const sig = headers().get('Stripe-Signature');
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;

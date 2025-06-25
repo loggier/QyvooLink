@@ -5,6 +5,13 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
+  if (!stripe) {
+    return new NextResponse(
+      'Stripe is not configured on the server. Missing STRIPE_SECRET_KEY.',
+      { status: 500 }
+    );
+  }
+  
   try {
     const { userId, priceId, planId } = await req.json();
 
