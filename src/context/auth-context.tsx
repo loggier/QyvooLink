@@ -15,7 +15,7 @@ import {
   reauthenticateWithCredential,
   sendPasswordResetEmail,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, Timestamp } from 'firebase/firestore'; // Import Timestamp
+import { doc, setDoc, getDoc, Timestamp, collection, query, where, getDocs } from 'firebase/firestore'; // Import Timestamp
 import type { RegisterFormData } from '@/components/auth/register-form';
 import type { LoginFormData } from '@/components/auth/login-form';
 import { useRouter } from 'next/navigation';
@@ -34,6 +34,7 @@ interface UserProfile {
   role?: 'admin' | 'user'; // User role
   createdAt?: Timestamp; // Registration date
   isActive?: boolean; // Account status
+  subscriptionStatus?: 'active' | 'trialing' | 'canceled' | 'inactive';
 }
 
 interface AuthContextType {
@@ -58,43 +59,46 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (firebaseUser) {
         const userDocRef = doc(db, 'users', firebaseUser.uid);
         const userDocSnap = await getDoc(userDocRef);
+        
+        let dbData: any = {};
         if (userDocSnap.exists()) {
-          const dbData = userDocSnap.data();
-          
+          dbData = userDocSnap.data();
           if (dbData.isActive === false) {
              await firebaseSignOut(auth);
              setUser(null);
              setLoading(false);
-             // Optionally, show a toast message here before redirecting.
              router.push('/login?error=account-disabled');
              return;
           }
-          
-          setUser({ 
-            uid: firebaseUser.uid, 
-            email: firebaseUser.email,
-            fullName: dbData.fullName,
-            company: dbData.company,
-            phone: dbData.phone,
-            username: dbData.username,
-            country: dbData.country,
-            city: dbData.city,
-            sector: dbData.sector,
-            employeeCount: dbData.employeeCount,
-            role: dbData.role || 'user', // Set role, default to 'user'
-            createdAt: dbData.createdAt,
-            isActive: dbData.isActive ?? true,
-           } as UserProfile);
-        } else {
-          // Basic profile if not found in Firestore
-          setUser({ 
-            uid: firebaseUser.uid, 
-            email: firebaseUser.email,
-            username: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || undefined,
-            role: 'user',
-            isActive: true,
-          });
         }
+        
+        // Fetch subscription status
+        const subscriptionsRef = collection(db, 'users', firebaseUser.uid, 'subscriptions');
+        const q = query(subscriptionsRef, where('status', 'in', ['trialing', 'active']));
+        const subscriptionSnap = await getDocs(q);
+        
+        let subscriptionStatus: UserProfile['subscriptionStatus'] = 'inactive';
+        if (!subscriptionSnap.empty) {
+            subscriptionStatus = subscriptionSnap.docs[0].data().status as UserProfile['subscriptionStatus'];
+        }
+
+        setUser({ 
+          uid: firebaseUser.uid, 
+          email: firebaseUser.email,
+          fullName: dbData.fullName,
+          company: dbData.company,
+          phone: dbData.phone,
+          username: dbData.username,
+          country: dbData.country,
+          city: dbData.city,
+          sector: dbData.sector,
+          employeeCount: dbData.employeeCount,
+          role: dbData.role || 'user',
+          createdAt: dbData.createdAt,
+          isActive: dbData.isActive ?? true,
+          subscriptionStatus: subscriptionStatus,
+         } as UserProfile);
+
       } else {
         setUser(null);
       }
@@ -121,17 +125,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           city: '',
           sector: '',
           employeeCount: '',
-          role: 'user', // Default role for new users
-          createdAt: serverTimestamp(), // Set registration timestamp
-          isActive: true, // Default account status
+          role: 'user', 
+          createdAt: serverTimestamp(),
+          isActive: true,
         };
         await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
         
-        // We need to refetch the data to get the server-generated timestamp
-        const newUserDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        setUser(newUserDoc.data() as UserProfile);
-
-        router.push('/dashboard');
+        // onAuthStateChanged will handle the user state update.
+        // We redirect to the subscription page immediately.
+        router.push('/subscribe'); 
         return userCredential;
       }
     } catch (error: any) {
@@ -143,8 +145,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         errorMessage = "La contraseña es demasiado débil. Por favor, elige una más segura.";
       } else if (error.code === 'auth/invalid-email') {
         errorMessage = "El formato del correo electrónico no es válido.";
-      } else if (error.code === 'auth/configuration-not-found') {
-        errorMessage = "Error de configuración de autenticación. Contacta al administrador.";
       }
       throw new Error(errorMessage);
     } finally {
@@ -155,61 +155,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const loginUser = async (data: LoginFormData) => {
     setLoading(true);
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
-      const firebaseUser = userCredential.user;
-      if (firebaseUser) {
-        const userDocRef = doc(db, 'users', firebaseUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          const dbData = userDocSnap.data();
-          if (dbData.isActive === false) {
-             await firebaseSignOut(auth);
-             throw new Error("Tu cuenta ha sido desactivada por un administrador.");
-          }
-          const userProfile: UserProfile = { 
-            uid: firebaseUser.uid, 
-            email: firebaseUser.email,
-            fullName: dbData.fullName,
-            company: dbData.company,
-            phone: dbData.phone,
-            username: dbData.username,
-            country: dbData.country,
-            city: dbData.city,
-            sector: dbData.sector,
-            employeeCount: dbData.employeeCount,
-            role: dbData.role || 'user',
-            createdAt: dbData.createdAt,
-            isActive: dbData.isActive ?? true,
-          };
-          setUser(userProfile);
-          if (userProfile.role === 'admin') {
-            router.push('/admin/dashboard');
-          } else {
-            router.push('/dashboard');
-          }
-        } else {
-           const basicProfile: UserProfile = { 
-            uid: firebaseUser.uid, 
-            email: firebaseUser.email,
-            username: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || undefined,
-            role: 'user',
-            isActive: true,
-          };
-           setUser(basicProfile);
-           router.push('/dashboard');
+        const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
+        const firebaseUser = userCredential.user;
+
+        // The onAuthStateChanged listener will handle redirecting and setting user state.
+        // We just need to check for active status here as a pre-check.
+        if (firebaseUser) {
+            const userDocRef = doc(db, 'users', firebaseUser.uid);
+            const userDocSnap = await getDoc(userDocRef);
+            if (userDocSnap.exists() && userDocSnap.data().isActive === false) {
+                await firebaseSignOut(auth);
+                throw new Error("Tu cuenta ha sido desactivada por un administrador.");
+            }
         }
+        // Redirect will be handled by onAuthStateChanged and the layout component logic
         return userCredential;
-      }
     } catch (error: any) {
-      console.error("Error de inicio de sesión:", error);
-      let errorMessage = error.message || "Correo electrónico o contraseña inválidos. Por favor, inténtalo de nuevo.";
-       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        errorMessage = "Correo electrónico o contraseña incorrectos.";
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = "El formato del correo electrónico no es válido.";
-      } else if (error.code === 'auth/configuration-not-found') {
-        errorMessage = "Error de configuración de autenticación. Contacta al administrador.";
+      console.error("Error de inicio de sesión:", error.code, error.message);
+      let errorMessage = "El correo electrónico o la contraseña son incorrectos. Por favor, inténtalo de nuevo.";
+
+      if (error.message.includes("Tu cuenta ha sido desactivada")) {
+          errorMessage = error.message;
+      } else if (error.code === 'auth/too-many-requests') {
+          errorMessage = "El acceso a esta cuenta ha sido temporalmente deshabilitado debido a muchos intentos fallidos de inicio de sesión. Puedes restaurarlo inmediatamente restableciendo tu contraseña o puedes intentarlo de nuevo más tarde.";
+      } else if (error.code === 'auth/network-request-failed') {
+          errorMessage = "Error de red. Por favor, comprueba tu conexión a internet e inténtalo de nuevo.";
       }
+      // For auth/user-not-found, auth/wrong-password, and auth/invalid-credential, we use the generic message to prevent user enumeration.
+      
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
@@ -261,8 +234,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       let errorMessage = "Ocurrió un error al enviar el correo de restablecimiento.";
       if (error.code === 'auth/invalid-email') {
         errorMessage = "El formato del correo electrónico no es válido.";
-      } else if (error.code === 'auth/configuration-not-found') {
-        errorMessage = "Error de configuración de autenticación. Contacta al administrador.";
       }
       throw new Error(errorMessage);
     }
