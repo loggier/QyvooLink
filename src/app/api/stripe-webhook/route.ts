@@ -1,7 +1,7 @@
 
 import { stripe } from '@/lib/stripe';
 import { db } from '@/lib/firebase';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
@@ -11,6 +11,21 @@ const relevantEvents = new Set([
   'customer.subscription.updated',
   'customer.subscription.deleted',
 ]);
+
+// Helper function to create a consistent subscription data object for Firestore
+const toSubscriptionModel = (subscription: Stripe.Subscription, userId: string, planId?: string) => {
+    return {
+        id: subscription.id,
+        userId: userId,
+        status: subscription.status,
+        planId: planId || subscription.metadata.planId, // Use provided planId or from subscription metadata
+        priceId: subscription.items.data[0].price.id,
+        current_period_end: new Date(subscription.current_period_end * 1000),
+        created: new Date(subscription.created * 1000),
+        cancel_at_period_end: subscription.cancel_at_period_end,
+        stripeCustomerId: subscription.customer.toString(),
+    };
+};
 
 export async function POST(req: Request) {
   if (!stripe) {
@@ -51,26 +66,15 @@ export async function POST(req: Request) {
         console.log('Processing checkout.session.completed...');
         const session = event.data.object as Stripe.Checkout.Session;
         
-        console.log('Session metadata:', session.metadata);
-        if (!session.metadata?.firebaseUID || !session.subscription || !session.customer) {
+        if (!session.metadata?.firebaseUID || !session.subscription) {
           console.error('Missing metadata in checkout session.', { metadata: session.metadata });
           throw new Error('Missing metadata in checkout session.');
         }
         
-        console.log(`Retrieving subscription ${session.subscription.toString()} from Stripe...`);
         const subscription = await stripe.subscriptions.retrieve(session.subscription.toString());
         
-        const subscriptionData = {
-          id: subscription.id,
-          userId: session.metadata.firebaseUID,
-          status: subscription.status,
-          planId: session.metadata.planId,
-          priceId: session.metadata.priceId,
-          current_period_end: new Date(subscription.current_period_end * 1000),
-          created: new Date(subscription.created * 1000),
-          cancel_at_period_end: subscription.cancel_at_period_end,
-          stripeCustomerId: session.customer.toString(),
-        };
+        // Use the helper to create the data object
+        const subscriptionData = toSubscriptionModel(subscription, session.metadata.firebaseUID, session.metadata.planId);
         
         const subscriptionRef = doc(db, 'users', session.metadata.firebaseUID, 'subscriptions', subscription.id);
         console.log(`Attempting to write subscription data to Firestore at path: ${subscriptionRef.path}`);
@@ -78,7 +82,7 @@ export async function POST(req: Request) {
 
         // Also update the main user doc with the stripe customer ID if it's not there
         const userRef = doc(db, 'users', session.metadata.firebaseUID);
-        await setDoc(userRef, { stripeCustomerId: session.customer.toString() }, { merge: true });
+        await setDoc(userRef, { stripeCustomerId: subscription.customer.toString() }, { merge: true });
 
         console.log(`Successfully created subscription for user ${session.metadata.firebaseUID}`);
         break;
@@ -88,23 +92,18 @@ export async function POST(req: Request) {
       case 'customer.subscription.deleted': {
         console.log(`Processing ${event.type}...`);
         const subscription = event.data.object as Stripe.Subscription;
-        const customer = await stripe.customers.retrieve(subscription.customer.toString()) as Stripe.Customer;
-        const userId = customer.metadata.firebaseUID;
+        
+        // Get user ID from subscription metadata (more reliable)
+        const userId = subscription.metadata.firebaseUID;
         
         if (!userId) {
-          console.error('User ID not found in customer metadata for subscription update/delete.');
-          throw new Error('User ID not found in customer metadata.');
+          console.error('User ID (firebaseUID) not found in subscription metadata.');
+          throw new Error('User ID not found in subscription metadata.');
         }
-
-        const subscriptionData = {
-          id: subscription.id,
-          userId: userId,
-          status: subscription.status,
-          priceId: subscription.items.data[0].price.id,
-          current_period_end: new Date(subscription.current_period_end * 1000),
-          cancel_at_period_end: subscription.cancel_at_period_end,
-        };
-
+        
+        // Use the helper to create the data object, it will get planId from metadata
+        const subscriptionData = toSubscriptionModel(subscription, userId);
+        
         const subscriptionRef = doc(db, 'users', userId, 'subscriptions', subscription.id);
         console.log(`Attempting to update/delete subscription data at path: ${subscriptionRef.path}`);
         await setDoc(subscriptionRef, subscriptionData, { merge: true });

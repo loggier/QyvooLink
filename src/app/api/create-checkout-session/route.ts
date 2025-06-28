@@ -56,6 +56,14 @@ export async function POST(req: Request) {
       customer: stripeCustomerId,
       success_url: `${origin}/dashboard/profile?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/dashboard/profile`,
+      // Attach metadata to the subscription object itself
+      subscription_data: {
+        metadata: {
+          firebaseUID: userId,
+          planId: planId,
+        }
+      },
+      // Keep metadata on the session for the webhook's checkout.session.completed event
       metadata: {
         firebaseUID: userId,
         planId: planId,
