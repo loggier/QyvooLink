@@ -3,6 +3,7 @@ import { stripe } from '@/lib/stripe';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { NextResponse } from 'next/server';
+import type Stripe from 'stripe';
 
 export async function POST(req: Request) {
   if (!stripe) {
@@ -19,6 +20,7 @@ export async function POST(req: Request) {
       return new NextResponse('Missing required parameters', { status: 400 });
     }
 
+    // --- 1. Fetch User Data ---
     const userDocRef = doc(db, 'users', userId);
     const userDocSnap = await getDoc(userDocRef);
 
@@ -43,10 +45,21 @@ export async function POST(req: Request) {
       await setDoc(userDocRef, { stripeCustomerId }, { merge: true });
     }
     
+    // --- 2. Fetch Plan Data to check for trial ---
+    const planDocRef = doc(db, 'subscriptions', planId);
+    const planDocSnap = await getDoc(planDocRef);
+
+    if (!planDocSnap.exists()) {
+        return new NextResponse('Plan not found', { status: 404 });
+    }
+    const planData = planDocSnap.data();
+    const isTrial = planData.isTrial === true;
+    const trialDays = planData.trialDays > 0 ? planData.trialDays : null;
+
     const origin = req.headers.get('origin') || 'http://localhost:3000';
 
-    // Create a Stripe Checkout session
-    const session = await stripe.checkout.sessions.create({
+    // --- 3. Build the session parameters ---
+    const sessionParams: Stripe.Checkout.SessionCreateParams = {
       payment_method_types: ['card'],
       line_items: [{
         price: priceId,
@@ -56,20 +69,28 @@ export async function POST(req: Request) {
       customer: stripeCustomerId,
       success_url: `${origin}/dashboard/profile?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/dashboard/profile`,
-      // Attach metadata to the subscription object itself
       subscription_data: {
         metadata: {
           firebaseUID: userId,
           planId: planId,
-        }
+        },
       },
-      // Keep metadata on the session for the webhook's checkout.session.completed event
       metadata: {
         firebaseUID: userId,
         planId: planId,
         priceId: priceId,
       },
-    });
+    };
+    
+    // Add trial period if applicable
+    if (isTrial && trialDays) {
+        if(sessionParams.subscription_data) {
+            sessionParams.subscription_data.trial_period_days = trialDays;
+        }
+    }
+
+    // --- 4. Create Stripe Checkout session ---
+    const session = await stripe.checkout.sessions.create(sessionParams);
 
     return NextResponse.json({ sessionId: session.id });
 
