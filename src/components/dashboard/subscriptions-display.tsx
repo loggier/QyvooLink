@@ -13,7 +13,7 @@ import { Switch } from '../ui/switch';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
 import { loadStripe } from '@stripe/stripe-js';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
@@ -187,13 +187,18 @@ export default function SubscriptionManager() {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <p className="text-sm">
-                    {subscription.status === 'trialing' && 'Tu período de prueba termina y tu plan se renovará el '}
-                    {subscription.status === 'active' && 'Tu plan se renovará el '}
-                    <span className="font-semibold">{format(subscription.current_period_end.toDate(), "dd 'de' MMMM 'de' yyyy", { locale: es })}</span>.
-                </p>
+                <div className="space-y-1">
+                    <p className="text-sm">
+                        {subscription.status === 'trialing' && 'Tu período de prueba termina y tu plan se renovará el '}
+                        {subscription.status === 'active' && 'Tu plan se renovará el '}
+                        <span className="font-semibold">{format(subscription.current_period_end.toDate(), "dd 'de' MMMM 'de' yyyy", { locale: es })}</span>.
+                    </p>
+                     <p className="text-xs text-muted-foreground">
+                        (Renovación en {formatDistanceToNow(subscription.current_period_end.toDate(), { locale: es })})
+                    </p>
+                </div>
                 {subscription.cancel_at_period_end && (
-                    <Badge variant="destructive" className="mt-2">Cancelación programada para el final del período.</Badge>
+                    <Badge variant="destructive" className="mt-2 block w-fit">Cancelación programada.</Badge>
                 )}
             </CardContent>
             <CardFooter>
