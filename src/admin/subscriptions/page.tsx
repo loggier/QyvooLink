@@ -19,6 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, PlusCircle, Edit, Trash2, CreditCard, DollarSign } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface SubscriptionPlan {
   id: string;
@@ -31,6 +32,14 @@ interface SubscriptionPlan {
   isActive: boolean;
   monthlyPriceId?: string; // Stripe Price ID for monthly plan
   yearlyPriceId?: string;  // Stripe Price ID for yearly plan
+}
+
+interface StripePrice {
+  id: string;
+  unit_amount: number;
+  product: {
+    name: string;
+  };
 }
 
 const initialFormState: Omit<SubscriptionPlan, 'id'> = {
@@ -58,6 +67,9 @@ export default function SubscriptionsPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [planToDelete, setPlanToDelete] = useState<SubscriptionPlan | null>(null);
 
+  const [stripePrices, setStripePrices] = useState<{ monthly: StripePrice[], yearly: StripePrice[] }>({ monthly: [], yearly: [] });
+  const [isLoadingPrices, setIsLoadingPrices] = useState(true);
+
   const fetchPlans = useCallback(async () => {
     if (!user) return;
     setIsLoading(true);
@@ -80,6 +92,29 @@ export default function SubscriptionsPage() {
   useEffect(() => {
     fetchPlans();
   }, [fetchPlans]);
+
+  useEffect(() => {
+    const fetchStripePrices = async () => {
+      if (!user) return;
+      setIsLoadingPrices(true);
+      try {
+        const response = await fetch('/api/stripe-prices');
+        if (!response.ok) {
+          throw new Error('Failed to fetch Stripe prices from API');
+        }
+        const data = await response.json();
+        setStripePrices(data);
+      } catch (error) {
+        console.error("Error fetching Stripe prices:", error);
+        toast({ variant: "destructive", title: "Error de Stripe", description: "No se pudieron cargar los precios. Revisa la consola para más detalles." });
+      } finally {
+        setIsLoadingPrices(false);
+      }
+    };
+
+    fetchStripePrices();
+  }, [user, toast]);
+
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -247,7 +282,7 @@ export default function SubscriptionsPage() {
           <DialogHeader>
             <DialogTitle>{editingPlan ? 'Editar Plan de Suscripción' : 'Crear Nuevo Plan de Suscripción'}</DialogTitle>
             <DialogDescription>
-              Define los detalles, precios y características del plan. Asegúrate de crear los precios en tu dashboard de Stripe primero.
+              Define los detalles, precios y características del plan. Selecciona los precios desde tu dashboard de Stripe.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmitForm}>
@@ -259,12 +294,66 @@ export default function SubscriptionsPage() {
                 </div>
                 
                 <div>
-                  <Label htmlFor="monthlyPriceId">ID del Precio Mensual de Stripe</Label>
-                  <Input id="monthlyPriceId" name="monthlyPriceId" value={currentFormData.monthlyPriceId || ''} onChange={handleInputChange} placeholder="price_..." />
+                    <Label htmlFor="monthlyPriceId">Precio Mensual de Stripe</Label>
+                    <Select
+                        name="monthlyPriceId"
+                        value={currentFormData.monthlyPriceId || ''}
+                        onValueChange={(value) => {
+                            const selectedPrice = stripePrices.monthly.find(p => p.id === value);
+                            setCurrentFormData(prev => ({
+                                ...prev,
+                                monthlyPriceId: value,
+                                priceMonthly: selectedPrice ? (selectedPrice.unit_amount || 0) / 100 : prev.priceMonthly,
+                            }));
+                        }}
+                        disabled={isLoadingPrices}
+                    >
+                        <SelectTrigger id="monthlyPriceId">
+                            <SelectValue placeholder={isLoadingPrices ? "Cargando precios..." : "Seleccionar precio mensual"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {stripePrices.monthly.length > 0 ? (
+                                stripePrices.monthly.map(price => (
+                                    <SelectItem key={price.id} value={price.id}>
+                                        {price.product.name} - ${(price.unit_amount / 100).toFixed(2)}/mes
+                                    </SelectItem>
+                                ))
+                            ) : (
+                                <SelectItem value="none" disabled>No hay precios mensuales activos en Stripe</SelectItem>
+                            )}
+                        </SelectContent>
+                    </Select>
                 </div>
                  <div>
-                  <Label htmlFor="yearlyPriceId">ID del Precio Anual de Stripe</Label>
-                  <Input id="yearlyPriceId" name="yearlyPriceId" value={currentFormData.yearlyPriceId || ''} onChange={handleInputChange} placeholder="price_..." />
+                  <Label htmlFor="yearlyPriceId">Precio Anual de Stripe</Label>
+                    <Select
+                        name="yearlyPriceId"
+                        value={currentFormData.yearlyPriceId || ''}
+                        onValueChange={(value) => {
+                            const selectedPrice = stripePrices.yearly.find(p => p.id === value);
+                            setCurrentFormData(prev => ({
+                                ...prev,
+                                yearlyPriceId: value,
+                                priceYearly: selectedPrice ? (selectedPrice.unit_amount || 0) / 100 : prev.priceYearly,
+                            }));
+                        }}
+                        disabled={isLoadingPrices}
+                    >
+                        <SelectTrigger id="yearlyPriceId">
+                            <SelectValue placeholder={isLoadingPrices ? "Cargando precios..." : "Seleccionar precio anual"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {stripePrices.yearly.length > 0 ? (
+                                stripePrices.yearly.map(price => (
+                                    <SelectItem key={price.id} value={price.id}>
+                                        {price.product.name} - ${(price.unit_amount / 100).toFixed(2)}/año
+                                    </SelectItem>
+                                ))
+                            ) : (
+                                <SelectItem value="none" disabled>No hay precios anuales activos en Stripe</SelectItem>
+                            )}
+                        </SelectContent>
+                    </Select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
