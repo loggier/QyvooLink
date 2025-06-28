@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, getDoc, updateDoc, Timestamp, query, where } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, updateDoc, Timestamp, query, where, collectionGroup, limit } from 'firebase/firestore';
 import {
   Dialog,
   DialogContent,
@@ -20,7 +20,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Shield, Wifi, Bot, Users, MessagesSquare, CalendarDays } from 'lucide-react';
+import { Loader2, Shield, Wifi, Bot, Users, MessagesSquare, CalendarDays, TrendingUp, ShieldCheck, Clock, XCircle } from 'lucide-react';
+import { differenceInDays } from 'date-fns';
+
+interface SubscriptionDetails {
+  planName: string;
+  status: 'active' | 'trialing' | 'canceled' | string;
+  renewsOn: Date;
+  isTrial: boolean;
+  trialEndsInDays?: number;
+  willCancel: boolean;
+}
 
 interface AdminViewUser {
   uid: string;
@@ -34,6 +44,7 @@ interface AdminViewUser {
   contactCount: number;
   totalMessages: number;
   botMessages: number;
+  subscription?: SubscriptionDetails | null;
 }
 
 interface DashboardStats {
@@ -41,6 +52,8 @@ interface DashboardStats {
   activeInstances: number;
   totalMessages: number;
   configuredBots: number;
+  activeSubscriptions: number;
+  estimatedMRR: number;
 }
 
 export default function AdminDashboardPage() {
@@ -52,7 +65,7 @@ export default function AdminDashboardPage() {
   
   const [isDateDialogOpen, setIsDateDialogOpen] = useState(false);
   const [selectedUserForDateChange, setSelectedUserForDateChange] = useState<AdminViewUser | null>(null);
-  const [newRegistrationDate, setNewRegistrationDate] = useState<Date | undefined>(undefined);
+  const [newRegistrationDate, setNewRegistrationDate] = useState<Date | undefined>(new Date());
   const [isSavingDate, setIsSavingDate] = useState(false);
 
   const fetchAllUsersData = useCallback(async () => {
@@ -63,57 +76,79 @@ export default function AdminDashboardPage() {
 
     setIsLoading(true);
     try {
-      const usersQuerySnapshot = await getDocs(collection(db, 'users'));
+      // --- Fetch global data once ---
+      const [usersQuerySnapshot, plansSnapshot, allSubscriptionsSnapshot] = await Promise.all([
+        getDocs(collection(db, 'users')),
+        getDocs(collection(db, 'subscriptions')),
+        getDocs(query(collectionGroup(db, 'subscriptions'), where('status', 'in', ['active', 'trialing'])))
+      ]);
+
+      const plansMap = new Map<string, any>();
+      plansSnapshot.forEach(doc => plansMap.set(doc.id, { ...doc.data(), id: doc.id }));
+
+      // --- Calculate global stats ---
+      let estimatedMRR = 0;
+      allSubscriptionsSnapshot.forEach(subDoc => {
+          const sub = subDoc.data();
+          const plan = plansMap.get(sub.planId);
+          if (plan) {
+              if (plan.monthlyPriceId === sub.priceId) {
+                  estimatedMRR += plan.priceMonthly || 0;
+              } else if (plan.yearlyPriceId === sub.priceId) {
+                  estimatedMRR += (plan.priceYearly || 0) / 12;
+              }
+          }
+      });
+      
       const allUserDataPromises = usersQuerySnapshot.docs.map(async (userDoc) => {
         const userData = userDoc.data();
         const uid = userDoc.id;
 
-        // --- Fetch Additional Data ---
-        let instanceName: string | undefined = undefined;
+        // Fetch user-specific data
+        const [instanceDocSnap, botDocSnap, contactsSnapshot, userSubscriptionsSnapshot] = await Promise.all([
+          getDoc(doc(db, 'instances', uid)),
+          getDoc(doc(db, 'qybot', uid)),
+          getDocs(query(collection(db, 'contacts'), where('userId', '==', uid))),
+          getDocs(query(collection(db, 'users', uid, 'subscriptions'), where('status', 'in', ['active', 'trialing']), limit(1)))
+        ]);
+
         let instanceStatus: AdminViewUser['instanceStatus'] = 'No Configurada';
-        let contactCount = 0;
+        let instanceName: string | undefined;
         let totalMessages = 0;
         let botMessages = 0;
 
-        // Fetch instance data
-        const instanceDocRef = doc(db, 'instances', uid);
-        const instanceDocSnap = await getDoc(instanceDocRef);
         if (instanceDocSnap.exists()) {
           const instanceData = instanceDocSnap.data();
           instanceStatus = instanceData.status || 'Pendiente';
           instanceName = instanceData.name;
           const instanceId = instanceData.id || instanceData.name;
-
-          // Fetch message counts if instanceId exists
           if (instanceId) {
-            try {
-              const messagesQuery = query(collection(db, 'chat'), where('instanceId', '==', instanceId));
-              const messagesSnapshot = await getDocs(messagesQuery);
-              totalMessages = messagesSnapshot.size;
-              messagesSnapshot.forEach(msgDoc => {
-                if (msgDoc.data().user_name?.toLowerCase() === 'bot') {
-                  botMessages++;
-                }
-              });
-            } catch (e) {
-              console.error(`Error fetching chat data for instance ${instanceId}`, e);
-            }
+            const messagesSnapshot = await getDocs(query(collection(db, 'chat'), where('instanceId', '==', instanceId)));
+            totalMessages = messagesSnapshot.size;
+            botMessages = messagesSnapshot.docs.filter(msgDoc => msgDoc.data().user_name?.toLowerCase() === 'bot').length;
           }
         }
-
-        // Fetch contact count
-        try {
-          const contactsQuery = query(collection(db, 'contacts'), where('userId', '==', uid));
-          const contactsSnapshot = await getDocs(contactsQuery);
-          contactCount = contactsSnapshot.size;
-        } catch (e) {
-          console.error(`Error fetching contact count for user ${uid}`, e);
+        
+        let subscriptionData: SubscriptionDetails | null = null;
+        if (!userSubscriptionsSnapshot.empty) {
+            const sub = userSubscriptionsSnapshot.docs[0].data();
+            const plan = plansMap.get(sub.planId);
+            if (plan) {
+                const renewsOn = sub.current_period_end.toDate();
+                let trialEndsInDays;
+                if (sub.status === 'trialing') {
+                    trialEndsInDays = differenceInDays(renewsOn, new Date());
+                }
+                subscriptionData = {
+                    planName: plan.name,
+                    status: sub.status,
+                    renewsOn: renewsOn,
+                    isTrial: sub.status === 'trialing',
+                    trialEndsInDays: trialEndsInDays,
+                    willCancel: sub.cancel_at_period_end,
+                };
+            }
         }
-
-        // Fetch bot config data
-        const botDocRef = doc(db, 'qybot', uid);
-        const botDocSnap = await getDoc(botDocRef);
-        const botConfigured = botDocSnap.exists() && !!botDocSnap.data().promptXml;
 
         return {
           uid,
@@ -122,31 +157,31 @@ export default function AdminDashboardPage() {
           createdAt: userData.createdAt,
           isActive: userData.isActive ?? true,
           instanceStatus,
-          botConfigured,
+          botConfigured: botDocSnap.exists() && !!botDocSnap.data().promptXml,
           instanceName,
-          contactCount,
+          contactCount: contactsSnapshot.size,
           totalMessages,
           botMessages,
+          subscription: subscriptionData,
         };
       });
       
       const allUserData = await Promise.all(allUserDataPromises);
-      // Filter out the current admin user from the list
       const filteredUsers = allUserData.filter(u => u.uid !== user.uid);
       
       setUsers(filteredUsers);
       
-      // Calculate aggregate stats
-      const totalUsers = filteredUsers.length;
-      const activeInstances = filteredUsers.filter(u => u.instanceStatus === 'Conectado').length;
-      const totalMessages = filteredUsers.reduce((sum, u) => sum + u.totalMessages, 0);
       const configuredBots = filteredUsers.filter(u => u.botConfigured).length;
+      const activeInstances = filteredUsers.filter(u => u.instanceStatus === 'Conectado').length;
+      const totalPlatformMessages = filteredUsers.reduce((sum, u) => sum + u.totalMessages, 0);
 
       setStats({
-        totalUsers,
+        totalUsers: filteredUsers.length,
         activeInstances,
-        totalMessages,
+        totalMessages: totalPlatformMessages,
         configuredBots,
+        activeSubscriptions: allSubscriptionsSnapshot.size,
+        estimatedMRR: estimatedMRR,
       });
 
     } catch (error) {
@@ -169,7 +204,6 @@ export default function AdminDashboardPage() {
     const userToUpdate = users.find(u => u.uid === uid);
     if (!userToUpdate) return;
 
-    // Optimistically update the UI
     setUsers(prevUsers =>
       prevUsers.map(u =>
         u.uid === uid ? { ...u, isActive: !currentStatus } : u
@@ -177,14 +211,12 @@ export default function AdminDashboardPage() {
     );
 
     try {
-      const userDocRef = doc(db, 'users', uid);
-      await updateDoc(userDocRef, { isActive: !currentStatus });
+      await updateDoc(doc(db, 'users', uid), { isActive: !currentStatus });
       toast({
         title: "Estado Actualizado",
         description: `La cuenta de ${userToUpdate.email} ha sido ${!currentStatus ? 'activada' : 'desactivada'}.`,
       });
     } catch (error) {
-      // Revert UI change on error
       setUsers(prevUsers =>
         prevUsers.map(u =>
           u.uid === uid ? { ...u, isActive: currentStatus } : u
@@ -198,7 +230,7 @@ export default function AdminDashboardPage() {
       });
     }
   };
-
+  
   const handleOpenDateDialog = (userToEdit: AdminViewUser) => {
     setSelectedUserForDateChange(userToEdit);
     setNewRegistrationDate(userToEdit.createdAt ? userToEdit.createdAt.toDate() : new Date());
@@ -212,8 +244,7 @@ export default function AdminDashboardPage() {
     }
     setIsSavingDate(true);
     try {
-      const userDocRef = doc(db, 'users', selectedUserForDateChange.uid);
-      await updateDoc(userDocRef, {
+      await updateDoc(doc(db, 'users', selectedUserForDateChange.uid), {
         createdAt: Timestamp.fromDate(newRegistrationDate),
       });
       toast({
@@ -221,7 +252,7 @@ export default function AdminDashboardPage() {
         description: `La fecha de registro de ${selectedUserForDateChange.email} ha sido actualizada.`,
       });
       setIsDateDialogOpen(false);
-      fetchAllUsersData(); // Refresh data in the table
+      fetchAllUsersData(); 
     } catch (error) {
       console.error("Error updating registration date:", error);
       toast({ variant: "destructive", title: "Error", description: "No se pudo actualizar la fecha de registro." });
@@ -230,9 +261,10 @@ export default function AdminDashboardPage() {
     }
   };
   
-  const formatDate = (timestamp?: Timestamp) => {
-    if (!timestamp) return 'N/A';
-    return timestamp.toDate().toLocaleDateString('es-ES', {
+  const formatDate = (date?: Date | Timestamp) => {
+    if (!date) return 'N/A';
+    const dateObj = date instanceof Timestamp ? date.toDate() : date;
+    return dateObj.toLocaleDateString('es-ES', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -271,8 +303,7 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total de Usuarios</CardTitle>
@@ -280,7 +311,6 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats?.totalUsers ?? <Loader2 className="h-6 w-6 animate-spin" />}</div>
-            <p className="text-xs text-muted-foreground">Cuentas registradas en la plataforma</p>
           </CardContent>
         </Card>
         <Card>
@@ -290,7 +320,6 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats?.activeInstances ?? <Loader2 className="h-6 w-6 animate-spin" />}</div>
-            <p className="text-xs text-muted-foreground">Instancias en estado "Conectado"</p>
           </CardContent>
         </Card>
         <Card>
@@ -300,7 +329,6 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats?.totalMessages.toLocaleString('es-ES') ?? <Loader2 className="h-6 w-6 animate-spin" />}</div>
-            <p className="text-xs text-muted-foreground">Procesados en toda la plataforma</p>
           </CardContent>
         </Card>
         <Card>
@@ -310,7 +338,24 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats?.configuredBots ?? <Loader2 className="h-6 w-6 animate-spin" />}</div>
-            <p className="text-xs text-muted-foreground">Usuarios con un prompt de bot activo</p>
+          </CardContent>
+        </Card>
+         <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Suscripciones Activas</CardTitle>
+            <ShieldCheck className="h-5 w-5 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.activeSubscriptions ?? <Loader2 className="h-6 w-6 animate-spin" />}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">MRR Estimado</CardTitle>
+            <TrendingUp className="h-5 w-5 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${stats?.estimatedMRR.toFixed(2) ?? <Loader2 className="h-6 w-6 animate-spin" />}</div>
           </CardContent>
         </Card>
       </div>
@@ -327,8 +372,9 @@ export default function AdminDashboardPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Usuario</TableHead>
-                <TableHead>Estadísticas de la Instancia</TableHead>
+                <TableHead>Suscripción</TableHead>
                 <TableHead>Estado General</TableHead>
+                <TableHead>Estadísticas</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -341,19 +387,22 @@ export default function AdminDashboardPage() {
                       <div className="text-sm text-muted-foreground">{u.email}</div>
                       <div className="text-xs text-muted-foreground mt-1">Registrado: {formatDate(u.createdAt)}</div>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col space-y-1">
-                        <div className="font-semibold text-sm">{u.instanceName || 'Sin Nombre'}</div>
-                        <div className="text-xs text-muted-foreground flex items-center gap-1">
-                           <Users className="h-3 w-3" /> Contactos: <span className="font-bold">{u.contactCount}</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground flex items-center gap-1">
-                           <MessagesSquare className="h-3 w-3" /> Msjs Totales: <span className="font-bold">{u.totalMessages}</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground flex items-center gap-1">
-                           <Bot className="h-3 w-3" /> Msjs del Bot: <span className="font-bold">{u.botMessages}</span>
-                        </div>
-                      </div>
+                     <TableCell>
+                        {u.subscription ? (
+                            <div className="flex flex-col space-y-1 text-xs">
+                                <Badge className={`w-fit ${u.subscription.status === 'active' ? 'bg-green-500' : 'bg-yellow-400'} text-white`}>
+                                   {u.subscription.planName}
+                                </Badge>
+                                {u.subscription.isTrial ? (
+                                    <span className="flex items-center text-yellow-600"><Clock className="h-3 w-3 mr-1"/>Prueba finaliza en {u.subscription.trialEndsInDays} días</span>
+                                ) : (
+                                    <span className="flex items-center text-muted-foreground"><CalendarDays className="h-3 w-3 mr-1"/>Renueva el {formatDate(u.subscription.renewsOn)}</span>
+                                )}
+                                {u.subscription.willCancel && <Badge variant="destructive" className="w-fit"><XCircle className="h-3 w-3 mr-1"/>Cancelación programada</Badge>}
+                            </div>
+                        ) : (
+                            <Badge variant="outline">Sin Suscripción</Badge>
+                        )}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col space-y-2 items-start">
@@ -363,6 +412,13 @@ export default function AdminDashboardPage() {
                           ) : (
                           <Badge variant="outline"><Bot className="h-3 w-3 mr-1"/>Bot Pendiente</Badge>
                           )}
+                      </div>
+                    </TableCell>
+                     <TableCell>
+                      <div className="flex flex-col space-y-1 text-xs text-muted-foreground">
+                        <span><Users className="h-3 w-3 inline mr-1"/> {u.contactCount} Contactos</span>
+                        <span><MessagesSquare className="h-3 w-3 inline mr-1"/> {u.totalMessages} Mensajes</span>
+                        <span><Bot className="h-3 w-3 inline mr-1"/> {u.botMessages} del Bot</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-right space-x-2">
