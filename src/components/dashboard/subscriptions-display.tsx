@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, getDoc, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
@@ -15,6 +15,7 @@ import { Badge } from '../ui/badge';
 import { loadStripe } from '@stripe/stripe-js';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 interface SubscriptionPlan {
   id: string;
@@ -34,7 +35,7 @@ interface UserSubscription {
     status: string;
     planId: string;
     priceId: string;
-    current_period_end: { seconds: number; nanoseconds: number; };
+    current_period_end: Timestamp;
     cancel_at_period_end: boolean;
 }
 
@@ -65,13 +66,9 @@ export default function SubscriptionManager() {
           const aIsFree = a.priceMonthly === 0 && a.priceYearly === 0;
           const bIsFree = b.priceMonthly === 0 && b.priceYearly === 0;
 
-          if (aIsFree && !bIsFree) {
-            return 1; // a (free) comes after b (paid)
-          }
-          if (!aIsFree && bIsFree) {
-            return -1; // a (paid) comes before b (free)
-          }
-          // If both are free or both are paid, sort by price
+          if (aIsFree && !bIsFree) return 1; 
+          if (!aIsFree && bIsFree) return -1;
+          
           return a.priceMonthly - b.priceMonthly;
         });
 
@@ -131,8 +128,8 @@ export default function SubscriptionManager() {
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'No se pudo iniciar el proceso de pago.');
+        const { message } = await res.json();
+        throw new Error(message || 'No se pudo iniciar el proceso de pago.');
       }
 
       const { sessionId } = await res.json();
@@ -176,24 +173,24 @@ export default function SubscriptionManager() {
     return <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
   
-  if (subscription && activePlanDetails) {
-    const renewalDate = new Date(subscription.current_period_end.seconds * 1000);
-    return (
-        <Card className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+  return (
+    <div className="space-y-8">
+      {subscription && activePlanDetails && (
+        <Card className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 ring-2 ring-green-500/50">
             <CardHeader>
                 <CardTitle className="flex items-center text-green-800 dark:text-green-300">
                     <CheckCircle className="h-6 w-6 mr-2" />
                     Estás suscrito al Plan: {activePlanDetails.name}
                 </CardTitle>
                 <CardDescription className="text-green-700 dark:text-green-400">
-                    Tu suscripción está activa.
+                    Tu suscripción está activa y lista para usar.
                 </CardDescription>
             </CardHeader>
             <CardContent>
                 <p className="text-sm">
                     {subscription.status === 'trialing' && 'Tu período de prueba termina y tu plan se renovará el '}
                     {subscription.status === 'active' && 'Tu plan se renovará el '}
-                    <span className="font-semibold">{format(renewalDate, 'dd \'de\' MMMM \'de\' yyyy', { locale: es })}</span>.
+                    <span className="font-semibold">{format(subscription.current_period_end.toDate(), "dd 'de' MMMM 'de' yyyy", { locale: es })}</span>.
                 </p>
                 {subscription.cancel_at_period_end && (
                     <Badge variant="destructive" className="mt-2">Cancelación programada para el final del período.</Badge>
@@ -202,28 +199,33 @@ export default function SubscriptionManager() {
             <CardFooter>
                  <Button onClick={handleManageSubscription} disabled={isProcessing.manage}>
                     {isProcessing.manage ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                    Gestionar Suscripción
+                    Gestionar Suscripción y Pagos
                 </Button>
             </CardFooter>
         </Card>
-    );
-  }
+      )}
 
-  return (
-    <div className="space-y-6">
       <div className="flex items-center justify-center space-x-2">
-        <Label htmlFor="billingCycle" className={billingCycle === 'monthly' ? 'text-foreground' : 'text-muted-foreground'}>Mensual</Label>
+        <Label htmlFor="billingCycle" className={billingCycle === 'monthly' ? 'text-foreground font-semibold' : 'text-muted-foreground'}>Mensual</Label>
         <Switch 
             id="billingCycle"
             checked={billingCycle === 'yearly'}
             onCheckedChange={(checked) => setBillingCycle(checked ? 'yearly' : 'monthly')}
+            disabled={!!subscription}
         />
-        <Label htmlFor="billingCycle" className={billingCycle === 'yearly' ? 'text-foreground' : 'text-muted-foreground'}>Anual (Ahorra 20%)</Label>
+        <Label htmlFor="billingCycle" className={billingCycle === 'yearly' ? 'text-foreground font-semibold' : 'text-muted-foreground'}>Anual (Ahorra ~20%)</Label>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {plans.map((plan) => (
-          <Card key={plan.id} className="flex flex-col">
+        {plans.map((plan) => {
+          const isCurrentPlan = subscription?.planId === plan.id;
+          const isSubscribed = !!subscription;
+
+          return (
+          <Card key={plan.id} className={cn(
+            "flex flex-col transition-shadow hover:shadow-xl", 
+            isCurrentPlan && "ring-2 ring-primary shadow-lg"
+          )}>
             <CardHeader>
               <CardTitle className="flex items-center">
                  <Sparkles className="h-5 w-5 mr-2 text-primary"/>
@@ -270,15 +272,16 @@ export default function SubscriptionManager() {
                 <Button 
                   className="w-full" 
                   onClick={() => handleSubscribe(plan)}
-                  disabled={isProcessing[plan.id]}
+                  disabled={isProcessing[plan.id] || isSubscribed}
                 >
-                  {isProcessing[plan.id] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CreditCard className="mr-2 h-4 w-4" />}
-                  Suscribirse al Plan {plan.name}
+                  {isProcessing[plan.id] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 
+                   isCurrentPlan ? <CheckCircle className="mr-2 h-4 w-4" /> : <CreditCard className="mr-2 h-4 w-4" />}
+                  {isCurrentPlan ? "Tu Plan Actual" : "Suscribirse"}
                 </Button>
               )}
             </CardFooter>
           </Card>
-        ))}
+        )})}
       </div>
     </div>
   );
