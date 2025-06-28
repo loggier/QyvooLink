@@ -35,6 +35,8 @@ interface UserProfile {
   createdAt?: Timestamp; // Registration date
   isActive?: boolean; // Account status
   subscriptionStatus?: 'active' | 'trialing' | 'canceled' | 'inactive';
+  isDemoMode?: boolean; // Demo mode flag
+  isChatbotGloballyEnabled?: boolean; // Global bot status
 }
 
 interface AuthContextType {
@@ -57,8 +59,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
+        // Fetch all user-related data in parallel
         const userDocRef = doc(db, 'users', firebaseUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
+        const instanceDocRef = doc(db, 'instances', firebaseUser.uid);
+        const subscriptionsRef = collection(db, 'users', firebaseUser.uid, 'subscriptions');
+        const q = query(subscriptionsRef, where('status', 'in', ['trialing', 'active']));
+        
+        const [userDocSnap, instanceDocSnap, subscriptionSnap] = await Promise.all([
+            getDoc(userDocRef),
+            getDoc(instanceDocRef),
+            getDocs(q),
+        ]);
         
         let dbData: any = {};
         if (userDocSnap.exists()) {
@@ -71,11 +82,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
              return;
           }
         }
-        
-        // Fetch subscription status
-        const subscriptionsRef = collection(db, 'users', firebaseUser.uid, 'subscriptions');
-        const q = query(subscriptionsRef, where('status', 'in', ['trialing', 'active']));
-        const subscriptionSnap = await getDocs(q);
+
+        let instanceData: any = {};
+        if (instanceDocSnap.exists()) {
+            instanceData = instanceDocSnap.data();
+        }
         
         let subscriptionStatus: UserProfile['subscriptionStatus'] = 'inactive';
         if (!subscriptionSnap.empty) {
@@ -97,6 +108,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           createdAt: dbData.createdAt,
           isActive: dbData.isActive ?? true,
           subscriptionStatus: subscriptionStatus,
+          isDemoMode: instanceData.demo ?? false,
+          isChatbotGloballyEnabled: instanceData.chatbotEnabled ?? true,
          } as UserProfile);
 
       } else {

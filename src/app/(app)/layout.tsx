@@ -23,19 +23,21 @@ export default function AuthenticatedAppLayout({ children }: { children: ReactNo
       return;
     }
     
-    // Si el usuario es admin, puede acceder a todo
+    // El admin siempre tiene acceso a todo
     if (user.role === 'admin') {
       return;
     }
 
-    // Comprobar si tiene suscripción activa
+    // Comprobar si tiene suscripción activa O si tiene el modo demo activado
     const hasActiveSubscription = user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing';
+    const isDemoMode = user.isDemoMode === true;
+    const isAllowed = hasActiveSubscription || isDemoMode;
     
-    // Lista de rutas permitidas sin suscripción activa
+    // Lista de rutas permitidas sin acceso completo
     const allowedPaths = ['/subscribe', '/profile'];
 
-    // Si no tiene suscripción y no está en una de las páginas permitidas, redirigir a /subscribe
-    if (!hasActiveSubscription && !allowedPaths.some(p => pathname.startsWith(p))) {
+    // Si no tiene acceso y no está en una de las páginas permitidas, redirigir a /subscribe
+    if (!isAllowed && !allowedPaths.some(p => pathname.startsWith(p))) {
       router.replace('/subscribe');
     }
 
@@ -49,8 +51,12 @@ export default function AuthenticatedAppLayout({ children }: { children: ReactNo
     );
   }
 
-  // Prevenir renderizado del layout para usuarios no suscritos y no admins que no estén en páginas permitidas
-  if (user.role !== 'admin' && !(user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing') && !pathname.startsWith('/subscribe') && !pathname.startsWith('/profile')) {
+  // Prevenir renderizado del layout para usuarios no permitidos que no estén en páginas de escape
+  const hasActiveSubscription = user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing';
+  const isDemoMode = user.isDemoMode === true;
+  const isAllowed = user.role === 'admin' || hasActiveSubscription || isDemoMode;
+  
+  if (!isAllowed && !pathname.startsWith('/subscribe') && !pathname.startsWith('/profile')) {
       return (
         <div className="flex min-h-screen items-center justify-center bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />

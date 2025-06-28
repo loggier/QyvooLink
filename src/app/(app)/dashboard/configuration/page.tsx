@@ -17,7 +17,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { useState, useEffect, useCallback } from 'react';
-import { Copy, Eye, EyeOff, MessageSquareText, Settings2, Trash2, Users, PlusCircle, ExternalLink, RefreshCw, ListChecks, Loader2, QrCode } from 'lucide-react';
+import { Copy, Eye, EyeOff, MessageSquareText, Settings2, Trash2, Users, PlusCircle, ExternalLink, RefreshCw, ListChecks, Loader2, QrCode, Bot, FlaskConical } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { db } from '@/lib/firebase'; 
@@ -55,7 +55,7 @@ export interface WhatsAppInstance { // Exported for chat page
   userEmail: string | null;
   demo?: boolean;
   demoPhoneNumber?: string | null;
-  chatbotEnabled?: boolean; // Nueva propiedad
+  chatbotEnabled?: boolean;
 }
 
 interface RefreshedInstanceInfo {
@@ -82,13 +82,10 @@ export default function ConfigurationPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   const [demoConfig, setDemoConfig] = useState({ demo: false, demoPhoneNumber: '' });
-  const [botsEnabled, setBotsEnabled] = useState(true); // New state for Bots
+  const [chatbotConfig, setChatbotConfig] = useState({ enabled: true });
   const [isSavingDemoConfig, setIsSavingDemoConfig] = useState(false);
-
-  const [chatbotConfig, setChatbotConfig] = useState({ enabled: false });
   const [isSavingChatbotConfig, setIsSavingChatbotConfig] = useState(false);
   
-  // Agregar esta función para manejar el guardado del chatbot
 const handleSaveChatbotConfig = async () => {
   if (!user || !whatsAppInstance) {
     toast({ variant: "destructive", title: "Error", description: "No se puede guardar la configuración del chatbot sin una instancia o usuario autenticado." });
@@ -105,7 +102,7 @@ const handleSaveChatbotConfig = async () => {
     await setDoc(doc(db, 'instances', user.uid), updatedInstance, { merge: true });
     setWhatsAppInstance(updatedInstance);
     toast({ title: "Configuración Chatbot Actualizada", description: "La configuración del chatbot ha sido guardada." });
-    setChatbotConfig({ enabled: updatedInstance.chatbotEnabled ?? false });
+    setChatbotConfig({ enabled: updatedInstance.chatbotEnabled ?? true });
   } catch (error: any) {
     toast({ variant: "destructive", title: "Error al actualizar", description: `No se pudo guardar la configuración del chatbot: ${error.message}` });
   } finally {
@@ -251,19 +248,13 @@ const handleSaveChatbotConfig = async () => {
     }
   };
 
-  // Agregar este useEffect para sincronizar el estado del chatbot cuando cambie la instancia
-useEffect(() => {
-  if (whatsAppInstance) {
-    setChatbotConfig({ enabled: whatsAppInstance.chatbotEnabled ?? false });
-  }
-}, [whatsAppInstance]);
-
-
- useEffect(() => {
- if (whatsAppInstance) {
+  useEffect(() => {
+    if (whatsAppInstance) {
       setDemoConfig({ demo: whatsAppInstance.demo ?? false, demoPhoneNumber: whatsAppInstance.demoPhoneNumber || '' });
- }
- }, [whatsAppInstance]);
+      setChatbotConfig({ enabled: whatsAppInstance.chatbotEnabled ?? true });
+    }
+  }, [whatsAppInstance]);
+
 
   useEffect(() => {
     const loadInstance = async () => {
@@ -276,10 +267,6 @@ useEffect(() => {
           if (instanceDocSnap.exists()) {
             const instanceDataFromDb = instanceDocSnap.data() as WhatsAppInstance;
             setWhatsAppInstance(instanceDataFromDb);
-            setDemoConfig({
-              demo: instanceDataFromDb.demo ?? false,
-              demoPhoneNumber: instanceDataFromDb.demoPhoneNumber || '',
-            });
             await fetchAndUpdateInstanceInfo(instanceDataFromDb, false); 
           } else {
             setWhatsAppInstance(null);
@@ -402,6 +389,8 @@ useEffect(() => {
         _count: { Message: 0, Contact: 0, Chat: 0 }, 
         userId: user.uid,
         userEmail: user.email,
+        chatbotEnabled: true, // Default to true
+        demo: false, // Default to false
       };
       
       await setDoc(doc(db, 'instances', user.uid), newInstance);
@@ -618,7 +607,7 @@ useEffect(() => {
 
   return (
     <div className="space-y-8">
- <div>
+      <div>
         <h2 className="text-3xl font-bold tracking-tight text-foreground">Panel de Configuración Qyvoo</h2>
         <p className="text-muted-foreground">
           Gestiona la configuración de tu API Qyvoo, instancias de WhatsApp, horarios comerciales y mensajes.
@@ -852,99 +841,82 @@ useEffect(() => {
       </Dialog>
 
 
- <Card>
- <CardHeader>
- <CardTitle>Configuración Demo</CardTitle>
- <CardDescription>
- Habilita el modo demo para simular interacciones de WhatsApp sin una instancia real.
- </CardDescription>
- </CardHeader>
- <CardContent className="space-y-4">
- <div className="flex items-center space-x-2">
- <Switch
-            id="isDemo"
- checked={demoConfig.demo}
- onCheckedChange={(checked) => setDemoConfig(prevState => ({ ...prevState, demo: checked }))}
- disabled={!whatsAppInstance || isSavingDemoConfig}
- />
- <Label htmlFor="isDemo">Habilitar Modo Demo</Label>
- </div>
- {demoConfig.demo && (
- <div className="space-y-2">
- <Label htmlFor="numeroDemo">Número de Teléfono Demo (con código de país)</Label>
- <Input
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Bot className="mr-2 h-5 w-5 text-primary" />
+            Configuración del Chatbot
+          </CardTitle>
+          <CardDescription>
+            Habilita o deshabilita la respuesta automática del bot para esta instancia.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="chatbotEnabled"
+              checked={chatbotConfig.enabled}
+              onCheckedChange={(checked) => setChatbotConfig({ enabled: checked })}
+              disabled={!whatsAppInstance || isSavingChatbotConfig}
+            />
+            <Label htmlFor="chatbotEnabled">Activar Chatbot para esta instancia</Label>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Si está desactivado, el bot no responderá a ningún mensaje.
+          </p>
+        </CardContent>
+        <CardFooter>
+          <Button onClick={handleSaveChatbotConfig} disabled={!whatsAppInstance || isSavingChatbotConfig}>
+            {isSavingChatbotConfig ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Guardar Configuración del Chatbot
+          </Button>
+        </CardFooter>
+      </Card>
+      
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <FlaskConical className="mr-2 h-5 w-5 text-primary" />
+            Configuración Demo
+          </CardTitle>
+          <CardDescription>
+            Habilita el modo demo para usar la plataforma sin una suscripción activa. Ideal para pruebas o clientes especiales.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="isDemo"
+              checked={demoConfig.demo}
+              onCheckedChange={(checked) => setDemoConfig(prevState => ({ ...prevState, demo: checked }))}
+              disabled={!whatsAppInstance || isSavingDemoConfig}
+            />
+            <Label htmlFor="isDemo">Habilitar Modo Demo</Label>
+          </div>
+          {demoConfig.demo && (
+          <div className="space-y-2">
+            <Label htmlFor="numeroDemo">Número de Teléfono Demo (con código de país)</Label>
+            <Input
               id="numeroDemo"
- type="tel"
- placeholder="521234567890"
- value={demoConfig.demoPhoneNumber}
- onChange={(e) => setDemoConfig(prevState => ({ ...prevState, demoPhoneNumber: e.target.value }))}
- disabled={!whatsAppInstance || isSavingDemoConfig}
- />
- <p className="text-sm text-muted-foreground">
- Este número será usado como destino en las simulaciones.
- </p>
- </div>
- )}
-               
- </CardContent>
- <CardFooter>
- <Button onClick={handleSaveDemoConfig} disabled={!whatsAppInstance || isSavingDemoConfig}>
- {isSavingDemoConfig ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
- {isSavingDemoConfig ? "Guardando..." : "Guardar Configuración Demo"}
- </Button>
- </CardFooter>
- </Card>
-<Card>
-  <CardHeader>
-    <CardTitle>Configuración Chatbot</CardTitle>
-    <CardDescription>
-      Habilita o deshabilita el chatbot automático para responder mensajes.
-    </CardDescription>
-  </CardHeader>
-  <CardContent className="space-y-4">
-    <div className="flex items-center space-x-2">
-      <Switch
-        id="chatbotEnabled"
-        checked={chatbotConfig.enabled}
-        onCheckedChange={(checked) => setChatbotConfig(prevState => ({ ...prevState, enabled: checked }))}
-        disabled={!whatsAppInstance || isSavingChatbotConfig}
-      />
-      <Label htmlFor="chatbotEnabled">Activar Chatbot</Label>
-    </div>
-    {chatbotConfig.enabled && (
-      <div className="mt-4 p-4 border rounded-md bg-accent/10">
-        <p className="text-sm text-accent-foreground">
-          ✅ El chatbot está habilitado y responderá automáticamente a los mensajes recibidos.
-        </p>
-      </div>
-    )}
-    {!chatbotConfig.enabled && (
-      <div className="mt-4 p-4 border rounded-md bg-muted/50">
-        <p className="text-sm text-muted-foreground">
-          ⏸️ El chatbot está deshabilitado. Los mensajes requerirán respuesta manual.
-        </p>
-      </div>
-    )}
-  </CardContent>
-  <CardFooter>
-    <Button 
-      onClick={handleSaveChatbotConfig} 
-      disabled={!whatsAppInstance || isSavingChatbotConfig}
-    >
-      {isSavingChatbotConfig ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-      {isSavingChatbotConfig ? "Guardando..." : "Guardar Configuración Chatbot"}
-    </Button>
-  </CardFooter>
-</Card>
-
-
-      <div className="flex justify-end">
-        <Button size="lg" onClick={() => toast({ title: "Guardado", description: "Configuraciones guardadas (simulado)." })}>
-            Guardar Configuraciones
-        </Button>
- </div>
+              type="tel"
+              placeholder="521234567890"
+              value={demoConfig.demoPhoneNumber}
+              onChange={(e) => setDemoConfig(prevState => ({ ...prevState, demoPhoneNumber: e.target.value }))}
+              disabled={!whatsAppInstance || isSavingDemoConfig}
+            />
+            <p className="text-sm text-muted-foreground">
+              Este número puede ser usado para simulaciones.
+            </p>
+          </div>
+          )}
+        </CardContent>
+        <CardFooter>
+          <Button onClick={handleSaveDemoConfig} disabled={!whatsAppInstance || isSavingDemoConfig}>
+            {isSavingDemoConfig ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Guardar Configuración Demo
+          </Button>
+        </CardFooter>
+      </Card>
     </div>
   );
 }
-
-    
