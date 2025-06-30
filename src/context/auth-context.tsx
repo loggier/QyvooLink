@@ -34,8 +34,8 @@ interface UserProfile {
   role?: 'admin' | 'user'; // User role
   createdAt?: Timestamp; // Registration date
   isActive?: boolean; // Account status
+  isVip?: boolean; // VIP access flag
   subscriptionStatus?: 'active' | 'trialing' | 'canceled' | 'inactive';
-  isDemoMode?: boolean; // Demo mode flag
   isChatbotGloballyEnabled?: boolean; // Global bot status
 }
 
@@ -107,8 +107,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           role: dbData.role || 'user',
           createdAt: dbData.createdAt,
           isActive: dbData.isActive ?? true,
+          isVip: dbData.isVip ?? false,
           subscriptionStatus: subscriptionStatus,
-          isDemoMode: instanceData.demo ?? false,
           isChatbotGloballyEnabled: instanceData.chatbotEnabled ?? true,
          } as UserProfile);
 
@@ -141,6 +141,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           role: 'user', 
           createdAt: serverTimestamp(),
           isActive: true,
+          isVip: false, // Default new users to not be VIP
         };
         await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
         

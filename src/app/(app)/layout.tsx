@@ -28,10 +28,10 @@ export default function AuthenticatedAppLayout({ children }: { children: ReactNo
       return;
     }
 
-    // Comprobar si tiene suscripción activa O si tiene el modo demo activado
+    // Comprobar si tiene suscripción activa O si tiene el modo VIP activado
     const hasActiveSubscription = user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing';
-    const isDemoMode = user.isDemoMode === true;
-    const isAllowed = hasActiveSubscription || isDemoMode;
+    const isVip = user.isVip === true;
+    const isAllowed = hasActiveSubscription || isVip;
     
     // Lista de rutas permitidas sin acceso completo
     const allowedPaths = ['/subscribe', '/profile'];
@@ -53,8 +53,8 @@ export default function AuthenticatedAppLayout({ children }: { children: ReactNo
 
   // Prevenir renderizado del layout para usuarios no permitidos que no estén en páginas de escape
   const hasActiveSubscription = user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing';
-  const isDemoMode = user.isDemoMode === true;
-  const isAllowed = user.role === 'admin' || hasActiveSubscription || isDemoMode;
+  const isVip = user.isVip === true;
+  const isAllowed = user.role === 'admin' || hasActiveSubscription || isVip;
   
   if (!isAllowed && !pathname.startsWith('/subscribe') && !pathname.startsWith('/profile')) {
       return (

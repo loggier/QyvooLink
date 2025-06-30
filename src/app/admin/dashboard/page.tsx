@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Shield, Wifi, Bot, Users, MessagesSquare, CalendarDays, TrendingUp, ShieldCheck, Clock, XCircle } from 'lucide-react';
+import { Loader2, Shield, Wifi, Bot, Users, MessagesSquare, CalendarDays, TrendingUp, ShieldCheck, Clock, XCircle, Star } from 'lucide-react';
 import { differenceInDays } from 'date-fns';
 
 interface SubscriptionDetails {
@@ -38,6 +38,7 @@ interface AdminViewUser {
   email?: string;
   createdAt?: Timestamp;
   isActive: boolean;
+  isVip?: boolean; // Added VIP status
   instanceStatus?: 'Conectado' | 'Desconectado' | 'Pendiente' | 'No Configurada';
   botConfigured: boolean;
   instanceName?: string;
@@ -156,6 +157,7 @@ export default function AdminDashboardPage() {
           email: userData.email,
           createdAt: userData.createdAt,
           isActive: userData.isActive ?? true,
+          isVip: userData.isVip ?? false,
           instanceStatus,
           botConfigured: botDocSnap.exists() && !!botDocSnap.data().promptXml,
           instanceName,
@@ -199,38 +201,43 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     fetchAllUsersData();
   }, [fetchAllUsersData]);
-
-  const handleToggleUserStatus = async (uid: string, currentStatus: boolean) => {
+  
+  const handleToggleStatus = async (uid: string, field: 'isActive' | 'isVip', currentValue: boolean) => {
     const userToUpdate = users.find(u => u.uid === uid);
     if (!userToUpdate) return;
-
+  
+    // Optimistic UI update
     setUsers(prevUsers =>
       prevUsers.map(u =>
-        u.uid === uid ? { ...u, isActive: !currentStatus } : u
+        u.uid === uid ? { ...u, [field]: !currentValue } : u
       )
     );
-
+  
     try {
-      await updateDoc(doc(db, 'users', uid), { isActive: !currentStatus });
+      await updateDoc(doc(db, 'users', uid), { [field]: !currentValue });
+      const fieldName = field === 'isActive' ? 'Estado' : 'Acceso VIP';
+      const action = !currentValue ? 'activado' : 'desactivado';
       toast({
-        title: "Estado Actualizado",
-        description: `La cuenta de ${userToUpdate.email} ha sido ${!currentStatus ? 'activada' : 'desactivada'}.`,
+        title: `${fieldName} Actualizado`,
+        description: `El ${fieldName.toLowerCase()} de ${userToUpdate.email} ha sido ${action}.`,
       });
     } catch (error) {
+      // Revert UI on error
       setUsers(prevUsers =>
         prevUsers.map(u =>
-          u.uid === uid ? { ...u, isActive: currentStatus } : u
+          u.uid === uid ? { ...u, [field]: currentValue } : u
         )
       );
-      console.error("Error updating user status:", error);
+      console.error(`Error updating user ${field}:`, error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "No se pudo actualizar el estado del usuario.",
+        description: `No se pudo actualizar el ${field.toLowerCase()} del usuario.`,
       });
     }
   };
-  
+
+
   const handleOpenDateDialog = (userToEdit: AdminViewUser) => {
     setSelectedUserForDateChange(userToEdit);
     setNewRegistrationDate(userToEdit.createdAt ? userToEdit.createdAt.toDate() : new Date());
@@ -400,6 +407,8 @@ export default function AdminDashboardPage() {
                                 )}
                                 {u.subscription.willCancel && <Badge variant="destructive" className="w-fit"><XCircle className="h-3 w-3 mr-1"/>Cancelación programada</Badge>}
                             </div>
+                        ) : u.isVip ? (
+                            <Badge className="bg-amber-400 text-amber-900"><Star className="h-3 w-3 mr-1"/>Acceso VIP</Badge>
                         ) : (
                             <Badge variant="outline">Sin Suscripción</Badge>
                         )}
@@ -421,12 +430,23 @@ export default function AdminDashboardPage() {
                         <span><Bot className="h-3 w-3 inline mr-1"/> {u.botMessages} del Bot</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-right space-x-2">
-                       <Switch
-                        checked={u.isActive}
-                        onCheckedChange={() => handleToggleUserStatus(u.uid, u.isActive)}
-                        aria-label={`Activar o desactivar la cuenta de ${u.email}`}
-                      />
+                    <TableCell className="text-right space-y-2">
+                       <div className="flex items-center justify-end space-x-2">
+                         <span className="text-xs text-muted-foreground">Activo</span>
+                         <Switch
+                           checked={u.isActive}
+                           onCheckedChange={() => handleToggleStatus(u.uid, 'isActive', u.isActive)}
+                           aria-label={`Activar o desactivar la cuenta de ${u.email}`}
+                         />
+                       </div>
+                       <div className="flex items-center justify-end space-x-2">
+                          <span className="text-xs text-muted-foreground">VIP</span>
+                          <Switch
+                            checked={u.isVip ?? false}
+                            onCheckedChange={() => handleToggleStatus(u.uid, 'isVip', u.isVip ?? false)}
+                            aria-label={`Activar o desactivar el acceso VIP para ${u.email}`}
+                           />
+                       </div>
                       <Button variant="outline" size="icon" onClick={() => handleOpenDateDialog(u)} title="Cambiar fecha de registro">
                         <CalendarDays className="h-4 w-4" />
                       </Button>
