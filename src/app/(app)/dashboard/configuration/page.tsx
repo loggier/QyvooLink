@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -16,7 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { useState, useEffect, useCallback } from 'react';
-import { Copy, Eye, EyeOff, MessageSquareText, Settings2, Trash2, Users, PlusCircle, ExternalLink, RefreshCw, ListChecks, Loader2, QrCode, Bot } from 'lucide-react';
+import { Copy, Eye, EyeOff, MessageSquareText, Settings2, Trash2, Users, PlusCircle, ExternalLink, RefreshCw, ListChecks, Loader2, QrCode, Bot, FlaskConical, Save } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { db } from '@/lib/firebase'; 
@@ -53,6 +53,8 @@ export interface WhatsAppInstance { // Exported for chat page
   userId: string;
   userEmail: string | null;
   chatbotEnabled?: boolean;
+  demo?: boolean; // For demo mode
+  demoPhoneNumber?: string; // Phone number for demo simulation
 }
 
 interface RefreshedInstanceInfo {
@@ -78,33 +80,40 @@ export default function ConfigurationPage() {
   const [qrCodeDataUri, setQrCodeDataUri] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
-  const [chatbotConfig, setChatbotConfig] = useState({ enabled: true });
-  const [isSavingChatbotConfig, setIsSavingChatbotConfig] = useState(false);
+  // State for instance settings
+  const [chatbotEnabled, setChatbotEnabled] = useState(true);
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [demoPhoneNumber, setDemoPhoneNumber] = useState('');
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
   
-const handleSaveChatbotConfig = async () => {
-  if (!user || !whatsAppInstance) {
-    toast({ variant: "destructive", title: "Error", description: "No se puede guardar la configuración del chatbot sin una instancia o usuario autenticado." });
-    return;
-  }
-
-  setIsSavingChatbotConfig(true);
-  const updatedInstance = {
-    ...whatsAppInstance,
-    chatbotEnabled: chatbotConfig.enabled,
+  const handleSaveInstanceSettings = async () => {
+      if (!user || !whatsAppInstance) {
+        toast({ variant: "destructive", title: "Error", description: "No se puede guardar la configuración sin una instancia o usuario autenticado." });
+        return;
+      }
+    
+      setIsSavingSettings(true);
+      const updatedInstance = {
+        ...whatsAppInstance,
+        chatbotEnabled: chatbotEnabled,
+        demo: isDemoMode,
+        demoPhoneNumber: isDemoMode ? demoPhoneNumber : '', // Clear phone number if demo mode is off
+      };
+    
+      try {
+        await setDoc(doc(db, 'instances', user.uid), updatedInstance, { merge: true });
+        setWhatsAppInstance(updatedInstance); // Update local state
+        toast({ title: "Configuración Actualizada", description: "La configuración de la instancia ha sido guardada." });
+        // Update local form state from the newly saved instance state
+        setChatbotEnabled(updatedInstance.chatbotEnabled ?? true);
+        setIsDemoMode(updatedInstance.demo ?? false);
+        setDemoPhoneNumber(updatedInstance.demoPhoneNumber ?? '');
+      } catch (error: any) {
+        toast({ variant: "destructive", title: "Error al actualizar", description: `No se pudo guardar la configuración: ${error.message}` });
+      } finally {
+        setIsSavingSettings(false);
+      }
   };
-
-  try {
-    await setDoc(doc(db, 'instances', user.uid), updatedInstance, { merge: true });
-    setWhatsAppInstance(updatedInstance);
-    toast({ title: "Configuración Chatbot Actualizada", description: "La configuración del chatbot ha sido guardada." });
-    setChatbotConfig({ enabled: updatedInstance.chatbotEnabled ?? true });
-  } catch (error: any) {
-    toast({ variant: "destructive", title: "Error al actualizar", description: `No se pudo guardar la configuración del chatbot: ${error.message}` });
-  } finally {
-    setIsSavingChatbotConfig(false);
-  }
-};
-
 
   const mapWebhookStatus = useCallback((webhookStatus?: string): InstanceStatus => {
     if (!webhookStatus) return 'Pendiente';
@@ -202,6 +211,10 @@ const handleSaveChatbotConfig = async () => {
       
       await setDoc(doc(db, 'instances', user.uid), fullyUpdatedInstance, { merge: true });
       setWhatsAppInstance(fullyUpdatedInstance);
+      // Update local settings state after fetch
+      setChatbotEnabled(fullyUpdatedInstance.chatbotEnabled ?? true);
+      setIsDemoMode(fullyUpdatedInstance.demo ?? false);
+      setDemoPhoneNumber(fullyUpdatedInstance.demoPhoneNumber ?? '');
 
       if (showToast) toast({ title: "Estado Actualizado", description: "El estado de la instancia de Qyvoo ha sido actualizado." });
       setIsLoading(false);
@@ -214,13 +227,6 @@ const handleSaveChatbotConfig = async () => {
   }, [user, toast, mapWebhookStatus]);
 
   useEffect(() => {
-    if (whatsAppInstance) {
-      setChatbotConfig({ enabled: whatsAppInstance.chatbotEnabled ?? true });
-    }
-  }, [whatsAppInstance]);
-
-
-  useEffect(() => {
     const loadInstance = async () => {
       if (user) {
         setIsPageLoading(true);
@@ -231,6 +237,10 @@ const handleSaveChatbotConfig = async () => {
           if (instanceDocSnap.exists()) {
             const instanceDataFromDb = instanceDocSnap.data() as WhatsAppInstance;
             setWhatsAppInstance(instanceDataFromDb);
+            // Initialize settings state from DB data
+            setChatbotEnabled(instanceDataFromDb.chatbotEnabled ?? true);
+            setIsDemoMode(instanceDataFromDb.demo ?? false);
+            setDemoPhoneNumber(instanceDataFromDb.demoPhoneNumber ?? '');
             await fetchAndUpdateInstanceInfo(instanceDataFromDb, false); 
           } else {
             setWhatsAppInstance(null);
@@ -354,6 +364,8 @@ const handleSaveChatbotConfig = async () => {
         userId: user.uid,
         userEmail: user.email,
         chatbotEnabled: true, // Default to true
+        demo: false, // Default to false
+        demoPhoneNumber: '', // Default to empty
       };
       
       await setDoc(doc(db, 'instances', user.uid), newInstance);
@@ -625,12 +637,12 @@ const handleSaveChatbotConfig = async () => {
                           </FormItem>
                         )}/>
                         <Button type="submit" disabled={isLoading || form.formState.isSubmitting} className="mt-4 w-full">
-  {isLoading || form.formState.isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
-  {isLoading || form.formState.isSubmitting ? "Agregando..." : "Agregar Instancia"}
-</Button>
+                          {isLoading || form.formState.isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+                          {isLoading || form.formState.isSubmitting ? "Agregando..." : "Agregar Instancia"}
+                        </Button>
                     </form>
                   </Form>
- </DialogContent>
+                </DialogContent>
               </Dialog>
             )}
           </div>
@@ -641,9 +653,6 @@ const handleSaveChatbotConfig = async () => {
             <Card className="shadow-lg">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-lg font-semibold">{whatsAppInstance.name}</CardTitle>
-                <Button variant="ghost" size="icon" onClick={() => toast({ title: "Próximamente", description: "Funcionalidad de ajustes de instancia pendiente."})}>
-                  <Settings2 className="h-5 w-5" />
-                </Button>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -802,39 +811,77 @@ const handleSaveChatbotConfig = async () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <Bot className="mr-2 h-5 w-5 text-primary" />
-            Configuración del Chatbot
-          </CardTitle>
-          <CardDescription>
-            Habilita o deshabilita la respuesta automática del bot para esta instancia.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center space-x-2">
-            <Switch
-              id="chatbotEnabled"
-              checked={chatbotConfig.enabled}
-              onCheckedChange={(checked) => setChatbotConfig({ enabled: checked })}
-              disabled={!whatsAppInstance || isSavingChatbotConfig}
-            />
-            <Label htmlFor="chatbotEnabled">Activar Chatbot para esta instancia</Label>
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            Si está desactivado, el bot no responderá a ningún mensaje.
-          </p>
-        </CardContent>
-        <CardFooter>
-          <Button onClick={handleSaveChatbotConfig} disabled={!whatsAppInstance || isSavingChatbotConfig}>
-            {isSavingChatbotConfig ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Guardar Configuración del Chatbot
-          </Button>
-        </CardFooter>
-      </Card>
+      
+      {whatsAppInstance && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Settings2 className="mr-2 h-5 w-5 text-primary" />
+              Configuración Avanzada de la Instancia
+            </CardTitle>
+            <CardDescription>
+              Gestiona el comportamiento del chatbot y el modo de prueba para esta instancia.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Chatbot Configuration */}
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="chatbotEnabled"
+                checked={chatbotEnabled}
+                onCheckedChange={setChatbotEnabled}
+                disabled={!whatsAppInstance || isSavingSettings}
+              />
+              <Label htmlFor="chatbotEnabled" className="flex items-center">
+                <Bot className="mr-2 h-4 w-4" />
+                Activar Chatbot
+              </Label>
+            </div>
+            
+            <Separator />
+            
+            {/* Demo Mode Configuration */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2">
+                 <Switch
+                  id="demoMode"
+                  checked={isDemoMode}
+                  onCheckedChange={setIsDemoMode}
+                  disabled={!whatsAppInstance || isSavingSettings}
+                />
+                <Label htmlFor="demoMode" className="flex items-center">
+                  <FlaskConical className="mr-2 h-4 w-4" />
+                  Activar Modo Demo
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Habilita un modo de demostración para probar tu bot sin conectar un teléfono real.
+              </p>
+              {isDemoMode && (
+                <div className="pl-2">
+                  <Label htmlFor="demoPhoneNumber">Número de Teléfono para Simulación</Label>
+                  <Input
+                    id="demoPhoneNumber"
+                    value={demoPhoneNumber}
+                    onChange={(e) => setDemoPhoneNumber(e.target.value)}
+                    placeholder="Ej: +1234567890"
+                    disabled={!whatsAppInstance || isSavingSettings}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Este número se usará para simular conversaciones en el modo demo.
+                  </p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button onClick={handleSaveInstanceSettings} disabled={!whatsAppInstance || isSavingSettings}>
+              {isSavingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4"/>}
+              Guardar Configuración
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
       
     </div>
   );

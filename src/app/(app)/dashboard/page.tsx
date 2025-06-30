@@ -31,7 +31,6 @@ interface ContactDetails {
   nombre?: string;
   apellido?: string;
   empresa?: string;
-  // ...otros campos si son necesarios para el fallback del avatar o displayName
 }
 
 interface DashboardStats {
@@ -77,19 +76,17 @@ const truncateText = (text: string | undefined, maxLength: number): string => {
 };
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [stats, setStats] = useState<DashboardStats>(initialStats);
   const [recentConversations, setRecentConversations] = useState<DashboardConversationSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (user) {
+    if (user && !authLoading) {
       const fetchData = async () => {
         setIsLoading(true);
         try {
           let instanceStatusVal: DashboardStats['instanceStatus'] = 'No Configurada';
-          let chatbotEnabledVal: boolean | undefined = undefined;
-          let demoModeVal: boolean | undefined = undefined;
           let contactsVal: number | string = 0;
           let conversationsVal: number | string = 0;
           let instanceIdForChats: string | null = null;
@@ -100,8 +97,6 @@ export default function DashboardPage() {
           if (instanceDocSnap.exists()) {
             const instanceData = instanceDocSnap.data() as WhatsAppInstance;
             instanceStatusVal = instanceData.status || 'Pendiente';
-            chatbotEnabledVal = instanceData.chatbotEnabled;
-            demoModeVal = instanceData.demo;
             instanceIdForChats = instanceData.id || instanceData.name;
           }
 
@@ -239,8 +234,8 @@ export default function DashboardPage() {
 
           setStats({
             instanceStatus: instanceStatusVal,
-            isChatbotGloballyEnabled: chatbotEnabledVal,
-            isDemoMode: demoModeVal,
+            isChatbotGloballyEnabled: user.isChatbotGloballyEnabled,
+            isDemoMode: user.demo,
             contactCount: contactsVal,
             conversationCount: conversationsVal,
             isBotPromptConfigured: botPromptConfiguredVal,
@@ -261,13 +256,13 @@ export default function DashboardPage() {
         }
       };
       fetchData();
-    } else {
-      setIsLoading(true); 
-      setRecentConversations([]);
+    } else if (!authLoading && !user) {
+        setIsLoading(false);
+        setRecentConversations([]);
     }
-  }, [user]);
+  }, [user, authLoading]);
 
-  if (isLoading && !user) { 
+  if (isLoading || authLoading) { 
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />

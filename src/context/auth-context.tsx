@@ -37,6 +37,7 @@ interface UserProfile {
   isVip?: boolean; // VIP access flag
   subscriptionStatus?: 'active' | 'trialing' | 'canceled' | 'inactive';
   isChatbotGloballyEnabled?: boolean; // Global bot status
+  demo?: boolean; // Demo mode status
 }
 
 interface AuthContextType {
@@ -110,6 +111,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           isVip: dbData.isVip ?? false,
           subscriptionStatus: subscriptionStatus,
           isChatbotGloballyEnabled: instanceData.chatbotEnabled ?? true,
+          demo: instanceData.demo ?? false,
          } as UserProfile);
 
       } else {

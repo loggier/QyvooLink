@@ -34,7 +34,7 @@ export default function AuthenticatedAppLayout({ children }: { children: ReactNo
     const isAllowed = hasActiveSubscription || isVip;
     
     // Lista de rutas permitidas sin acceso completo
-    const allowedPaths = ['/subscribe', '/profile'];
+    const allowedPaths = ['/subscribe', '/profile', '/dashboard/configuration'];
 
     // Si no tiene acceso y no está en una de las páginas permitidas, redirigir a /subscribe
     if (!isAllowed && !allowedPaths.some(p => pathname.startsWith(p))) {
@@ -56,7 +56,7 @@ export default function AuthenticatedAppLayout({ children }: { children: ReactNo
   const isVip = user.isVip === true;
   const isAllowed = user.role === 'admin' || hasActiveSubscription || isVip;
   
-  if (!isAllowed && !pathname.startsWith('/subscribe') && !pathname.startsWith('/profile')) {
+  if (!isAllowed && !['/subscribe', '/profile', '/dashboard/configuration'].some(p => pathname.startsWith(p))) {
       return (
         <div className="flex min-h-screen items-center justify-center bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
