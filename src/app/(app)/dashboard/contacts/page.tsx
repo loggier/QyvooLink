@@ -49,7 +49,7 @@ const initialContactFormState: Omit<ContactDetails, 'id' | 'userId'> = {
   telefono: "",
   empresa: "",
   ubicacion: "",
-  tipoCliente: undefined,
+  tipoCliente: 'Cliente',
   chatbotEnabledForContact: true,
   _chatIdOriginal: undefined,
 };
@@ -410,6 +410,3 @@ export default function ContactsPage() {
     </div>
   );
 }
-
-
-    
