@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -396,6 +397,7 @@ export default function ChatPage() {
             data.chatbotEnabledForContact = data.chatbotEnabledForContact ?? true; 
             setContactDetails(data);
             setInitialContactDetails(data);
+            setIsEditingContact(false); // Set to false for existing contacts
           } else {
             const initialData: ContactDetails = { 
               id: compositeContactId, 
@@ -413,6 +415,7 @@ export default function ChatPage() {
             };
             setContactDetails(initialData); 
             setInitialContactDetails(initialData);
+            setIsEditingContact(true); // Set to true for new contacts
           }
         } catch (error) {
           console.error("Error fetching contact details:", error);
@@ -422,7 +425,6 @@ export default function ChatPage() {
         }
       };
       fetchDetails();
-      setIsEditingContact(false); 
     } else {
       setContactDetails(null);
       setInitialContactDetails(null);

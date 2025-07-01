@@ -77,7 +77,7 @@ export default function ContactDetailsPanel({
     );
   }
   
-  const currentDisplayDetails = isEditingContact && initialContactDetails ? initialContactDetails : contactDetails;
+  const currentDisplayDetails = contactDetails;
 
 
   return (
