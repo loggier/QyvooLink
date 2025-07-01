@@ -1,3 +1,4 @@
+
 "use client";
 import type { ChangeEvent } from 'react';
 import { useState, useEffect, useCallback } from 'react';
@@ -10,10 +11,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, Trash2, PlusCircle, Settings, Trash, Bell } from 'lucide-react';
+import { Loader2, Save, Trash2, PlusCircle, Settings, Trash, Bell, Bot, Building, Phone } from 'lucide-react';
 import { generateSafeId } from '@/lib/uuid';
 
 // Types for Bot Configuration
@@ -110,7 +111,6 @@ export default function BotConfigPage() {
   const [selectedRules, setSelectedRules] = useState<string[]>([]);
   const [agentRole, setAgentRole] = useState<string>(initialAgentRole);
   const [businessContext, setBusinessContext] = useState<BusinessContext>(initialBusinessContext);
-  // Inicializamos serviceCatalog con un array vacío, pero lo poblamos con initialServiceCatalog si no hay datos de Firebase
   const [serviceCatalog, setServiceCatalog] = useState<ServiceCategory[]>([]); 
   const [contactDetails, setContactDetails] = useState<BotContactDetails>(initialContactDetails);
   const [closingMessage, setClosingMessage] = useState<string>(initialClosingMessage);
@@ -129,24 +129,21 @@ export default function BotConfigPage() {
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             const data = docSnap.data() as BotConfigData;
-            // Aseguramos que los arrays y strings tengan valores por defecto seguros
             setSelectedRules(data.rules || []);
             setAgentRole(data.agentRole || initialAgentRole);
             setBusinessContext(data.businessContext || initialBusinessContext);
             
-            // --- CAMBIO CLAVE AQUÍ: Aseguramos que las propiedades de serviceCatalog sean strings ---
             const loadedCatalog = (data.serviceCatalog || []).map(cat => ({ 
               id: cat.id || generateSafeId(),
-              categoryName: cat.categoryName || "", // Asegura que categoryName sea string
+              categoryName: cat.categoryName || "",
               services: (cat.services || []).map(srv => ({
                 id: srv.id || generateSafeId(),
-                name: srv.name || "",   // Asegura que name sea string
-                price: srv.price || "", // Asegura que price sea string
-                notes: srv.notes || "", // Asegura que notes sea string
+                name: srv.name || "",
+                price: srv.price || "",
+                notes: srv.notes || "",
               })),
             }));
             setServiceCatalog(loadedCatalog);
-            // -------------------------------------------------------------------------------------
 
             setContactDetails(data.contact || initialContactDetails);
             setClosingMessage(data.closingMessage || initialClosingMessage);
@@ -154,11 +151,10 @@ export default function BotConfigPage() {
             setNotificationRule(data.notificationRule || initialNotificationRule);
             if (data.promptXml) setGeneratedPromptConfig(data.promptXml);
           } else {
-            // Si el documento no existe, inicializa con los valores por defecto definidos
             setSelectedRules([]);
             setAgentRole(initialAgentRole);
             setBusinessContext(initialBusinessContext);
-            setServiceCatalog(initialServiceCatalog); // Utiliza el initialServiceCatalog si no hay datos
+            setServiceCatalog(initialServiceCatalog);
             setContactDetails(initialContactDetails);
             setClosingMessage(initialClosingMessage);
             setNotificationPhoneNumber(initialNotificationPhoneNumber);
@@ -177,124 +173,72 @@ export default function BotConfigPage() {
     }
   }, [user, toast]);
 
-  // Este useEffect se encarga de generar el XML cuando los datos estén listos
   useEffect(() => {
     const generate = () => {
-      // --- CAMBIOS EN LA FUNCIÓN GENERATE PARA MAYOR ROBUSTEZ ---
-      // Aseguramos que las propiedades de businessContext sean strings antes de trim()
       const safeBusinessContextDescription = businessContext.description || "";
       const safeBusinessContextLocation = businessContext.location || "";
       const safeBusinessContextMission = businessContext.mission || "";
-
-      const businessContextIsEmpty = !safeBusinessContextDescription.trim() && 
-                                     !safeBusinessContextLocation.trim() && 
-                                     !safeBusinessContextMission.trim();
-
-      // Aseguramos que las propiedades de contactDetails sean strings antes de trim()
+      const businessContextIsEmpty = !safeBusinessContextDescription.trim() && !safeBusinessContextLocation.trim() && !safeBusinessContextMission.trim();
       const safeContactPhone = contactDetails.phone || "";
       const safeContactEmail = contactDetails.email || "";
       const safeContactWebsite = contactDetails.website || "";
-
-      const contactDetailsIsEmpty = !safeContactPhone.trim() && 
-                                    !safeContactEmail.trim() && 
-                                    !safeContactWebsite.trim();
-      
-      // Filtramos categorías para asegurar que sean válidas y tengan al menos un nombre o servicio
-      const activeCategories = serviceCatalog.filter(
-        category => category && (category.categoryName?.trim() !== "" || (category.services && category.services.length > 0))
-      );
+      const contactDetailsIsEmpty = !safeContactPhone.trim() && !safeContactEmail.trim() && !safeContactWebsite.trim();
+      const activeCategories = serviceCatalog.filter(category => category && (category.categoryName?.trim() !== "" || (category.services && category.services.length > 0)));
       const serviceCatalogIsEmpty = activeCategories.length === 0;
-
-      // Aseguramos que las reglas seleccionadas y la de notificación sean strings
       const safeSelectedRules = selectedRules.filter(rule => typeof rule === 'string');
-      const safeNotificationRule = notificationRule || ""; // Valor por defecto para notificationRule
-
+      const safeNotificationRule = notificationRule || "";
       let allRulesForConfig = [...safeSelectedRules];
       if (safeNotificationRule.trim()) {
         allRulesForConfig.push(safeNotificationRule.trim());
       }
-
       let rulesConfig = '';
       if (allRulesForConfig.length > 0) {
-        rulesConfig = `
-  <rules>
-    ${allRulesForConfig.map(rule => `<rule>${escapeXml(rule)}</rule>`).join('\n    ')}
-  </rules>`;
+        rulesConfig = `<rules>\n    ${allRulesForConfig.map(rule => `<rule>${escapeXml(rule)}</rule>`).join('\n    ')}\n  </rules>`;
       }
-
       let businessContextConfig = '';
       if (!businessContextIsEmpty) {
-        businessContextConfig = `
-  <businessContext>
-    <description>${escapeXml(safeBusinessContextDescription)}</description>
-    <location>${escapeXml(safeBusinessContextLocation)}</location>
-    <mission>${escapeXml(safeBusinessContextMission)}</mission>
-  </businessContext>`;
+        businessContextConfig = `<businessContext>\n    <description>${escapeXml(safeBusinessContextDescription)}</description>\n    <location>${escapeXml(safeBusinessContextLocation)}</location>\n    <mission>${escapeXml(safeBusinessContextMission)}</mission>\n  </businessContext>`;
       }
-
       let serviceCatalogConfigSection = '';
       if (!serviceCatalogIsEmpty) {
-        serviceCatalogConfigSection = `
-  <serviceCatalog>
-    ${activeCategories.map(category => {
-      // Aseguramos que el nombre de la categoría sea una cadena válida
-      const categoryNameForXml = category.categoryName || ''; 
-      // Filtramos servicios nulos/undefined y mapeamos sus propiedades a strings
-      const servicesForXml = (category.services || []).filter(srv => srv).map(service => { 
-          const serviceNameForXml = service.name || '';
-          const servicePriceForXml = service.price || '';
-          const serviceNotesForXml = service.notes || '';
-          return `
-      <service>
-        <name>${escapeXml(serviceNameForXml)}</name>
-        <price>${escapeXml(servicePriceForXml)}</price>
-        <notes>${escapeXml(serviceNotesForXml)}</notes>
-      </service>`;
-      }).join('\n      ');
-      return `
-    <category name="${escapeXml(categoryNameForXml)}">
-      ${servicesForXml}
-    </category>`;
-    }).join('\n    ')}
-  </serviceCatalog>`;
+        serviceCatalogConfigSection = `<serviceCatalog>\n    ${activeCategories.map(category => {
+          const categoryNameForXml = category.categoryName || '';
+          const servicesForXml = (category.services || []).filter(srv => srv).map(service => {
+              const serviceNameForXml = service.name || '';
+              const servicePriceForXml = service.price || '';
+              const serviceNotesForXml = service.notes || '';
+              return `<service>\n        <name>${escapeXml(serviceNameForXml)}</name>\n        <price>${escapeXml(servicePriceForXml)}</price>\n        <notes>${escapeXml(serviceNotesForXml)}</notes>\n      </service>`;
+          }).join('\n      ');
+          return `<category name="${escapeXml(categoryNameForXml)}">\n      ${servicesForXml}\n    </category>`;
+        }).join('\n    ')}\n  </serviceCatalog>`;
       }
-
       let contactConfig = '';
       if (!contactDetailsIsEmpty) {
-        contactConfig = `
-  <contact>
-    <phone>${escapeXml(safeContactPhone)}</phone>
-    <email>${escapeXml(safeContactEmail)}</email>
-    <website>${escapeXml(safeContactWebsite)}</website>
-  </contact>`;
+        contactConfig = `<contact>\n    <phone>${escapeXml(safeContactPhone)}</phone>\n    <email>${escapeXml(safeContactEmail)}</email>\n    <website>${escapeXml(safeContactWebsite)}</website>\n  </contact>`;
       }
-      
       let notificationConfig = '';
-      const safeNotificationPhoneNumber = notificationPhoneNumber || ""; // Valor por defecto
+      const safeNotificationPhoneNumber = notificationPhoneNumber || "";
       if (safeNotificationPhoneNumber.trim()) {
-        notificationConfig = `
-  <notification>${escapeXml(safeNotificationPhoneNumber.trim())}</notification>`;
+        notificationConfig = `<notification>${escapeXml(safeNotificationPhoneNumber.trim())}</notification>`;
       }
-
-      const safeAgentRole = agentRole || ""; // Asegura que agentRole sea string
-      const safeClosingMessage = closingMessage || ""; // Asegura que closingMessage sea string
-
-      const finalPromptConfig = `
-${rulesConfig.trim() ? rulesConfig.trim() : ''}
-${safeAgentRole.trim() ? `<agentRole>${escapeXml(safeAgentRole)}</agentRole>` : ''}
-${businessContextConfig.trim() ? businessContextConfig.trim() : ''}
-${serviceCatalogConfigSection.trim() ? serviceCatalogConfigSection.trim() : ''}
-${contactConfig.trim() ? contactConfig.trim() : ''}
-${safeClosingMessage.trim() ? `<closingMessage>${escapeXml(safeClosingMessage)}</closingMessage>` : ''}
-${notificationConfig.trim() ? notificationConfig.trim() : ''}
-      `.trim().replace(/^\s*\n/gm, ""); 
+      const safeAgentRole = agentRole || "";
+      const safeClosingMessage = closingMessage || "";
+      const finalPromptConfig = [
+        rulesConfig,
+        safeAgentRole.trim() ? `<agentRole>${escapeXml(safeAgentRole)}</agentRole>` : '',
+        businessContextConfig,
+        serviceCatalogConfigSection,
+        contactConfig,
+        safeClosingMessage.trim() ? `<closingMessage>${escapeXml(safeClosingMessage)}</closingMessage>` : '',
+        notificationConfig,
+      ].filter(Boolean).join('\n').trim();
       setGeneratedPromptConfig(finalPromptConfig);
     };
-    // Solo generamos el prompt si los datos ya se cargaron (isLoading es false)
-    if (!isLoading) { 
+
+    if (!isLoading) {
         generate();
     }
-  }, [selectedRules, agentRole, businessContext, serviceCatalog, contactDetails, closingMessage, notificationPhoneNumber, notificationRule, isLoading]); // Dependencias
+  }, [selectedRules, agentRole, businessContext, serviceCatalog, contactDetails, closingMessage, notificationPhoneNumber, notificationRule, isLoading]);
 
   const handleRuleChange = (rule: string) => {
     setSelectedRules(prev =>
@@ -388,7 +332,7 @@ ${notificationConfig.trim() ? notificationConfig.trim() : ''}
         serviceCatalog,
         contact: contactDetails,
         closingMessage,
-        promptXml: generatedPromptConfig, // This field name in Firestore remains promptXml
+        promptXml: generatedPromptConfig,
         instanceIdAssociated,
         notificationPhoneNumber,
         notificationRule,
@@ -425,18 +369,47 @@ ${notificationConfig.trim() ? notificationConfig.trim() : ''}
   }
 
   return (
-    <div className="container mx-auto p-4 space-y-8">
-      <h1 className="text-3xl font-bold text-foreground">Configurar Prompt del Bot</h1>
+    <div className="container mx-auto p-0 md:p-4 space-y-8">
+      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Configurar Prompt del Bot</h1>
+          <p className="text-muted-foreground">Define la personalidad, conocimiento y comportamiento de tu asistente virtual.</p>
+        </div>
+        <Button onClick={handleSave} disabled={isSaving || !user} size="lg" className="w-full sm:w-auto">
+          {isSaving ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
+          {isSaving ? "Guardando..." : "Guardar Configuración"}
+        </Button>
+      </div>
       
-      <div className="space-y-6">
-        <ScrollArea className="h-auto pr-4">
-        <div className="space-y-6">
+      <Tabs defaultValue="role_rules" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
+          <TabsTrigger value="role_rules">Rol y Reglas</TabsTrigger>
+          <TabsTrigger value="context_services">Contexto y Servicios</TabsTrigger>
+          <TabsTrigger value="contact_closing">Contacto y Cierre</TabsTrigger>
+          <TabsTrigger value="notifications">Notificaciones</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="role_rules" className="pt-6 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center"><Bot className="mr-2 h-5 w-5 text-primary"/>Rol del Agente</CardTitle>
+              <CardDescription>Define la personalidad y el objetivo principal de tu asistente de ventas.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={agentRole}
+                onChange={handleTextAreaChange(setAgentRole)}
+                rows={6}
+                placeholder="Ej: Eres un asistente de ventas amigable y proactivo..."
+              />
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle>Reglas del Bot</CardTitle>
-              <CardDescription>Selecciona las reglas generales que el bot debe seguir. La regla de notificación se añadirá aquí si se define.</CardDescription>
+              <CardDescription>Selecciona las reglas generales que el bot debe seguir en todo momento.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-3">
               {availableRules.map(rule => (
                 <div key={rule} className="flex items-center space-x-2">
                   <Checkbox
@@ -444,31 +417,18 @@ ${notificationConfig.trim() ? notificationConfig.trim() : ''}
                     checked={selectedRules.includes(rule)}
                     onCheckedChange={() => handleRuleChange(rule)}
                   />
-                  <Label htmlFor={`rule-${rule.replace(/\s+/g, '-')}`}>{rule}</Label>
+                  <Label htmlFor={`rule-${rule.replace(/\s+/g, '-')}`} className="font-normal">{rule}</Label>
                 </div>
               ))}
             </CardContent>
           </Card>
+        </TabsContent>
 
+        <TabsContent value="context_services" className="pt-6 space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Rol del Agente</CardTitle>
-              <CardDescription>Define la personalidad y el objetivo del agente de ventas.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Textarea
-                value={agentRole}
-                onChange={handleTextAreaChange(setAgentRole)}
-                rows={5}
-                placeholder="Ej: Eres un asistente de ventas amigable..."
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Contexto del Negocio</CardTitle>
-              <CardDescription>Información sobre tu empresa. Se omitirá de la configuración del prompt si todos los campos están vacíos.</CardDescription>
+              <CardTitle className="flex items-center"><Building className="mr-2 h-5 w-5 text-primary"/>Contexto del Negocio</CardTitle>
+              <CardDescription>Proporciona información clave sobre tu empresa para que el bot pueda responder con precisión.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -485,11 +445,10 @@ ${notificationConfig.trim() ? notificationConfig.trim() : ''}
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader>
               <CardTitle>Catálogo de Servicios</CardTitle>
-              <CardDescription>Define los servicios que ofrece el bot. Se omitirá de la configuración del prompt si no hay categorías o servicios definidos.</CardDescription>
+              <CardDescription>Define los servicios que ofrece el bot. Puedes agruparlos por categorías.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {serviceCatalog.map((category, catIndex) => (
@@ -536,11 +495,13 @@ ${notificationConfig.trim() ? notificationConfig.trim() : ''}
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
 
-          <Card>
+        <TabsContent value="contact_closing" className="pt-6 space-y-6">
+           <Card>
             <CardHeader>
-              <CardTitle>Datos de Contacto</CardTitle>
-              <CardDescription>Información de contacto que el bot puede proporcionar. Se omitirá de la configuración del prompt si todos los campos están vacíos.</CardDescription>
+              <CardTitle className="flex items-center"><Phone className="mr-2 h-5 w-5 text-primary"/>Datos de Contacto</CardTitle>
+              <CardDescription>Información de contacto que el bot puede proporcionar si el cliente lo solicita.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -557,14 +518,30 @@ ${notificationConfig.trim() ? notificationConfig.trim() : ''}
               </div>
             </CardContent>
           </Card>
-
+          <Card>
+            <CardHeader>
+              <CardTitle>Mensaje de Cierre</CardTitle>
+              <CardDescription>Define la llamada a la acción o el mensaje final que el bot debe usar para guiar al cliente.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={closingMessage}
+                onChange={handleTextAreaChange(setClosingMessage)}
+                rows={4}
+                placeholder="Ej: ¿Te gustaría agendar una llamada para discutir esto más a fondo?"
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="notifications" className="pt-6 space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
                 <Bell className="mr-2 h-5 w-5 text-primary" />
-                Notificación
+                Configuración de Notificaciones
               </CardTitle>
-              <CardDescription>Configura las notificaciones que el bot puede enviar. La regla se añadirá a las reglas generales del bot.</CardDescription>
+              <CardDescription>Configura las notificaciones que el bot puede enviar y bajo qué condiciones.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -576,7 +553,7 @@ ${notificationConfig.trim() ? notificationConfig.trim() : ''}
                   placeholder="Ej: 528112345678 (solo dígitos, con código de país)" 
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Ingresa el número completo sin espacios ni símbolos. Si se deja vacío, no se incluirá la información de notificación en el prompt del bot.
+                  Ingresa el número completo sin espacios ni símbolos. Si se deja vacío, no se enviarán notificaciones.
                 </p>
               </div>
               <div>
@@ -589,36 +566,15 @@ ${notificationConfig.trim() ? notificationConfig.trim() : ''}
                   placeholder="Ej: Notificar cuando un cliente solicite hablar con un humano." 
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Describe la condición bajo la cual el bot debe activar una notificación. Esta regla se agregará a la sección de reglas del prompt del bot. Si se deja vacía, no se añadirá.
+                  Describe la condición bajo la cual el bot debe activar una notificación. Esta regla se agregará a la sección de reglas del prompt.
                 </p>
               </div>
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Mensaje de Cierre</CardTitle>
-              <CardDescription>La llamada a la acción final del bot.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Textarea
-                value={closingMessage}
-                onChange={handleTextAreaChange(setClosingMessage)}
-                rows={4}
-                placeholder="Ej: ¿Te gustaría agendar una llamada?"
-              />
-            </CardContent>
-          </Card>
-        </div>
-        </ScrollArea>
-
-        <div className="flex justify-end pt-6">
-          <Button onClick={handleSave} disabled={isSaving || !user} size="lg" className="w-full sm:w-auto">
-            {isSaving ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
-            {isSaving ? "Guardando..." : "Guardar Configuración del Bot"}
-          </Button>
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
+
+    
