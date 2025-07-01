@@ -14,6 +14,7 @@ import type { WhatsAppInstance } from './configuration/page';
 import type { BotConfigData } from './bot-config/page'; 
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
+import OnboardingGuide from '@/components/dashboard/onboarding-guide';
 
 // Interfaces necesarias para el Dashboard
 interface ChatMessageDocument {
@@ -94,8 +95,9 @@ export default function DashboardPage() {
           const instanceDocRef = doc(db, 'instances', user.uid);
           const instanceDocSnap = await getDoc(instanceDocRef);
 
+          let instanceData: WhatsAppInstance | null = null;
           if (instanceDocSnap.exists()) {
-            const instanceData = instanceDocSnap.data() as WhatsAppInstance;
+            instanceData = instanceDocSnap.data() as WhatsAppInstance;
             instanceStatusVal = instanceData.status || 'Pendiente';
             instanceIdForChats = instanceData.id || instanceData.name;
           }
@@ -234,8 +236,8 @@ export default function DashboardPage() {
 
           setStats({
             instanceStatus: instanceStatusVal,
-            isChatbotGloballyEnabled: user.isChatbotGloballyEnabled,
-            isDemoMode: user.demo,
+            isChatbotGloballyEnabled: instanceData?.chatbotEnabled ?? true,
+            isDemoMode: instanceData?.demo ?? false,
             contactCount: contactsVal,
             conversationCount: conversationsVal,
             isBotPromptConfigured: botPromptConfiguredVal,
@@ -296,6 +298,8 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {user && <OnboardingGuide />}
+
       <h2 className="text-3xl font-bold tracking-tight text-foreground">Resumen del Panel</h2>
       
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

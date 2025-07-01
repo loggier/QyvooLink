@@ -38,6 +38,7 @@ interface UserProfile {
   subscriptionStatus?: 'active' | 'trialing' | 'canceled' | 'inactive';
   isChatbotGloballyEnabled?: boolean; // Global bot status
   demo?: boolean; // Demo mode status
+  onboardingCompleted?: boolean; // Onboarding status
 }
 
 interface AuthContextType {
@@ -112,6 +113,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           subscriptionStatus: subscriptionStatus,
           isChatbotGloballyEnabled: instanceData.chatbotEnabled ?? true,
           demo: instanceData.demo ?? false,
+          onboardingCompleted: dbData.onboardingCompleted ?? false,
          } as UserProfile);
 
       } else {
@@ -143,7 +145,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           role: 'user', 
           createdAt: serverTimestamp(),
           isActive: true,
-          isVip: false, // Default new users to not be VIP
+          isVip: false,
+          onboardingCompleted: false, // Set onboarding to false for new users
         };
         await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
         

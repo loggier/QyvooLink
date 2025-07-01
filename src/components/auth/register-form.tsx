@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useForm } from 'react-hook-form';
@@ -65,9 +66,9 @@ export function RegisterForm() {
       await registerUser(values);
       toast({
         title: "Registro Exitoso",
-        description: "¡Bienvenido a Qyvoo! Has iniciado sesión.",
+        description: "¡Bienvenido a Qyvoo! Ahora elige un plan para comenzar.",
       });
-      // Redirect is handled by AuthContext
+      // Redirect is handled by AuthContext and the registerUser function
     } catch (error: any) {
       toast({
         variant: "destructive",
