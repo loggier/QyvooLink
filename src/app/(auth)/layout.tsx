@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ReactNode } from 'react';
@@ -5,6 +6,7 @@ import { useAuth } from '@/context/auth-context';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
+import { AppFooter } from '@/components/layout/footer';
 
 export default function AuthPagesLayout({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -24,5 +26,10 @@ export default function AuthPagesLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <div className="flex flex-col min-h-screen">
+      <main className="flex-grow flex flex-col">{children}</main>
+      <AppFooter />
+    </div>
+  );
 }

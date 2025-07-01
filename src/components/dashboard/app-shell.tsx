@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ReactNode } from 'react';
@@ -30,6 +31,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare, Bot, Users, Zap, Shield, CreditCard, HelpCircle } from 'lucide-react';
 import OnboardingGuide from '@/components/dashboard/onboarding-guide';
+import { AppFooter } from '@/components/layout/footer';
 
 interface NavItem {
   href: string;
@@ -116,7 +118,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {/* User profile and logout */}
         </SidebarFooter>
       </Sidebar>
-      <SidebarInset>
+      <SidebarInset className="flex flex-col">
         <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-md md:px-6">
           <div className="flex items-center gap-4">
              <SidebarTrigger className="md:hidden" /> {/* Mobile trigger */}
@@ -169,6 +171,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <main className="flex-1 p-4 md:p-8">
           {children}
         </main>
+        <AppFooter />
       </SidebarInset>
     </SidebarProvider>
   );

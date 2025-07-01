@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ReactNode } from 'react';
@@ -12,7 +13,7 @@ interface AuthLayoutProps {
 
 export function AuthLayout({ children, title, description }: AuthLayoutProps) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
+    <div className="flex flex-1 flex-col items-center justify-center bg-background p-4">
       <div className="w-full max-w-md space-y-8">
         <div className="flex flex-col items-center text-center">
           <Link href="/" aria-label="Qyvoo Home">
