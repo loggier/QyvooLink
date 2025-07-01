@@ -127,11 +127,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           {user && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                <Button variant="ghost" className="relative h-10 w-10 rounded-full group">
                   <Avatar className="h-9 w-9">
                     {/* Placeholder for user avatar image */}
                     {/* <AvatarImage src="https://placehold.co/100x100.png" alt={user.fullName || user.username || 'User'} data-ai-hint="user avatar" /> */}
-                    <AvatarFallback>{getInitials(user.fullName || user.username)}</AvatarFallback>
+                    <AvatarFallback className="group-hover:bg-primary group-hover:text-primary-foreground transition-colors duration-200">
+                        {getInitials(user.fullName || user.username)}
+                    </AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
