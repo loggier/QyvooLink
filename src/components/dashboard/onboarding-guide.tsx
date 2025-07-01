@@ -75,7 +75,10 @@ export default function OnboardingGuide({ isOpen, setIsOpen, startFromBeginning 
   };
 
   const handleFinish = async () => {
-    if (!user) return;
+    if (!user) {
+      setIsOpen(false);
+      return;
+    };
     try {
       const userDocRef = doc(db, 'users', user.uid);
       await updateDoc(userDocRef, { onboardingCompleted: true });
@@ -119,22 +122,27 @@ export default function OnboardingGuide({ isOpen, setIsOpen, startFromBeginning 
             </p>
         </div>
 
-        <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-between w-full">
-          {currentStep > 0 && (
-            <Button variant="outline" onClick={handlePrevious}>
-              Anterior
-            </Button>
-          )}
+        <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-between sm:w-full">
+            {/* Left-aligned button(s) */}
+            <div>
+                {currentStep > 0 && (
+                    <Button variant="outline" onClick={handlePrevious}>
+                        Anterior
+                    </Button>
+                )}
+            </div>
 
-          {currentStep === onboardingSteps.length - 1 ? (
-             <Button onClick={handleFinish} className="flex-1">
-                Finalizar
-             </Button>
-          ) : (
-            <Button onClick={handleCtaClick} className="flex-1">
-                {step.ctaText}
-            </Button>
-          )}
+            {/* Right-aligned button(s) */}
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                {currentStep < onboardingSteps.length - 1 && (
+                    <Button variant="ghost" onClick={handleFinish}>
+                        Omitir
+                    </Button>
+                )}
+                <Button onClick={currentStep === onboardingSteps.length - 1 ? handleFinish : handleCtaClick}>
+                    {step.ctaText}
+                </Button>
+            </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
