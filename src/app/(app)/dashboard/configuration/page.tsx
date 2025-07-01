@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -16,7 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { useState, useEffect, useCallback } from 'react';
-import { Copy, Eye, EyeOff, MessageSquareText, Settings2, Trash2, Users, PlusCircle, ExternalLink, RefreshCw, ListChecks, Loader2, QrCode, Bot, FlaskConical, Save } from 'lucide-react';
+import { Copy, Eye, EyeOff, MessageSquareText, Settings2, Trash2, Users, PlusCircle, ExternalLink, RefreshCw, ListChecks, Loader2, QrCode, Bot, FlaskConical, Save, HelpCircle } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { db } from '@/lib/firebase'; 
@@ -592,8 +592,11 @@ export default function ConfigurationPage() {
 
       <Card>
         <CardHeader>
-          <div className="flex justify-between items-center">
-            <CardTitle>Instancia de Qyvoo WhatsApp</CardTitle>
+          <div className="flex justify-between items-start">
+            <div>
+              <CardTitle>Instancia de Qyvoo WhatsApp</CardTitle>
+              <CardDescription>Gestiona tu conexión de WhatsApp a través de Qyvoo.</CardDescription>
+            </div>
             {!whatsAppInstance && (
               <Dialog open={isAddInstanceDialogOpen} onOpenChange={setIsAddInstanceDialogOpen}>
                 <DialogTrigger asChild>
@@ -646,24 +649,35 @@ export default function ConfigurationPage() {
               </Dialog>
             )}
           </div>
-          <CardDescription>Gestiona tu conexión de WhatsApp a través de Qyvoo.</CardDescription>
         </CardHeader>
         <CardContent>
           {whatsAppInstance ? (
-            <Card className="shadow-lg">
+            <Card className="shadow-none border-dashed">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-lg font-semibold">{whatsAppInstance.name}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="qyvooApiKey">Qyvoo API Key (Hash/Token)</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="qyvooApiKey">Qyvoo API Key (Hash/Token)</Label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Esta es tu clave secreta para conectar servicios externos a la API de Qyvoo.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                  </div>
                   <div className="flex items-center space-x-2">
                     <Input
                       id="qyvooApiKey"
                       type={showApiKey ? "text" : "password"}
                       readOnly
                       value={whatsAppInstance.apiKey || "No disponible"}
-                      className="flex-grow"
+                      className="flex-grow font-mono"
                     />
                     <Button variant="ghost" size="icon" onClick={() => copyToClipboard(whatsAppInstance.apiKey)} disabled={!whatsAppInstance.apiKey}>
                       <Copy className="h-4 w-4" />
@@ -688,9 +702,9 @@ export default function ConfigurationPage() {
                 </div>
 
                 {whatsAppInstance.qrCodeUrl && (whatsAppInstance.status === 'Pendiente' || whatsAppInstance.status === 'Desconectado') && (
-                  <div className="mt-4 p-4 border rounded-md bg-accent/10 text-center">
+                  <div className="mt-4 p-4 border rounded-lg bg-accent/10 text-center">
                     <p className="text-sm text-accent-foreground mb-2">Escanea este código QR con WhatsApp en tu teléfono para conectar la instancia.</p>
-                    <img src={whatsAppInstance.qrCodeUrl.startsWith('data:image') ? whatsAppInstance.qrCodeUrl : `data:image/png;base64,${whatsAppInstance.qrCodeUrl}`} alt="QR Code para conectar WhatsApp" className="mx-auto mb-2 max-w-xs" data-ai-hint="qr code"/>
+                    <img src={whatsAppInstance.qrCodeUrl.startsWith('data:image') ? whatsAppInstance.qrCodeUrl : `data:image/png;base64,${whatsAppInstance.qrCodeUrl}`} alt="QR Code para conectar WhatsApp" className="mx-auto mb-2 max-w-xs rounded-lg" data-ai-hint="qr code"/>
                     {whatsAppInstance.connectionWebhookUrl && (
                        <Button variant="outline" size="sm" asChild>
                         <a href={whatsAppInstance.connectionWebhookUrl} target="_blank" rel="noopener noreferrer">
@@ -727,7 +741,7 @@ export default function ConfigurationPage() {
                 </div>
 
               </CardContent>
-              <CardFooter className="flex justify-between items-center">
+              <CardFooter className="flex justify-between items-center bg-muted/50 p-4 rounded-b-lg">
                  <Badge variant={
                     whatsAppInstance.status === 'Conectado' ? 'default' : 
                     whatsAppInstance.status === 'Pendiente' ? 'secondary' : 
@@ -778,9 +792,9 @@ export default function ConfigurationPage() {
               </CardFooter>
             </Card>
           ) : (
-            <div className="text-center py-8">
+            <div className="text-center py-12 rounded-lg border-2 border-dashed">
               <p className="text-muted-foreground">No hay ninguna instancia de Qyvoo WhatsApp configurada.</p>
-              <p className="text-sm text-muted-foreground">Haz clic en "Agregar Instancia" para comenzar.</p>
+              <p className="text-sm text-muted-foreground mt-2">Haz clic en "Agregar Instancia" para comenzar.</p>
             </div>
           )}
         </CardContent>
@@ -795,7 +809,7 @@ export default function ConfigurationPage() {
             </DialogDescription>
           </DialogHeader>
           {qrCodeDataUri ? (
-            <div className="flex justify-center">
+            <div className="flex justify-center p-4 bg-white rounded-lg">
               <img src={qrCodeDataUri} alt="Código QR de WhatsApp" className="mx-auto max-w-xs" data-ai-hint="qr code" />
             </div>
           ) : (
@@ -858,7 +872,7 @@ export default function ConfigurationPage() {
                 Habilita un modo de demostración para probar tu bot sin conectar un teléfono real.
               </p>
               {isDemoMode && (
-                <div className="pl-2">
+                <div className="pl-8 space-y-2">
                   <Label htmlFor="demoPhoneNumber">Número de Teléfono para Simulación</Label>
                   <Input
                     id="demoPhoneNumber"

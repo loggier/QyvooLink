@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from 'next/link';
@@ -296,8 +295,8 @@ export default function DashboardPage() {
 
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-8">
+      <div>
         <h2 className="text-3xl font-bold tracking-tight text-foreground">Resumen del Panel</h2>
       </div>
       
@@ -421,7 +420,7 @@ export default function DashboardPage() {
               <p className="ml-3 text-muted-foreground">Cargando actividad...</p>
             </div>
           ) : recentConversations.length === 0 ? (
-            <div className="flex h-64 flex-col items-center justify-center rounded-md border border-dashed">
+            <div className="flex h-64 flex-col items-center justify-center rounded-lg border border-dashed">
               <MessagesSquare className="h-12 w-12 text-muted-foreground/70" />
               <p className="mt-4 text-center text-muted-foreground">
                 No hay actividad reciente para mostrar. <br />
@@ -430,10 +429,10 @@ export default function DashboardPage() {
             </div>
           ) : (
             <ScrollArea className="h-72">
-              <ul className="space-y-4 pr-3">
+              <ul className="space-y-2 pr-3">
                 {recentConversations.map((convo) => (
                   <li key={convo.chat_id}>
-                    <Link href={`/dashboard/chat?chatId=${convo.chat_id}`} className="block hover:bg-muted/50 p-3 rounded-md transition-colors">
+                    <Link href={`/dashboard/chat?chatId=${convo.chat_id}`} className="block hover:bg-muted p-3 rounded-lg transition-colors">
                       <div className="flex items-center space-x-3">
                         <Avatar className="h-10 w-10">
                           <AvatarFallback>{convo.avatarFallback}</AvatarFallback>

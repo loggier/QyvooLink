@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -583,7 +582,7 @@ export default function ChatPage() {
 
   if (error && (!whatsAppInstance || whatsAppInstance.status !== 'Conectado')) {
     return (
-      <Card className="m-auto mt-10 max-w-lg shadow-lg">
+      <Card className="m-auto mt-10 max-w-lg">
         <CardHeader>
           <CardTitle className="flex items-center text-destructive">
             <AlertTriangle className="mr-2 h-6 w-6" />
@@ -602,7 +601,7 @@ export default function ChatPage() {
   
   if (!whatsAppInstance || whatsAppInstance.status !== 'Conectado') {
      return (
-      <Card className="m-auto mt-10 max-w-lg shadow-lg">
+      <Card className="m-auto mt-10 max-w-lg">
         <CardHeader>
           <CardTitle className="flex items-center text-primary">
             <Info className="mr-2 h-6 w-6" />
@@ -759,7 +758,7 @@ export default function ChatPage() {
             </div>
 
             {/* Messages Area */}
-            <ScrollArea className="flex-grow p-4 space-y-3 bg-muted/30">
+            <ScrollArea className="flex-grow p-4 space-y-4 bg-muted/20">
               {isLoadingMessages ? (
                 <div className="flex justify-center items-center h-full">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -779,14 +778,12 @@ export default function ChatPage() {
                   let bubbleClass: string;
                   let timestampAlignmentClass: string;
                   let IconComponent: React.ElementType | null = null;
-                  let avatarFallbackClass: string;
                   
                   if (isExternalUser) {
                     alignmentClass = 'justify-start'; 
-                    bubbleClass = 'bg-muted dark:bg-slate-700'; 
+                    bubbleClass = 'bg-card border'; 
                     timestampAlignmentClass = 'text-muted-foreground text-left';
                     IconComponent = UserRound; 
-                    avatarFallbackClass = "bg-gray-400 text-white";
                   } else { 
                     alignmentClass = 'justify-end'; 
                     timestampAlignmentClass = 'text-right';
@@ -795,53 +792,34 @@ export default function ChatPage() {
                       bubbleClass = 'bg-primary text-primary-foreground';
                       timestampAlignmentClass += ' text-primary-foreground/80';
                       IconComponent = Bot;
-                      avatarFallbackClass = "bg-blue-500 text-white";
                     } else if (userNameLower === 'agente') {
-                      bubbleClass = 'bg-secondary text-secondary-foreground dark:bg-slate-600 dark:text-slate-100';
-                      timestampAlignmentClass += ' text-secondary-foreground/80';
+                      bubbleClass = 'bg-accent text-accent-foreground';
+                      timestampAlignmentClass += ' text-accent-foreground/80';
                       IconComponent = User; 
-                      avatarFallbackClass = "bg-green-500 text-white";
                     } else { 
-                      bubbleClass = 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200';
-                      timestampAlignmentClass += ' text-gray-500 dark:text-gray-400';
+                      bubbleClass = 'bg-secondary text-secondary-foreground';
+                      timestampAlignmentClass += ' text-muted-foreground';
                       IconComponent = MessageCircle; 
-                      avatarFallbackClass = "bg-gray-300 dark:bg-gray-600 text-black dark:text-white";
                     }
                   }
 
                   return (
                     <div
                       key={msg.id}
-                      className={`flex w-full ${alignmentClass}`}
+                      className={`flex w-full items-end gap-2 ${alignmentClass}`}
                     >
-                      <div className={`flex items-end max-w-[75%] gap-2`}>
-                        {IconComponent && isExternalUser && (
-                          <Avatar className={`h-6 w-6 self-end mb-1`}>
-                            <AvatarFallback className={avatarFallbackClass}>
-                              <IconComponent className="h-4 w-4" />
-                            </AvatarFallback>
-                          </Avatar>
-                        )}
-                        
-                        <div
-                          className={`py-2 px-3 rounded-lg shadow-md ${bubbleClass}`}
-                        >
-                          <p className="text-sm break-all whitespace-pre-wrap">
-                            {formatWhatsAppMessage(msg.mensaje)}
-                          </p>
-                          <p className={`text-xs mt-1 ${timestampAlignmentClass}`}>
-                            {formatChatMessageTimestamp(msg.timestamp)}
-                          </p>
+                      {isExternalUser && IconComponent && <IconComponent className="h-6 w-6 text-muted-foreground shrink-0 mb-1" />}
+                      
+                      <div className={`py-2 px-3 rounded-2xl shadow-sm max-w-[75%] ${bubbleClass}`}>
+                        <div className="text-sm break-words whitespace-pre-wrap leading-relaxed">
+                          {formatWhatsAppMessage(msg.mensaje)}
                         </div>
-
-                        {IconComponent && !isExternalUser && (
-                          <Avatar className={`h-6 w-6 self-end mb-1`}>
-                            <AvatarFallback className={avatarFallbackClass}>
-                              <IconComponent className="h-4 w-4" />
-                            </AvatarFallback>
-                          </Avatar>
-                        )}
+                        <p className={`text-xs mt-1.5 ${timestampAlignmentClass}`}>
+                          {formatChatMessageTimestamp(msg.timestamp)}
+                        </p>
                       </div>
+
+                      {!isExternalUser && IconComponent && <IconComponent className="h-6 w-6 text-muted-foreground shrink-0 mb-1" />}
                     </div>
                   );
                 })
@@ -893,15 +871,16 @@ export default function ChatPage() {
                   onClick={handleSendMessage} 
                   disabled={!replyMessage.trim() || isLoadingMessages}
                   className="shrink-0"
+                  size="lg"
                 >
                   <Send className="h-4 w-4" />
-                  {!isMobile && <span className="ml-2">Enviar</span>}
+                  <span className="sr-only">Enviar</span>
                 </Button>
               </div>
             </div>
           </>
         ) : ( 
-          <div className={`${isMobile ? 'hidden' : 'flex'} flex-1 flex-col items-center justify-center p-6`}>
+          <div className={`${isMobile ? 'hidden' : 'flex'} flex-1 flex-col items-center justify-center p-6 bg-muted/20`}>
             <div className="text-center max-w-md">
               <EvolveLinkLogo className="h-16 w-auto mx-auto mb-6 text-primary" data-ai-hint="company logo"/>
               <h2 className="text-2xl font-semibold mb-2">Bienvenido a Qyvoo</h2>

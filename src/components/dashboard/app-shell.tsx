@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ReactNode } from 'react';
@@ -165,7 +164,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </DropdownMenu>
           )}
         </header>
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-4 md:p-8">
           {children}
         </main>
       </SidebarInset>

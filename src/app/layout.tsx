@@ -1,23 +1,20 @@
 import type { Metadata, Viewport } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Poppins } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/context/auth-context';
 import { Toaster } from '@/components/ui/toaster';
 import '@/polyfills';
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-});
 
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
+const fontSans = Poppins({
+  variable: '--font-sans',
   subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
 });
 
 export const metadata: Metadata = {
   title: 'Qyvoo - Gestión de WhatsApp',
   description: 'Sistema de gestión para WhatsApp Business',
-  themeColor: '#F44336',
+  themeColor: '#1E88E5',
   viewport: 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no',
   icons: {
     icon: '/icons/icon-192x192.png',
@@ -30,9 +27,8 @@ export const metadata: Metadata = {
   }
 };
 
-
 export const viewport: Viewport = {
-  themeColor: '#3F51B5', // Updated to PRD primary color: Saturated Blue
+  themeColor: '#1E88E5',
 };
 
 export default function RootLayout({
@@ -42,7 +38,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${fontSans.variable} font-sans antialiased`}>
         <AuthProvider>
           {children}
           <Toaster />
