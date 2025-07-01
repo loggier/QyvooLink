@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc } from 'firebase/firestore';
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Loader2, Rocket, Settings, Bot, PartyPopper } from 'lucide-react';
+import { Rocket, Settings, Bot, PartyPopper } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { useRouter } from 'next/navigation';
 
@@ -49,36 +49,22 @@ const onboardingSteps = [
   },
 ];
 
-export default function OnboardingGuide() {
+interface OnboardingGuideProps {
+  isOpen: boolean;
+  setIsOpen: (open: boolean) => void;
+  startFromBeginning?: boolean;
+}
+
+export default function OnboardingGuide({ isOpen, setIsOpen, startFromBeginning = false }: OnboardingGuideProps) {
   const { user } = useAuth();
   const router = useRouter();
-  const [isOpen, setIsOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (user) {
-      const checkOnboardingStatus = async () => {
-        const userDocRef = doc(db, 'users', user.uid);
-        try {
-          const docSnap = await getDoc(userDocRef);
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            if (!data.onboardingCompleted) {
-              setIsOpen(true);
-            }
-          }
-        } catch (error) {
-          console.error("Error checking onboarding status:", error);
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      checkOnboardingStatus();
-    } else {
-        setIsLoading(false);
+    if (isOpen && startFromBeginning) {
+      setCurrentStep(0);
     }
-  }, [user]);
+  }, [isOpen, startFromBeginning]);
 
   const handleNext = () => {
     setCurrentStep((prev) => Math.min(prev + 1, onboardingSteps.length - 1));
@@ -108,10 +94,6 @@ export default function OnboardingGuide() {
       handleNext();
     }
   };
-
-  if (isLoading) {
-    return null; // Don't render anything while checking status
-  }
 
   const step = onboardingSteps[currentStep];
   const Icon = step.icon;
