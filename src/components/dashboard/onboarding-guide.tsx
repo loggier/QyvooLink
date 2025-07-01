@@ -61,45 +61,53 @@ export default function OnboardingGuide({ isOpen, setIsOpen, startFromBeginning 
   const [currentStep, setCurrentStep] = useState(0);
 
   useEffect(() => {
+    // When the guide is opened manually, always reset to the first step.
     if (isOpen && startFromBeginning) {
       setCurrentStep(0);
     }
   }, [isOpen, startFromBeginning]);
 
-  const handleNext = () => {
+  // Moves to the next step in the guide.
+  const handleNextStep = () => {
     setCurrentStep((prev) => Math.min(prev + 1, onboardingSteps.length - 1));
   };
 
-  const handlePrevious = () => {
+  // Moves to the previous step in the guide.
+  const handlePreviousStep = () => {
     setCurrentStep((prev) => Math.max(prev - 1, 0));
   };
 
-  const handleFinish = async () => {
-    if (!user) {
-      setIsOpen(false);
-      return;
-    };
+  /**
+   * Marks the onboarding as completed for the user in Firestore so it won't show automatically again.
+   * This is called when the user clicks "Omitir" or "Finalizar".
+   */
+  const handleCompleteOnboarding = async () => {
+    setIsOpen(false); // Close the dialog immediately for a snappy UX.
+    if (!user) return;
+    
     try {
       const userDocRef = doc(db, 'users', user.uid);
       await updateDoc(userDocRef, { onboardingCompleted: true });
-      setIsOpen(false);
     } catch (error) {
       console.error("Error updating onboarding status:", error);
+      // Optional: show a toast to the user if saving fails.
     }
   };
 
+  // Handles the main call-to-action button click for the current step.
   const handleCtaClick = () => {
     const step = onboardingSteps[currentStep];
     if (step.ctaLink) {
       router.push(step.ctaLink);
-      setIsOpen(false); // Close the dialog to let the user navigate
+      setIsOpen(false); // Close the dialog to let the user navigate and complete the action.
     } else {
-      handleNext();
+      handleNextStep();
     }
   };
 
   const step = onboardingSteps[currentStep];
   const Icon = step.icon;
+  const isFinalStep = currentStep === onboardingSteps.length - 1;
   const progressValue = ((currentStep + 1) / onboardingSteps.length) * 100;
 
   return (
@@ -123,26 +131,24 @@ export default function OnboardingGuide({ isOpen, setIsOpen, startFromBeginning 
         </div>
 
         <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-between sm:w-full">
-            {/* Left-aligned button(s) */}
-            <div>
+            {/* Left-aligned button(s): "Anterior" and "Omitir" */}
+            <div className="flex gap-2">
                 {currentStep > 0 && (
-                    <Button variant="outline" onClick={handlePrevious}>
+                    <Button variant="outline" onClick={handlePreviousStep}>
                         Anterior
+                    </Button>
+                )}
+                 {!isFinalStep && (
+                    <Button variant="ghost" onClick={handleCompleteOnboarding}>
+                        Omitir
                     </Button>
                 )}
             </div>
 
-            {/* Right-aligned button(s) */}
-            <div className="flex flex-col-reverse gap-2 sm:flex-row">
-                {currentStep < onboardingSteps.length - 1 && (
-                    <Button variant="ghost" onClick={handleFinish}>
-                        Omitir
-                    </Button>
-                )}
-                <Button onClick={currentStep === onboardingSteps.length - 1 ? handleFinish : handleCtaClick}>
-                    {step.ctaText}
-                </Button>
-            </div>
+            {/* Right-aligned button: Main CTA */}
+            <Button onClick={isFinalStep ? handleCompleteOnboarding : handleCtaClick}>
+                {step.ctaText}
+            </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
