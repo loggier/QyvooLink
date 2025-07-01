@@ -2,6 +2,7 @@
 "use client";
 
 import type { ReactNode } from 'react';
+import { useState, useEffect } from 'react';
 import {
   SidebarProvider,
   Sidebar,
@@ -28,7 +29,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare, Bot, Users, Zap, Shield, CreditCard } from 'lucide-react';
+import { Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare, Bot, Users, Zap, Shield, CreditCard, HelpCircle } from 'lucide-react';
+import OnboardingGuide from '@/components/dashboard/onboarding-guide';
 
 interface NavItem {
   href: string;
@@ -52,6 +54,14 @@ const navItems: NavItem[] = [
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { user, logoutUser } = useAuth();
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
+
+  useEffect(() => {
+    // Automatically open the guide for new, non-admin users who haven't completed it, only on the main dashboard page.
+    if (user && user.role !== 'admin' && user.onboardingCompleted === false && pathname === '/dashboard') {
+      setIsGuideOpen(true);
+    }
+  }, [user, pathname]);
 
   const getInitials = (name?: string) => {
     if (!name) return 'U';
@@ -76,6 +86,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider defaultOpen>
+      <OnboardingGuide isOpen={isGuideOpen} setIsOpen={setIsGuideOpen} startFromBeginning={true} />
       <Sidebar collapsible="icon">
         <SidebarHeader className="p-4 flex flex-row items-center justify-between">
            <Link href={homeUrl} className="flex items-center gap-2" aria-label="Dashboard">
@@ -140,6 +151,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <UserCircle className="mr-2 h-4 w-4" />
                     Perfil
                   </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsGuideOpen(true)} className="cursor-pointer">
+                  <HelpCircle className="mr-2 h-4 w-4" />
+                  Ver Guía de Inicio
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={logoutUser} className="cursor-pointer">

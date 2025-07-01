@@ -14,8 +14,6 @@ import type { WhatsAppInstance } from './configuration/page';
 import type { BotConfigData } from './bot-config/page'; 
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
-import OnboardingGuide from '@/components/dashboard/onboarding-guide';
-import { Button } from '@/components/ui/button';
 
 // Interfaces necesarias para el Dashboard
 interface ChatMessageDocument {
@@ -82,8 +80,6 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>(initialStats);
   const [recentConversations, setRecentConversations] = useState<DashboardConversationSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isGuideOpen, setIsGuideOpen] = useState(false);
-  const [isLoadingOnboarding, setIsLoadingOnboarding] = useState(true);
 
   useEffect(() => {
     if (user && !authLoading) {
@@ -267,32 +263,7 @@ export default function DashboardPage() {
     }
   }, [user, authLoading]);
 
-  useEffect(() => {
-    if (user) {
-      const checkOnboardingStatus = async () => {
-        const userDocRef = doc(db, 'users', user.uid);
-        try {
-          const docSnap = await getDoc(userDocRef);
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            if (!data.onboardingCompleted) {
-              setIsGuideOpen(true);
-            }
-          }
-        } catch (error) {
-          console.error("Error checking onboarding status:", error);
-        } finally {
-          setIsLoadingOnboarding(false);
-        }
-      };
-      checkOnboardingStatus();
-    } else {
-        setIsLoadingOnboarding(false);
-    }
-  }, [user]);
-
-
-  if (isLoading || authLoading || isLoadingOnboarding) { 
+  if (isLoading || authLoading) { 
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -326,14 +297,8 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <OnboardingGuide isOpen={isGuideOpen} setIsOpen={setIsGuideOpen} startFromBeginning={true} />
-
       <div className="flex justify-between items-center">
         <h2 className="text-3xl font-bold tracking-tight text-foreground">Resumen del Panel</h2>
-        <Button variant="outline" onClick={() => setIsGuideOpen(true)}>
-            <HelpCircle className="mr-2 h-4 w-4" />
-            Ver Guía de Inicio
-        </Button>
       </div>
       
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
