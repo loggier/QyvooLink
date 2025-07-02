@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -8,7 +9,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Wifi, WifiOff, BotMessageSquare, MessageCircleOff, FlaskConical, Users, FileText, Loader2, AlertTriangle, HelpCircle, ListChecks, MessagesSquare } from "lucide-react";
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, collection, query, where, getDocs, orderBy, limit, Timestamp as FirestoreTimestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, orderBy, limit, Timestamp as FirestoreTimestamp, getCountFromServer } from 'firebase/firestore';
 import type { WhatsAppInstance } from './configuration/page'; 
 import type { BotConfigData } from './bot-config/page'; 
 import { formatDistanceToNow } from 'date-fns';
@@ -111,9 +112,10 @@ export default function DashboardPage() {
           }
 
           try {
+            // OPTIMIZATION: Use getCountFromServer for efficient counting without fetching all documents.
             const contactsQuery = query(collection(db, 'contacts'), where('userId', '==', user.uid));
-            const contactsSnapshot = await getDocs(contactsQuery);
-            contactsVal = contactsSnapshot.size;
+            const contactsSnapshot = await getCountFromServer(contactsQuery);
+            contactsVal = contactsSnapshot.data().count;
           } catch (e) {
             console.error("Error fetching contacts count:", e);
             contactsVal = "Error";
@@ -122,10 +124,12 @@ export default function DashboardPage() {
           let fetchedRecentConversations: DashboardConversationSummary[] = [];
           if (instanceIdForChats) {
             try {
+               // OPTIMIZATION: Query only the last 200 messages to build the recent conversations list.
               const chatQuery = query(
                 collection(db, 'chat'),
                 where('instanceId', '==', instanceIdForChats),
-                orderBy('timestamp', 'desc')
+                orderBy('timestamp', 'desc'),
+                limit(200) 
               );
               const chatSnapshot = await getDocs(chatQuery);
               const messages: ChatMessageDocument[] = [];

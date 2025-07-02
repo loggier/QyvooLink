@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Shield, Wifi, Bot, Users, MessagesSquare, CalendarDays, TrendingUp, ShieldCheck, Clock, XCircle, Star } from 'lucide-react';
+import { Loader2, Shield, Wifi, Bot, Users, MessagesSquare, CalendarDays, TrendingUp, ShieldCheck, Clock, XCircle, Star, AlertCircle } from 'lucide-react';
 import { differenceInDays } from 'date-fns';
 
 interface SubscriptionDetails {
@@ -42,16 +42,18 @@ interface AdminViewUser {
   instanceStatus?: 'Conectado' | 'Desconectado' | 'Pendiente' | 'No Configurada';
   botConfigured: boolean;
   instanceName?: string;
-  contactCount: number;
-  totalMessages: number;
-  botMessages: number;
+  // --- Deprecated fields due to high read cost. Should be moved to aggregated data. ---
+  contactCount: number | 'N/A';
+  totalMessages: number | 'N/A';
+  botMessages: number | 'N/A';
+  // --- End of deprecated fields ---
   subscription?: SubscriptionDetails | null;
 }
 
 interface DashboardStats {
   totalUsers: number;
   activeInstances: number;
-  totalMessages: number;
+  totalMessages: number | 'N/A'; // Now can be N/A
   configuredBots: number;
   activeSubscriptions: number;
   estimatedMRR: number;
@@ -96,7 +98,7 @@ export default function AdminDashboardPage() {
               if (plan.monthlyPriceId === sub.priceId) {
                   estimatedMRR += plan.priceMonthly || 0;
               } else if (plan.yearlyPriceId === sub.priceId) {
-                  estimatedMRR += (plan.priceYearly || 0) / 12;
+                  estimatedMRR += (plan.yearlyPriceId || 0) / 12;
               }
           }
       });
@@ -105,29 +107,20 @@ export default function AdminDashboardPage() {
         const userData = userDoc.data();
         const uid = userDoc.id;
 
-        // Fetch user-specific data
-        const [instanceDocSnap, botDocSnap, contactsSnapshot, userSubscriptionsSnapshot] = await Promise.all([
+        // Fetch user-specific data that is NOT read-intensive
+        const [instanceDocSnap, botDocSnap, userSubscriptionsSnapshot] = await Promise.all([
           getDoc(doc(db, 'instances', uid)),
           getDoc(doc(db, 'qybot', uid)),
-          getDocs(query(collection(db, 'contacts'), where('userId', '==', uid))),
           getDocs(query(collection(db, 'users', uid, 'subscriptions'), where('status', 'in', ['active', 'trialing']), limit(1)))
         ]);
 
         let instanceStatus: AdminViewUser['instanceStatus'] = 'No Configurada';
         let instanceName: string | undefined;
-        let totalMessages = 0;
-        let botMessages = 0;
 
         if (instanceDocSnap.exists()) {
           const instanceData = instanceDocSnap.data();
           instanceStatus = instanceData.status || 'Pendiente';
           instanceName = instanceData.name;
-          const instanceId = instanceData.id || instanceData.name;
-          if (instanceId) {
-            const messagesSnapshot = await getDocs(query(collection(db, 'chat'), where('instanceId', '==', instanceId)));
-            totalMessages = messagesSnapshot.size;
-            botMessages = messagesSnapshot.docs.filter(msgDoc => msgDoc.data().user_name?.toLowerCase() === 'bot').length;
-          }
         }
         
         let subscriptionData: SubscriptionDetails | null = null;
@@ -150,6 +143,13 @@ export default function AdminDashboardPage() {
                 };
             }
         }
+        
+        // IMPORTANT: The following stats are extremely expensive to calculate on the fly.
+        // They should be calculated and stored periodically by a backend job (e.g., a scheduled Cloud Function).
+        // For now, we display 'N/A' to prevent massive read costs.
+        const contactCount: number | 'N/A' = 'N/A';
+        const totalMessages: number | 'N/A' = 'N/A';
+        const botMessages: number | 'N/A' = 'N/A';
 
         return {
           uid,
@@ -161,7 +161,7 @@ export default function AdminDashboardPage() {
           instanceStatus,
           botConfigured: botDocSnap.exists() && !!botDocSnap.data().promptXml,
           instanceName,
-          contactCount: contactsSnapshot.size,
+          contactCount,
           totalMessages,
           botMessages,
           subscription: subscriptionData,
@@ -175,12 +175,11 @@ export default function AdminDashboardPage() {
       
       const configuredBots = filteredUsers.filter(u => u.botConfigured).length;
       const activeInstances = filteredUsers.filter(u => u.instanceStatus === 'Conectado').length;
-      const totalPlatformMessages = filteredUsers.reduce((sum, u) => sum + u.totalMessages, 0);
 
       setStats({
         totalUsers: filteredUsers.length,
         activeInstances,
-        totalMessages: totalPlatformMessages,
+        totalMessages: 'N/A', // Set to N/A to avoid expensive calculation
         configuredBots,
         activeSubscriptions: allSubscriptionsSnapshot.size,
         estimatedMRR: estimatedMRR,
@@ -332,10 +331,10 @@ export default function AdminDashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Mensajes Totales</CardTitle>
-            <MessagesSquare className="h-5 w-5 text-muted-foreground" />
+             <AlertCircle className="h-5 w-5 text-amber-500" title="Este cálculo ha sido desactivado para optimizar el rendimiento. Se debe implementar un sistema de agregación."/>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalMessages.toLocaleString('es-ES') ?? <Loader2 className="h-6 w-6 animate-spin" />}</div>
+            <div className="text-2xl font-bold">{stats?.totalMessages.toLocaleString('es-ES') ?? 'N/A'}</div>
           </CardContent>
         </Card>
         <Card>
@@ -371,7 +370,7 @@ export default function AdminDashboardPage() {
         <CardHeader>
           <CardTitle>Gestión de Cuentas de Usuario</CardTitle>
           <CardDescription>
-            Activa/desactiva cuentas, visualiza el estado de sus servicios y gestiona fechas de registro.
+            Activa/desactiva cuentas, visualiza el estado de sus servicios y gestiona fechas de registro. Las estadísticas de mensajes se deben consultar en reportes para optimizar costos.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -381,7 +380,7 @@ export default function AdminDashboardPage() {
                 <TableHead>Usuario</TableHead>
                 <TableHead>Suscripción</TableHead>
                 <TableHead>Estado General</TableHead>
-                <TableHead>Estadísticas</TableHead>
+                <TableHead>Estadísticas (Agregadas)</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>

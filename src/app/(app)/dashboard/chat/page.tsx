@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -7,7 +8,7 @@ import { db } from '@/lib/firebase';
 import { 
   doc, getDoc, 
   collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, Timestamp as FirestoreTimestamp,
-  setDoc, onSnapshot
+  setDoc, onSnapshot, limit
 } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -220,10 +221,14 @@ export default function ChatPage() {
         try {
           const instanceIdentifier = whatsAppInstance.id || whatsAppInstance.name;
           
+          // OPTIMIZATION: Instead of reading the entire chat collection, we now read only the last 200 messages.
+          // This dramatically reduces read costs for users with large chat histories.
+          // For a fully scalable solution, an aggregated 'conversations' collection updated by a backend function is recommended.
           const q = query(
             collection(db, 'chat'),
             where('instanceId', '==', instanceIdentifier),
-            orderBy('timestamp', 'desc')
+            orderBy('timestamp', 'desc'),
+            limit(200) // Limiting the query to the most recent 200 messages
           );
           
           const querySnapshot = await getDocs(q);

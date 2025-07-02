@@ -8,7 +8,7 @@ import { Users, MessagesSquare, Bot, UserCog, Loader2, User, Star } from "lucide
 import ChartsSection from "@/components/reports/ChartsSection";
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, orderBy, limit, Timestamp } from 'firebase/firestore';
 import type { WhatsAppInstance } from '../configuration/page';
 import { format, subDays, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -75,8 +75,13 @@ export default function ReportsPage() {
       const instance = instanceDocSnap.data() as WhatsAppInstance;
       const instanceId = instance.id || instance.name;
 
-      // 2. Obtener todos los mensajes de la instancia
-      const messagesQuery = query(collection(db, 'chat'), where('instanceId', '==', instanceId));
+      // 2. Obtener mensajes de los últimos 30 días para optimizar lecturas
+      const thirtyDaysAgo = subDays(new Date(), 30);
+      const messagesQuery = query(
+        collection(db, 'chat'), 
+        where('instanceId', '==', instanceId),
+        where('timestamp', '>=', Timestamp.fromDate(thirtyDaysAgo))
+      );
       const messagesSnapshot = await getDocs(messagesQuery);
       const messages = messagesSnapshot.docs.map(d => ({ ...d.data(), timestamp: d.data().timestamp.toDate() }));
       
@@ -190,7 +195,7 @@ export default function ReportsPage() {
       <div>
         <h2 className="text-3xl font-bold tracking-tight text-foreground">Reportes y Analíticas</h2>
         <p className="text-muted-foreground">
-          Visualiza los datos clave de tu operación con Qyvoo.
+          Visualiza los datos clave de tu operación con Qyvoo de los últimos 30 días.
         </p>
       </div>
 
@@ -203,7 +208,7 @@ export default function ReportsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalMessages}</div>
-            <p className="text-xs text-muted-foreground">En todo el historial</p>
+            <p className="text-xs text-muted-foreground">En los últimos 30 días</p>
           </CardContent>
         </Card>
         <Card>
