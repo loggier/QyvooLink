@@ -124,50 +124,77 @@ export default function BotsPage() {
     fetchBots();
   }, [fetchBots]);
 
-  const handleActivateBot = async (botToActivateId: string) => {
+  const handleToggleBotStatus = async (botToToggle: BotData, shouldBeActive: boolean) => {
     if (!user) return;
-    setIsProcessing({ [botToActivateId]: true });
-  
-    const botToActivate = bots.find(b => b.id === botToActivateId);
-    if (!botToActivate) {
-      toast({ variant: "destructive", title: "Error", description: "Bot no encontrado." });
-      setIsProcessing({});
-      return;
-    }
-  
-    try {
-      const batch = writeBatch(db);
-      
-      // Deactivate all other bots for this user
-      bots.forEach(bot => {
-        if (bot.id !== botToActivateId) {
-          const botRef = doc(db, 'bots', bot.id);
-          batch.update(botRef, { isActive: false });
-        }
-      });
-  
-      // Activate the selected bot
-      const activeBotRef = doc(db, 'bots', botToActivateId);
-      batch.update(activeBotRef, { isActive: true });
-      
-      // Generate and save the active prompt config to the main 'qybot' document
-      const { promptXml, instanceIdAssociated } = await buildPromptForBot(botToActivate);
-      const qybotConfigRef = doc(db, 'qybot', user.uid);
-      batch.set(qybotConfigRef, {
-        activeBotId: botToActivateId,
-        promptXml: promptXml,
-        instanceIdAssociated: instanceIdAssociated, // Ensure this is stored
-      }, { merge: true });
+    setIsProcessing({ [botToToggle.id]: true });
 
-      await batch.commit();
-      
-      toast({ title: "Bot Activado", description: `El bot "${botToActivate.name}" ahora está activo.` });
-      await fetchBots(); // Refresh the list to show the new state
-    } catch (error) {
-      console.error("Error activating bot:", error);
-      toast({ variant: 'destructive', title: 'Error de Activación', description: 'No se pudo activar el bot.' });
-    } finally {
-      setIsProcessing({});
+    if (shouldBeActive) {
+      // Activation Logic
+      try {
+        const batch = writeBatch(db);
+        
+        // Deactivate all other bots for this user
+        bots.forEach(bot => {
+          if (bot.id !== botToToggle.id) {
+            const botRef = doc(db, 'bots', bot.id);
+            batch.update(botRef, { isActive: false });
+          }
+        });
+  
+        // Activate the selected bot
+        const activeBotRef = doc(db, 'bots', botToToggle.id);
+        batch.update(activeBotRef, { isActive: true });
+        
+        // Generate and save the active prompt config to the main 'qybot' document
+        const { promptXml, instanceIdAssociated } = await buildPromptForBot(botToToggle);
+        const qybotConfigRef = doc(db, 'qybot', user.uid);
+        batch.set(qybotConfigRef, {
+          activeBotId: botToToggle.id,
+          promptXml: promptXml,
+          instanceIdAssociated: instanceIdAssociated,
+        }, { merge: true });
+
+        await batch.commit();
+        
+        toast({ title: "Bot Activado", description: `El bot "${botToToggle.name}" ahora está activo.` });
+        await fetchBots(); // Refresh the list to show the new state
+      } catch (error) {
+        console.error("Error activating bot:", error);
+        toast({ variant: 'destructive', title: 'Error de Activación', description: 'No se pudo activar el bot.' });
+      } finally {
+        setIsProcessing({});
+      }
+    } else {
+      // Deactivation Logic
+      try {
+        const batch = writeBatch(db);
+
+        // Deactivate the bot
+        const botRef = doc(db, 'bots', botToToggle.id);
+        batch.update(botRef, { isActive: false });
+
+        // Check if this was the active bot in the main config
+        const qybotConfigRef = doc(db, 'qybot', user.uid);
+        const qybotDocSnap = await getDoc(qybotConfigRef);
+
+        if (qybotDocSnap.exists() && qybotDocSnap.data().activeBotId === botToToggle.id) {
+          // It was the active bot, so clear the config to a safe default
+          batch.set(qybotConfigRef, {
+            activeBotId: null,
+            promptXml: '<prompt><system>Ningún bot está activo. El sistema no responderá automáticamente.</system></prompt>',
+            instanceIdAssociated: null,
+          }, { merge: true });
+        }
+
+        await batch.commit();
+        toast({ title: "Bot Desactivado", description: `El bot "${botToToggle.name}" ya no está activo.` });
+        await fetchBots();
+      } catch (error) {
+        console.error("Error deactivating bot:", error);
+        toast({ variant: 'destructive', title: 'Error de Desactivación', description: 'No se pudo desactivar el bot.' });
+      } finally {
+        setIsProcessing({});
+      }
     }
   };
 
@@ -282,9 +309,9 @@ export default function BotsPage() {
                     <TableCell>
                       <Switch
                         checked={bot.isActive}
-                        onCheckedChange={() => handleActivateBot(bot.id)}
-                        disabled={isProcessing[bot.id] || bot.isActive}
-                        aria-label={`Activar bot ${bot.name}`}
+                        onCheckedChange={(checked) => handleToggleBotStatus(bot, checked)}
+                        disabled={isProcessing[bot.id]}
+                        aria-label={`Activar o desactivar bot ${bot.name}`}
                       />
                     </TableCell>
                     <TableCell className="text-right space-x-2">
