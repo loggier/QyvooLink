@@ -34,12 +34,12 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: '/dashboard', label: 'Panel de Control', shortLabel: 'Panel', icon: Home },
-  { href: '/dashboard/chat', label: 'Conversaciones', shortLabel: 'Chat', icon: MessageSquare },
-  { href: '/dashboard/bot-config', label: 'Configurar Bot', shortLabel: 'Bot', icon: Bot },
+  { href: '/dashboard', label: 'Panel', shortLabel: 'Panel', icon: Home },
+  { href: '/dashboard/chat', label: 'Chat', shortLabel: 'Chat', icon: MessageSquare },
+  { href: '/dashboard/bots', label: 'Mis Bots', shortLabel: 'Bots', icon: Bot },
   { href: '/dashboard/contacts', label: 'Contactos', shortLabel: 'Contactos', icon: Users },
-  { href: '/dashboard/quick-replies', label: 'Respuestas Rápidas', shortLabel: 'Respuestas', icon: Zap },
-  { href: '/dashboard/configuration', label: 'Configuración General', shortLabel: 'Config', icon: Settings },
+  { href: '/dashboard/quick-replies', label: 'Respuestas', shortLabel: 'Respuestas', icon: Zap },
+  { href: '/dashboard/configuration', label: 'Configuración', shortLabel: 'Config', icon: Settings },
   { href: '/dashboard/reports', label: 'Reportes', shortLabel: 'Reportes', icon: BarChart2 },
   { href: '/admin/dashboard', label: 'Admin Panel', shortLabel: 'Admin', icon: Shield, adminOnly: true },
   { href: '/admin/subscriptions', label: 'Planes', shortLabel: 'Planes', icon: CreditCard, adminOnly: true },
@@ -70,14 +70,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const homeUrl = user?.role === 'admin' ? '/admin/dashboard' : '/dashboard';
 
   const NavLink = ({ item, isMobile }: { item: NavItem, isMobile?: boolean }) => {
-    const isActive = pathname === item.href || (item.href !== homeUrl && pathname.startsWith(item.href));
+    const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
     return (
       <Link
         href={item.href}
         onClick={() => isMobile && setIsMobileMenuOpen(false)}
         className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors
           ${isActive
-            ? 'bg-primary/10 text-primary'
+            ? 'bg-primary text-primary-foreground'
             : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
           }
           ${isMobile ? 'text-base py-3' : ''}
