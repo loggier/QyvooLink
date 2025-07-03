@@ -5,12 +5,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, addDoc, doc, writeBatch, Timestamp, orderBy, setDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, doc, writeBatch, Timestamp, orderBy, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 import { buildPromptForBot } from '@/lib/bot-prompt-builder';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -46,6 +47,9 @@ export default function BotsPage() {
   const [newBotName, setNewBotName] = useState('');
   const [newBotCategory, setNewBotCategory] = useState<BotCategory>('Ventas');
 
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [botToDelete, setBotToDelete] = useState<BotData | null>(null);
+
   const fetchBots = useCallback(async () => {
     if (!user) return;
     setIsLoading(true);
@@ -55,10 +59,11 @@ export default function BotsPage() {
       const querySnapshot = await getDocs(q);
 
       // --- MIGRATION LOGIC for users with old bot config ---
-      if (querySnapshot.empty) {
+      const hasBots = querySnapshot.docs.length > 0;
+      if (!hasBots) {
         const qybotDocRef = doc(db, 'qybot', user.uid);
         const qybotDocSnap = await getDoc(qybotDocRef);
-
+        
         // Check for a legacy field ('agentRole') and ensure a modern field ('activeBotId') is NOT present to prevent re-migration
         if (qybotDocSnap.exists() && qybotDocSnap.data().agentRole && !qybotDocSnap.data().activeBotId) {
           toast({ title: "Actualizando tu bot...", description: "Hemos encontrado tu configuración anterior y la estamos actualizando al nuevo formato multi-bot." });
@@ -200,6 +205,35 @@ export default function BotsPage() {
     }
   }
 
+  const handleDeleteBot = (bot: BotData) => {
+    if (bot.isActive) {
+      toast({
+        variant: "destructive",
+        title: "Acción no permitida",
+        description: "No puedes eliminar un bot que está activo. Desactívalo primero.",
+      });
+      return;
+    }
+    setBotToDelete(bot);
+    setIsDeleteDialogOpen(true);
+  };
+  
+  const confirmDeleteBot = async () => {
+    if (!botToDelete) return;
+    setIsProcessing({ [botToDelete.id]: true });
+    try {
+      await deleteDoc(doc(db, 'bots', botToDelete.id));
+      toast({ title: "Bot Eliminado", description: `El bot "${botToDelete.name}" ha sido eliminado.` });
+      await fetchBots(); // Refresh list after deletion
+    } catch (error) {
+      console.error("Error deleting bot:", error);
+      toast({ variant: 'destructive', title: 'Error de Eliminación', description: 'No se pudo eliminar el bot.' });
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setBotToDelete(null);
+      setIsProcessing({});
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -254,12 +288,18 @@ export default function BotsPage() {
                       />
                     </TableCell>
                     <TableCell className="text-right space-x-2">
-                       <Button variant="outline" size="icon" onClick={() => router.push(`/dashboard/bots/edit/${bot.id}`)}>
+                       <Button variant="outline" size="icon" onClick={() => router.push(`/dashboard/bots/edit/${bot.id}`)} title="Editar Bot">
                           <Edit className="h-4 w-4" />
                         </Button>
-                       {/*  <Button variant="destructive" size="icon" disabled>
+                       <Button 
+                          variant="destructive" 
+                          size="icon" 
+                          onClick={() => handleDeleteBot(bot)} 
+                          disabled={bot.isActive || isProcessing[bot.id]}
+                          title={bot.isActive ? "Desactiva el bot para eliminarlo" : "Eliminar Bot"}
+                        >
                           <Trash2 className="h-4 w-4" />
-                        </Button> */}
+                        </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -314,6 +354,27 @@ export default function BotsPage() {
             </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Estás seguro de eliminar este bot?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. El bot "{botToDelete?.name}" y toda su configuración serán eliminados permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setBotToDelete(null)} disabled={isProcessing[botToDelete?.id || '']}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDeleteBot} 
+              disabled={isProcessing[botToDelete?.id || '']} 
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {isProcessing[botToDelete?.id || ''] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
