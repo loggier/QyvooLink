@@ -59,8 +59,8 @@ export default function BotsPage() {
         const qybotDocRef = doc(db, 'qybot', user.uid);
         const qybotDocSnap = await getDoc(qybotDocRef);
 
-        // Check for a legacy field like 'agentRole' to identify an un-migrated bot
-        if (qybotDocSnap.exists() && qybotDocSnap.data().agentRole) {
+        // Check for a legacy field ('agentRole') and ensure a modern field ('activeBotId') is NOT present to prevent re-migration
+        if (qybotDocSnap.exists() && qybotDocSnap.data().agentRole && !qybotDocSnap.data().activeBotId) {
           toast({ title: "Actualizando tu bot...", description: "Hemos encontrado tu configuración anterior y la estamos actualizando al nuevo formato multi-bot." });
 
           const legacyData = qybotDocSnap.data();
