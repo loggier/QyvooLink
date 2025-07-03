@@ -130,15 +130,15 @@ export default function VentasBotForm({ data, onDataChange }: VentasBotFormProps
         <CardContent className="space-y-4">
           <div>
             <Label htmlFor="bizDesc">Descripción</Label>
-            <Textarea id="bizDesc" value={businessContext.description} onChange={(e) => handleNestedChange('businessContext', 'description', e.target.value)} rows={3} />
+            <Textarea id="bizDesc" value={businessContext.description || ''} onChange={(e) => handleNestedChange('businessContext', 'description', e.target.value)} rows={3} />
           </div>
           <div>
             <Label htmlFor="bizLocation">Ubicación</Label>
-            <Input id="bizLocation" value={businessContext.location} onChange={(e) => handleNestedChange('businessContext', 'location', e.target.value)} />
+            <Input id="bizLocation" value={businessContext.location || ''} onChange={(e) => handleNestedChange('businessContext', 'location', e.target.value)} />
           </div>
           <div>
             <Label htmlFor="bizMission">Misión</Label>
-            <Textarea id="bizMission" value={businessContext.mission} onChange={(e) => handleNestedChange('businessContext', 'mission', e.target.value)} rows={3} />
+            <Textarea id="bizMission" value={businessContext.mission || ''} onChange={(e) => handleNestedChange('businessContext', 'mission', e.target.value)} rows={3} />
           </div>
         </CardContent>
       </Card>
@@ -180,9 +180,9 @@ export default function VentasBotForm({ data, onDataChange }: VentasBotFormProps
       <Card>
         <CardHeader><CardTitle className="flex items-center"><Phone className="mr-2 h-5 w-5 text-primary"/>Datos de Contacto</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-            <Label>Teléfono</Label><Input value={contact.phone} onChange={(e) => handleNestedChange('contact', 'phone', e.target.value)} />
-            <Label>Email</Label><Input value={contact.email} onChange={(e) => handleNestedChange('contact', 'email', e.target.value)} />
-            <Label>Sitio Web</Label><Input value={contact.website} onChange={(e) => handleNestedChange('contact', 'website', e.target.value)} />
+            <Label>Teléfono</Label><Input value={contact.phone || ''} onChange={(e) => handleNestedChange('contact', 'phone', e.target.value)} />
+            <Label>Email</Label><Input value={contact.email || ''} onChange={(e) => handleNestedChange('contact', 'email', e.target.value)} />
+            <Label>Sitio Web</Label><Input value={contact.website || ''} onChange={(e) => handleNestedChange('contact', 'website', e.target.value)} />
         </CardContent>
       </Card>
       

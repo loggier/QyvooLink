@@ -48,11 +48,11 @@ export default function AtencionClienteBotForm({ data, onDataChange }: AtencionC
                 <CardContent className="space-y-4">
                     <div>
                         <Label htmlFor="companyName">Nombre de la Empresa</Label>
-                        <Input id="companyName" value={companyInfo.name} onChange={(e) => handleNestedChange('companyInfo', 'name', e.target.value)} placeholder="Ej: Mi Empresa S.A."/>
+                        <Input id="companyName" value={companyInfo.name || ''} onChange={(e) => handleNestedChange('companyInfo', 'name', e.target.value)} placeholder="Ej: Mi Empresa S.A."/>
                     </div>
                     <div>
                         <Label htmlFor="supportHours">Horario de Atención</Label>
-                        <Input id="supportHours" value={companyInfo.supportHours} onChange={(e) => handleNestedChange('companyInfo', 'supportHours', e.target.value)} placeholder="Ej: Lunes a Viernes de 9am a 6pm"/>
+                        <Input id="supportHours" value={companyInfo.supportHours || ''} onChange={(e) => handleNestedChange('companyInfo', 'supportHours', e.target.value)} placeholder="Ej: Lunes a Viernes de 9am a 6pm"/>
                     </div>
                 </CardContent>
             </Card>

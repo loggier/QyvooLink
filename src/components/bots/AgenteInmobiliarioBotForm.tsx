@@ -48,11 +48,11 @@ export default function AgenteInmobiliarioBotForm({ data, onDataChange }: Agente
                 <CardContent className="space-y-4">
                     <div>
                         <Label htmlFor="agentName">Nombre del Agente o Inmobiliaria</Label>
-                        <Input id="agentName" value={agentInfo.name} onChange={(e) => handleNestedChange('agentInfo', 'name', e.target.value)} placeholder="Ej: Juan Pérez o Inmobiliaria XYZ"/>
+                        <Input id="agentName" value={agentInfo.name || ''} onChange={(e) => handleNestedChange('agentInfo', 'name', e.target.value)} placeholder="Ej: Juan Pérez o Inmobiliaria XYZ"/>
                     </div>
                     <div>
                         <Label htmlFor="agentLicense">Licencia (Opcional)</Label>
-                        <Input id="agentLicense" value={agentInfo.license} onChange={(e) => handleNestedChange('agentInfo', 'license', e.target.value)} placeholder="Ej: Matrícula 12345"/>
+                        <Input id="agentLicense" value={agentInfo.license || ''} onChange={(e) => handleNestedChange('agentInfo', 'license', e.target.value)} placeholder="Ej: Matrícula 12345"/>
                     </div>
                 </CardContent>
             </Card>
