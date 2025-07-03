@@ -11,7 +11,6 @@ import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, orderBy, limit, Timestamp as FirestoreTimestamp, getCountFromServer } from 'firebase/firestore';
 import type { WhatsAppInstance } from './configuration/page'; 
-import type { BotConfigData } from './bot-config/page'; 
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -24,6 +23,11 @@ interface ChatMessageDocument {
   timestamp: FirestoreTimestamp;
   to: string;
   user_name: 'User' | 'bot' | 'agente' | string;
+}
+
+interface BotConfigData {
+  promptXml?: string;
+  activeBotId?: string;
 }
 
 interface ContactDetails {
@@ -106,7 +110,8 @@ export default function DashboardPage() {
           const botConfigDocSnap = await getDoc(botConfigDocRef);
           if (botConfigDocSnap.exists()) {
              const botConfig = botConfigDocSnap.data() as BotConfigData;
-             if (botConfig.agentRole && botConfig.agentRole.trim() !== "" && botConfig.promptXml && botConfig.promptXml.trim() !== "") {
+             // Correct check: A bot is configured if there's a valid promptXML.
+             if (botConfig.promptXml && botConfig.promptXml.trim() !== "") {
                 botPromptConfiguredVal = true;
              }
           }
