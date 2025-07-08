@@ -30,7 +30,7 @@ const registerSchema = z.object({
   company: z.string().min(2, { message: "El nombre de la empresa debe tener al menos 2 caracteres." }),
   email: z.string().email({ message: "Dirección de correo electrónico inválida." }),
   phone: z.string().regex(phoneRegex, { message: "Número de teléfono inválido."}),
-  username: z.string().min(3, { message: "El nombre de usuario debe tener al menos 3 caracteres." }),
+  username: z.string().min(3, { message: "El nombre de usuario debe tener al menos 3 caracteres." }).regex(/^[a-zA-Z0-9_.-]+$/, { message: "El nombre de usuario no puede contener espacios ni caracteres especiales." }),
   password: z.string().min(6, { message: "La contraseña debe tener al menos 6 caracteres." }),
   confirmPassword: z.string(),
   terms: z.boolean().refine(val => val === true, { message: "Debes aceptar los términos y condiciones." }),

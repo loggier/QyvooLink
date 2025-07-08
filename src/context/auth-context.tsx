@@ -128,6 +128,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const registerUser = async (data: RegisterFormData) => {
     setLoading(true);
     try {
+      // Check for unique username
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('username', '==', data.username));
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        throw new Error("Este nombre de usuario ya está en uso. Por favor, elige otro.");
+      }
+
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const firebaseUser = userCredential.user;
       if (firebaseUser) {
@@ -157,7 +165,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     } catch (error: any) {
       console.error("Error de registro:", error);
-      let errorMessage = "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.";
+      let errorMessage = error.message || "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.";
       if (error.code === 'auth/email-already-in-use') {
         errorMessage = "Este correo electrónico ya está en uso. Por favor, intenta con otro.";
       } else if (error.code === 'auth/weak-password') {
