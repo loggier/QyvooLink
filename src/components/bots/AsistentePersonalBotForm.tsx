@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Bot, User, ClipboardList, Calendar } from 'lucide-react';
+import DriveLinksForm from './shared/DriveLinksForm';
 
 interface AsistentePersonalBotFormProps {
   data: BotData;
@@ -66,13 +67,15 @@ export default function AsistentePersonalBotForm({ data, onDataChange }: Asisten
                 </CardContent>
             </Card>
             
+            <DriveLinksForm data={data} onDataChange={onDataChange} />
+
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center"><Calendar className="mr-2 h-5 w-5 text-primary"/>Enlace de Calendario</CardTitle>
                     <CardDescription>Si usas un servicio como Calendly, pon el enlace aquí para que el bot pueda compartirlo.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Input value={calendarLink} onChange={(e) => handleFieldChange('calendarLink', e.target.value)} placeholder="https://calendly.com/tu-usuario"/>
+                    <Input value={calendarLink || ''} onChange={(e) => handleFieldChange('calendarLink', e.target.value)} placeholder="https://calendly.com/tu-usuario"/>
                 </CardContent>
             </Card>
         </div>

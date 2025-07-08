@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Bot, Wrench, BookOpen, Share2 } from 'lucide-react';
+import DriveLinksForm from './shared/DriveLinksForm';
 
 interface SoporteTecnicoBotFormProps {
   data: BotData;
@@ -60,6 +61,8 @@ export default function SoporteTecnicoBotForm({ data, onDataChange }: SoporteTec
                     />
                 </CardContent>
             </Card>
+            
+            <DriveLinksForm data={data} onDataChange={onDataChange} />
 
             <Card>
                 <CardHeader>

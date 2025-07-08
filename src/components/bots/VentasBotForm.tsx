@@ -8,10 +8,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { PlusCircle, Trash2, Bot, Building, Phone, Bell } from 'lucide-react';
 import { generateSafeId } from '@/lib/uuid';
 import { produce } from 'immer';
+import DriveLinksForm from './shared/DriveLinksForm';
 
 interface VentasBotFormProps {
   data: BotData;
@@ -176,6 +176,8 @@ export default function VentasBotForm({ data, onDataChange }: VentasBotFormProps
           <Button onClick={handleAddCategory} className="w-full"><PlusCircle className="h-4 w-4 mr-2"/>Añadir Categoría</Button>
         </CardContent>
       </Card>
+      
+      <DriveLinksForm data={data} onDataChange={onDataChange} />
 
       <Card>
         <CardHeader><CardTitle className="flex items-center"><Phone className="mr-2 h-5 w-5 text-primary"/>Datos de Contacto</CardTitle></CardHeader>

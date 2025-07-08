@@ -1,5 +1,5 @@
 
-import type { BotData } from '@/app/(app)/dashboard/bots/page';
+import type { BotData, DriveLink } from '@/app/(app)/dashboard/bots/page';
 import { db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -22,10 +22,22 @@ function buildRulesXml(rules?: string[]): string {
     return `<rules>\n    ${rules.map(rule => `<rule>${escapeXml(rule)}</rule>`).join('\n    ')}\n  </rules>`;
 }
 
+function buildDriveLinksXml(links?: DriveLink[]): string {
+    if (!links || links.length === 0) return '';
+    const documents = links
+        .filter(link => link.url && link.type) // Ensure link and type are not empty
+        .map(link => `<document type="${escapeXml(link.type)}">${escapeXml(link.url)}</document>`)
+        .join('\n    ');
+
+    if (!documents) return ''; // Don't create the parent tag if there are no valid links
+
+    return `<driveDocuments>\n    ${documents}\n  </driveDocuments>`;
+}
+
 function buildVentasPrompt(botData: BotData): string {
     const {
         agentRole = "Eres un asistente de ventas virtual.",
-        rules = [],
+        selectedRules = [],
         businessContext = { description: '', location: '', mission: '' },
         serviceCatalog = [],
         contact = { phone: '', email: '', website: '' },
@@ -34,7 +46,7 @@ function buildVentasPrompt(botData: BotData): string {
         notificationRule = ''
     } = botData;
     
-    let allRules = [...(rules || [])];
+    let allRules = [...(selectedRules || [])];
     if (notificationRule) allRules.push(notificationRule);
 
     const rulesConfig = buildRulesXml(allRules);
@@ -51,12 +63,14 @@ function buildVentasPrompt(botData: BotData): string {
     const contactConfig = `<contact>\n    <phone>${escapeXml(contact.phone)}</phone>\n    <email>${escapeXml(contact.email)}</email>\n    <website>${escapeXml(contact.website)}</website>\n  </contact>`;
     
     const notificationConfig = notificationPhoneNumber ? `<notification>${escapeXml(notificationPhoneNumber)}</notification>` : '';
+    const driveLinksConfig = buildDriveLinksXml(botData.driveLinks);
 
     return [
         rulesConfig,
         `<agentRole>${escapeXml(agentRole)}</agentRole>`,
         businessContextConfig,
         serviceCatalogConfigSection,
+        driveLinksConfig,
         contactConfig,
         `<closingMessage>${escapeXml(closingMessage)}</closingMessage>`,
         notificationConfig,
@@ -73,12 +87,14 @@ function buildSoporteTecnicoPrompt(botData: BotData): string {
     } = botData;
 
     const rulesConfig = buildRulesXml(rules);
+    const driveLinksConfig = buildDriveLinksXml(botData.driveLinks);
 
     return [
         rulesConfig,
         `<agentRole>${escapeXml(agentRole)}</agentRole>`,
         `<supportedProducts>${escapeXml(supportedProducts)}</supportedProducts>`,
         `<knowledgeBase>${escapeXml(commonSolutions)}</knowledgeBase>`,
+        driveLinksConfig,
         `<escalationPolicy>${escapeXml(escalationPolicy)}</escalationPolicy>`,
     ].filter(Boolean).join('\n').trim();
 }
@@ -94,12 +110,14 @@ function buildAtencionClientePrompt(botData: BotData): string {
 
     const rulesConfig = buildRulesXml(rules);
     const companyInfoConfig = `<companyInfo>\n    <name>${escapeXml(companyInfo.name)}</name>\n    <supportHours>${escapeXml(companyInfo.supportHours)}</supportHours>\n  </companyInfo>`;
+    const driveLinksConfig = buildDriveLinksXml(botData.driveLinks);
 
     return [
         rulesConfig,
         `<agentRole>${escapeXml(agentRole)}</agentRole>`,
         companyInfoConfig,
         `<knowledgeBase>${escapeXml(knowledgeBase)}</knowledgeBase>`,
+        driveLinksConfig,
         `<escalationPolicy>${escapeXml(escalationPolicy)}</escalationPolicy>`,
     ].filter(Boolean).join('\n').trim();
 }
@@ -115,12 +133,14 @@ function buildAgenteInmobiliarioPrompt(botData: BotData): string {
     
     const rulesConfig = buildRulesXml(rules);
     const agentInfoConfig = `<agentInfo>\n    <name>${escapeXml(agentInfo.name)}</name>\n    <license>${escapeXml(agentInfo.license)}</license>\n  </agentInfo>`;
+    const driveLinksConfig = buildDriveLinksXml(botData.driveLinks);
 
     return [
         rulesConfig,
         `<agentRole>${escapeXml(agentRole)}</agentRole>`,
         agentInfoConfig,
         `<propertyTypes>${escapeXml(propertyTypes)}</propertyTypes>`,
+        driveLinksConfig,
         `<viewingInstructions>${escapeXml(viewingInstructions)}</viewingInstructions>`,
     ].filter(Boolean).join('\n').trim();
 }
@@ -135,12 +155,14 @@ function buildAsistentePersonalPrompt(botData: BotData): string {
     } = botData;
 
     const rulesConfig = buildRulesXml(rules);
+    const driveLinksConfig = buildDriveLinksXml(botData.driveLinks);
 
     return [
         rulesConfig,
         `<agentRole>${escapeXml(agentRole)}</agentRole>`,
         `<userPreferences>${escapeXml(userPreferences)}</userPreferences>`,
         `<taskInstructions>${escapeXml(taskInstructions)}</taskInstructions>`,
+        driveLinksConfig,
         `<calendarLink>${escapeXml(calendarLink)}</calendarLink>`,
     ].filter(Boolean).join('\n').trim();
 }

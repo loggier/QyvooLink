@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Bot, User, Home, Calendar } from 'lucide-react';
+import DriveLinksForm from './shared/DriveLinksForm';
 
 interface AgenteInmobiliarioBotFormProps {
   data: BotData;
@@ -71,6 +72,8 @@ export default function AgenteInmobiliarioBotForm({ data, onDataChange }: Agente
                     />
                 </CardContent>
             </Card>
+            
+            <DriveLinksForm data={data} onDataChange={onDataChange} />
 
             <Card>
                 <CardHeader>

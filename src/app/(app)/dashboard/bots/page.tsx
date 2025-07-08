@@ -22,6 +22,12 @@ import { generateSafeId } from '@/lib/uuid';
 
 export type BotCategory = 'Ventas' | 'Atención al Cliente' | 'Asistente Personal' | 'Agente Inmobiliario' | 'Soporte Técnico';
 
+export interface DriveLink {
+  id: string;
+  type: 'Catálogo de Productos' | 'Base de Conocimiento' | 'Preguntas Frecuentes' | 'Otro';
+  url: string;
+}
+
 export interface BotData {
   id: string;
   userId: string;
@@ -29,6 +35,7 @@ export interface BotData {
   category: BotCategory;
   isActive: boolean;
   createdAt: Timestamp;
+  driveLinks?: DriveLink[];
   [key: string]: any; // To accommodate various config fields
 }
 

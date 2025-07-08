@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Bot, Building, BookOpen, Share2 } from 'lucide-react';
+import DriveLinksForm from './shared/DriveLinksForm';
 
 interface AtencionClienteBotFormProps {
   data: BotData;
@@ -71,6 +72,8 @@ export default function AtencionClienteBotForm({ data, onDataChange }: AtencionC
                     />
                 </CardContent>
             </Card>
+
+            <DriveLinksForm data={data} onDataChange={onDataChange} />
 
             <Card>
                 <CardHeader>
