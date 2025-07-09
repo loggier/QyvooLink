@@ -14,14 +14,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!loading) {
-      const isAllowed = user?.role === 'admin' || user?.role === 'owner';
+      // The global admin section should ONLY be accessible to users with the 'admin' role.
+      // Organization 'owners' should not have access to this section.
+      const isAllowed = user?.role === 'admin';
       if (!user || !isAllowed) {
-        router.replace('/dashboard'); // Redirect non-admins/owners
+        router.replace('/dashboard'); // Redirect non-admins
       }
     }
   }, [user, loading, router]);
 
-  const isAllowed = user?.role === 'admin' || user?.role === 'owner';
+  const isAllowed = user?.role === 'admin';
   if (loading || !user || !isAllowed) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
