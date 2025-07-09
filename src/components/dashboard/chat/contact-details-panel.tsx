@@ -9,7 +9,8 @@ import { CardHeader, CardFooter, CardTitle, CardContent } from '@/components/ui/
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Save, XCircle, Edit3, UserRound, Building, Mail, Phone, UserCheck, MapPin, Bot, MessageSquareDashed, MessageCircle, ListTodo } from 'lucide-react';
+import { Loader2, Save, XCircle, Edit3, UserRound, Building, Mail, Phone, UserCheck, MapPin, Bot, MessageSquareDashed, MessageCircle, ListTodo, UserCog } from 'lucide-react';
+import type { TeamMember } from '@/app/(app)/dashboard/team/page';
 
 export interface ContactDetails {
   id?: string;
@@ -25,6 +26,8 @@ export interface ContactDetails {
   userId?: string;
   _chatIdOriginal?: string;
   chatbotEnabledForContact?: boolean;
+  assignedTo?: string; // UID of the agent
+  assignedToName?: string; // Name of the agent for display
 }
 
 interface ContactDetailsPanelProps {
@@ -34,12 +37,14 @@ interface ContactDetailsPanelProps {
   setIsEditingContact: (isEditing: boolean) => void;
   isLoadingContact: boolean;
   isSavingContact: boolean;
+  teamMembers: TeamMember[];
   onSave: () => Promise<void>;
   onCancel: () => void;
-  onInputChange: (field: keyof Omit<ContactDetails, 'id' | 'instanceId' | 'userId' | 'tipoCliente' | '_chatIdOriginal' | 'chatbotEnabledForContact' | 'estadoConversacion'>, value: string) => void;
+  onInputChange: (field: keyof Omit<ContactDetails, 'id' | 'instanceId' | 'userId' | 'tipoCliente' | '_chatIdOriginal' | 'chatbotEnabledForContact' | 'estadoConversacion' | 'assignedTo' | 'assignedToName'>, value: string) => void;
   onSelectChange: (value: ContactDetails['tipoCliente']) => void;
   onStatusChange: (value: ContactDetails['estadoConversacion']) => void;
   onSwitchChange: (checked: boolean) => void;
+  onAssigneeChange: (memberId: string) => void;
   formatPhoneNumber: (chat_id: string | undefined) => string;
 }
 
@@ -50,12 +55,14 @@ export default function ContactDetailsPanel({
   setIsEditingContact,
   isLoadingContact,
   isSavingContact,
+  teamMembers,
   onSave,
   onCancel,
   onInputChange,
   onSelectChange,
   onStatusChange,
   onSwitchChange,
+  onAssigneeChange,
   formatPhoneNumber,
 }: ContactDetailsPanelProps) {
 
@@ -111,6 +118,24 @@ export default function ContactDetailsPanel({
                 <SelectItem value="Abierto">Abierto</SelectItem>
                 <SelectItem value="Pendiente">Pendiente</SelectItem>
                 <SelectItem value="Cerrado">Cerrado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+           <div>
+            <Label htmlFor="contactAssignee" className="flex items-center text-sm text-muted-foreground"><UserCog className="h-4 w-4 mr-2" />Asignado a</Label>
+            <Select
+              value={currentDisplayDetails.assignedTo || ""}
+              onValueChange={onAssigneeChange}
+              disabled={!isEditingContact}
+            >
+              <SelectTrigger id="contactAssignee">
+                <SelectValue placeholder="Sin asignar" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Sin asignar</SelectItem>
+                {teamMembers.map(member => (
+                    <SelectItem key={member.uid} value={member.uid}>{member.fullName || member.email}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -209,4 +234,3 @@ export default function ContactDetailsPanel({
     </>
   );
 }
-

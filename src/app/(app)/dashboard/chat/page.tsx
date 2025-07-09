@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EvolveLinkLogo } from '@/components/icons';
-import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft, ListTodo } from 'lucide-react'; 
+import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft, ListTodo, UserCog } from 'lucide-react'; 
 import type { WhatsAppInstance } from '../configuration/page'; 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,7 @@ import ContactDetailsPanel, { type ContactDetails } from '@/components/dashboard
 import { format, isToday, isYesterday, parseISO, differenceInCalendarDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { TeamMember } from '../team/page';
 
 interface ChatMessageDocument {
   chat_id: string;
@@ -56,6 +57,7 @@ interface ConversationSummary {
   nameLine2: string | null;
   avatarFallback?: string; 
   status?: ContactDetails['estadoConversacion'];
+  assignedToName?: string;
 }
 
 interface QuickReply {
@@ -165,6 +167,7 @@ export default function ChatPage() {
   const [isLoadingQuickReplies, setIsLoadingQuickReplies] = useState(false);
   
   const [statusFilter, setStatusFilter] = useState<'all' | 'Abierto' | 'Pendiente' | 'Cerrado'>('all');
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -216,6 +219,28 @@ export default function ChatPage() {
       setIsLoadingInstance(false);
     }
   }, [user]);
+  
+  useEffect(() => {
+    if (!user?.organizationId) return;
+
+    const fetchTeamMembers = async () => {
+        const teamQuery = query(collection(db, 'users'), where('organizationId', '==', user.organizationId));
+        const querySnapshot = await getDocs(teamQuery);
+        const members: TeamMember[] = [];
+        querySnapshot.forEach(doc => {
+            const data = doc.data();
+            members.push({
+                uid: doc.id,
+                fullName: data.fullName,
+                email: data.email,
+                role: data.role,
+            });
+        });
+        setTeamMembers(members);
+    };
+
+    fetchTeamMembers();
+  }, [user?.organizationId]);
 
   useEffect(() => {
     if (whatsAppInstance && whatsAppInstance.status === 'Conectado' && (whatsAppInstance.id || whatsAppInstance.name) && user) {
@@ -330,7 +355,8 @@ export default function ChatPage() {
                   nameLine1: nameL1,
                   nameLine2: nameL2,
                   avatarFallback: avatarFb,
-                  status: contactData?.estadoConversacion || 'Abierto'
+                  status: contactData?.estadoConversacion || 'Abierto',
+                  assignedToName: contactData?.assignedToName,
               });
           }
 
@@ -423,6 +449,8 @@ export default function ChatPage() {
               userId: user.uid, 
               _chatIdOriginal: selectedChatId,
               chatbotEnabledForContact: true, 
+              assignedTo: '',
+              assignedToName: '',
             };
             setContactDetails(initialData); 
             setInitialContactDetails(initialData);
@@ -562,7 +590,7 @@ export default function ChatPage() {
     }
   };
 
-  const handleContactInputChange = (field: keyof Omit<ContactDetails, 'id' | 'instanceId' | 'userId' | 'tipoCliente' | '_chatIdOriginal' | 'chatbotEnabledForContact' | 'estadoConversacion'>, value: string) => {
+  const handleContactInputChange = (field: keyof Omit<ContactDetails, 'id' | 'instanceId' | 'userId' | 'tipoCliente' | '_chatIdOriginal' | 'chatbotEnabledForContact' | 'estadoConversacion' | 'assignedTo' | 'assignedToName'>, value: string) => {
     setContactDetails(prev => prev ? { ...prev, [field]: value } : null);
   };
   
@@ -576,6 +604,15 @@ export default function ChatPage() {
 
   const handleContactStatusChange = (value: ContactDetails['estadoConversacion']) => {
     setContactDetails(prev => prev ? { ...prev, estadoConversacion: value } : null);
+  };
+
+  const handleAssigneeChange = (memberId: string) => {
+    const selectedMember = teamMembers.find(m => m.uid === memberId);
+    setContactDetails(prev => prev ? { 
+        ...prev, 
+        assignedTo: selectedMember?.uid || '',
+        assignedToName: selectedMember?.fullName || selectedMember?.email || ''
+    } : null);
   };
 
   const handleQuickReplySelect = (tag: string) => {
@@ -712,7 +749,13 @@ export default function ChatPage() {
                           </p>
                         </div>
                         {convo.nameLine2 && <p className="text-xs text-muted-foreground truncate pl-4">{convo.nameLine2}</p>}
-                        <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5 pl-4">
+                        {convo.assignedToName && (
+                          <p className="text-xs text-muted-foreground truncate flex items-center mt-0.5">
+                              <UserCog className="h-3 w-3 mr-1.5 shrink-0" />
+                              Asignado a: {convo.assignedToName}
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
                           <span className="font-medium">
                             {convo.lastMessageSender?.toLowerCase() === 'bot' ? 'Bot' : 
                              convo.lastMessageSender?.toLowerCase() === 'agente' ? 'Agente' : 
@@ -792,6 +835,8 @@ export default function ChatPage() {
                         onSwitchChange={handleContactSwitchChange}
                         onStatusChange={handleContactStatusChange}
                         formatPhoneNumber={formatPhoneNumber}
+                        teamMembers={teamMembers}
+                        onAssigneeChange={handleAssigneeChange}
                       />
                     )}
                   </SheetContent>
@@ -958,6 +1003,8 @@ export default function ChatPage() {
             onSwitchChange={handleContactSwitchChange}
             onStatusChange={handleContactStatusChange}
             formatPhoneNumber={formatPhoneNumber}
+            teamMembers={teamMembers}
+            onAssigneeChange={handleAssigneeChange}
           />
         </div>
       )}
