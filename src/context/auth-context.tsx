@@ -19,6 +19,7 @@ import { doc, setDoc, getDoc, Timestamp, collection, query, where, getDocs, addD
 import type { RegisterFormData } from '@/components/auth/register-form';
 import type { LoginFormData } from '@/components/auth/login-form';
 import { useRouter } from 'next/navigation';
+import { sendWelcomeEmail } from '@/lib/email';
 
 interface UserProfile {
   uid: string;
@@ -232,6 +233,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         };
         await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
         
+        // Send welcome email for standard registration
+        try {
+          await sendWelcomeEmail({
+            userEmail: data.email,
+            userName: data.fullName,
+          });
+        } catch (emailError) {
+          console.error("Failed to send welcome email:", emailError);
+          // Don't block registration if email fails, just log it.
+        }
+
         router.push('/subscribe'); // New user needs to subscribe
       }
 

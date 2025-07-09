@@ -133,3 +133,50 @@ export const sendAssignmentNotificationEmail = async ({
     html,
   });
 };
+
+interface WelcomeEmailProps {
+  userEmail: string;
+  userName: string;
+}
+
+export const sendWelcomeEmail = async ({ userEmail, userName }: WelcomeEmailProps) => {
+  const subject = `¡Bienvenido a Qyvoo, ${userName}!`;
+  
+  const loginUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/login`;
+  const qyvooLogoUrl = 'https://qyvoo.vemontech.com/img/logo-2x1.png';
+
+  const html = `
+  <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f5f7fa; padding: 20px;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #ddd; border-radius: 8px; background-color: #ffffff;">
+      <div style="text-align: center; margin-bottom: 30px; border-bottom: 1px solid #eee; padding-bottom: 20px;">
+        <img src="${qyvooLogoUrl}" alt="Qyvoo Logo" style="max-width: 150px;"/>
+      </div>
+      <h1 style="color: #1E88E5; font-size: 24px; text-align: center;">¡Bienvenido a bordo, ${userName}!</h1>
+      <p style="font-size: 16px;">Estamos encantados de tenerte en Qyvoo. Has dado el primer paso para revolucionar la comunicación con tus clientes a través de WhatsApp.</p>
+      <p style="font-size: 16px;">Con Qyvoo, podrás:</p>
+      <ul style="font-size: 16px; list-style-type: '✔  '; padding-left: 20px;">
+        <li>Automatizar respuestas con asistentes inteligentes.</li>
+        <li>Gestionar todas tus conversaciones en un solo lugar.</li>
+        <li>Colaborar con tu equipo para ofrecer el mejor servicio.</li>
+      </ul>
+      <p style="font-size: 16px;">Para empezar, simplemente inicia sesión en tu cuenta:</p>
+      <div style="text-align: center; margin: 40px 0;">
+        <a href="${loginUrl}" style="background-color: #1E88E5; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;">
+          Iniciar Sesión en Qyvoo
+        </a>
+      </div>
+      <p style="font-size: 14px; color: #666;">Si tienes alguna pregunta, no dudes en visitar nuestro <a href="https://qyvoo.com" target="_blank" style="color: #1E88E5;">sitio web</a> o contactar a nuestro equipo de soporte.</p>
+      <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+      <p style="font-size: 12px; color: #888; text-align: center;">
+        © ${new Date().getFullYear()} Vemontech | Qyvoo - Automatiza tus conversaciones.
+      </p>
+    </div>
+  </div>
+  `;
+
+  await sendEmail({
+    to: userEmail,
+    subject,
+    html,
+  });
+};
