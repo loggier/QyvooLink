@@ -1,10 +1,10 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type FormEvent } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from '@/components/ui/label';
-import { Tooltip, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Input } from '@/components/ui/input';
 
 export interface TeamMember {
   uid: string;
@@ -41,6 +41,13 @@ export default function TeamPage() {
   const [memberToEdit, setMemberToEdit] = useState<TeamMember | null>(null);
   const [selectedRole, setSelectedRole] = useState<TeamMember['role']>('agent');
   const [isSavingRole, setIsSavingRole] = useState(false);
+
+  // State for invitations
+  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<'admin' | 'agent'>('agent');
+  const [isInviting, setIsInviting] = useState(false);
+
 
   const fetchTeamMembers = useCallback(async () => {
     if (!user || !user.organizationId) {
@@ -118,6 +125,72 @@ export default function TeamPage() {
       }
   }
 
+  const handleInviteSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!user || !user.organizationId || !inviteEmail.trim()) {
+      toast({ variant: 'destructive', title: 'Error', description: 'El correo electrónico es obligatorio.' });
+      return;
+    }
+    
+    setIsInviting(true);
+    try {
+      // 1. Check if user with this email is already in the organization
+      const usersRef = collection(db, 'users');
+      const userQuery = query(usersRef, where('email', '==', inviteEmail.trim()), where('organizationId', '==', user.organizationId));
+      const userSnapshot = await getDocs(userQuery);
+
+      if (!userSnapshot.empty) {
+        toast({
+          variant: 'destructive',
+          title: 'Usuario existente',
+          description: `${inviteEmail.trim()} ya es miembro de esta organización.`,
+        });
+        return;
+      }
+      
+      // 2. Check if there's a pending invitation for this email in this organization
+      const invitationsRef = collection(db, 'invitations');
+      const invQuery = query(invitationsRef, where('inviteeEmail', '==', inviteEmail.trim()), where('organizationId', '==', user.organizationId), where('status', '==', 'pending'));
+      const invSnapshot = await getDocs(invQuery);
+
+      if (!invSnapshot.empty) {
+        toast({
+          variant: 'default',
+          title: 'Invitación pendiente',
+          description: `Ya existe una invitación pendiente para este correo electrónico.`,
+        });
+        return;
+      }
+      
+      // 3. Create a new invitation document
+      await addDoc(invitationsRef, {
+        organizationId: user.organizationId,
+        organizationName: user.company || `${user.fullName}'s Team`,
+        inviterId: user.uid,
+        inviterName: user.fullName || user.email,
+        inviteeEmail: inviteEmail.trim(),
+        role: inviteRole,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+      });
+
+      toast({
+        title: 'Invitación Enviada',
+        description: `Se ha enviado una invitación a ${inviteEmail.trim()}.`,
+      });
+      
+      setIsInviteDialogOpen(false);
+      setInviteEmail('');
+      setInviteRole('agent');
+
+    } catch (error) {
+      console.error("Error sending invitation:", error);
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo enviar la invitación.' });
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
@@ -128,20 +201,9 @@ export default function TeamPage() {
           </h2>
           <p className="text-muted-foreground">Gestiona los miembros de tu organización y sus roles.</p>
         </div>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span tabIndex={0}>
-                <Button onClick={() => {}} className="mt-4 sm:mt-0" disabled>
-                  <UserPlus className="mr-2 h-4 w-4" /> Invitar Miembro
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>La función para invitar miembros estará disponible pronto.</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <Button onClick={() => setIsInviteDialogOpen(true)} className="mt-4 sm:mt-0">
+          <UserPlus className="mr-2 h-4 w-4" /> Invitar Miembro
+        </Button>
       </div>
 
       <Card>
@@ -217,6 +279,52 @@ export default function TeamPage() {
                 Guardar Cambios
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invitation Dialog */}
+      <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Invitar Nuevo Miembro</DialogTitle>
+            <DialogDescription>
+              Ingresa el correo electrónico y asigna un rol al nuevo miembro. Recibirá una notificación para unirse a tu organización.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleInviteSubmit} className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="invite-email">Correo Electrónico del Invitado</Label>
+              <Input
+                id="invite-email"
+                type="email"
+                placeholder="nuevo.miembro@ejemplo.com"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="invite-role">Asignar Rol</Label>
+              <Select value={inviteRole} onValueChange={(value) => setInviteRole(value as 'admin' | 'agent')}>
+                <SelectTrigger id="invite-role">
+                  <SelectValue placeholder="Seleccionar un rol" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="agent">Agente (Acceso limitado a chats y contactos)</SelectItem>
+                  <SelectItem value="admin">Admin (Acceso total)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsInviteDialogOpen(false)} disabled={isInviting}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isInviting}>
+                {isInviting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Enviar Invitación
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
