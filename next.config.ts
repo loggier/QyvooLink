@@ -37,6 +37,7 @@ const nextConfig: NextConfig = {
         stream: require.resolve('stream-browserify'),
         crypto: require.resolve('crypto-browserify'),
         buffer: require.resolve('buffer/'),
+        child_process: false,
       };
     }
     return config;

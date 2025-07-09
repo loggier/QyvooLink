@@ -1,4 +1,6 @@
 
+'use server';
+
 import nodemailer from 'nodemailer';
 
 interface EmailOptions {
