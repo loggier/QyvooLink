@@ -28,10 +28,10 @@ export function AppFooter() {
           >
             Qyvoo.com
           </a>
-          <Link href="/terms" className="hover:text-primary hover:underline">
+          <Link href="/terms" target="_blank" rel="noopener noreferrer" className="hover:text-primary hover:underline">
             Términos
           </Link>
-          <Link href="/privacy" className="hover:text-primary hover:underline">
+          <Link href="/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-primary hover:underline">
             Privacidad
           </Link>
         </nav>
