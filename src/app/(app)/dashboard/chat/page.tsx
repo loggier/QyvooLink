@@ -32,6 +32,7 @@ import { format, isToday, isYesterday, parseISO, differenceInCalendarDays } from
 import { es } from 'date-fns/locale';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { TeamMember } from '../team/page';
+import { sendAssignmentNotificationEmail } from '@/lib/email';
 
 interface ChatMessageDocument {
   chat_id: string;
@@ -577,6 +578,31 @@ export default function ChatPage() {
       await setDoc(contactDocRef, finalDataToPersist, { merge: true });
       
       const updatedContactState = { ...finalDataToPersist, id: compositeContactId };
+      
+      // Check if assignee has changed and send notification
+      const oldAssigneeId = initialContactDetails?.assignedTo;
+      const newAssigneeId = finalDataToPersist.assignedTo;
+      if (newAssigneeId && newAssigneeId !== oldAssigneeId) {
+        const newAssignee = teamMembers.find(m => m.uid === newAssigneeId);
+        if (newAssignee && newAssignee.email) {
+          try {
+            const contactName = `${contactDetails.nombre || ''} ${contactDetails.apellido || ''}`.trim() || contactDetails.telefono || selectedChatId;
+            const chatLink = `${process.env.NEXT_PUBLIC_BASE_URL || window.location.origin}/dashboard/chat?chatId=${selectedChatId}`;
+            
+            await sendAssignmentNotificationEmail({
+              assigneeEmail: newAssignee.email,
+              assigneeName: newAssignee.fullName,
+              assignerName: user.fullName || user.email || 'un administrador',
+              contactName: contactName,
+              chatLink: chatLink,
+            });
+            toast({ title: "Notificación Enviada", description: `Se ha notificado a ${newAssignee.fullName || newAssignee.email} sobre la asignación.` });
+          } catch (emailError) {
+             console.error("Error sending assignment notification:", emailError);
+             toast({ variant: "destructive", title: "Error de Notificación", description: "No se pudo enviar el correo de notificación al agente." });
+          }
+        }
+      }
 
       setContactDetails(updatedContactState);
       setInitialContactDetails(updatedContactState); 

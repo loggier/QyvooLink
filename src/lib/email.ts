@@ -86,3 +86,48 @@ export const sendInvitationEmail = async ({ inviteeEmail, organizationName, invi
         html,
     });
 };
+
+interface AssignmentEmailProps {
+  assigneeEmail: string;
+  assigneeName?: string;
+  assignerName: string;
+  contactName: string;
+  chatLink: string;
+}
+
+export const sendAssignmentNotificationEmail = async ({
+  assigneeEmail,
+  assigneeName,
+  assignerName,
+  contactName,
+  chatLink,
+}: AssignmentEmailProps) => {
+  const subject = `Nueva conversación asignada: ${contactName}`;
+  const html = `
+  <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f9f9f9; padding: 20px;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #ddd; border-radius: 8px; background-color: #ffffff;">
+      <div style="text-align: center; margin-bottom: 30px;">
+        <h1 style="color: #3F51B5; font-size: 24px;">Nueva Conversación Asignada</h1>
+      </div>
+      <p style="font-size: 16px;">Hola ${assigneeName || ''},</p>
+      <p style="font-size: 16px;"><strong>${assignerName}</strong> te ha asignado una nueva conversación con el contacto <strong>${contactName}</strong>.</p>
+      <div style="text-align: center; margin: 40px 0;">
+        <a href="${chatLink}" style="background-color: #3F51B5; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;">
+          Ir a la Conversación
+        </a>
+      </div>
+      <p style="font-size: 14px; color: #666;">Por favor, atiende este chat a la brevedad posible.</p>
+      <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+      <p style="font-size: 12px; color: #888; text-align: center;">
+        Qyvoo - Automatiza tus conversaciones.
+      </p>
+    </div>
+  </div>
+  `;
+
+  await sendEmail({
+    to: assigneeEmail,
+    subject,
+    html,
+  });
+};
