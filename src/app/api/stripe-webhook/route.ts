@@ -20,8 +20,9 @@ const toSubscriptionModel = (subscription: Stripe.Subscription, userId: string, 
         status: subscription.status,
         planId: planId || subscription.metadata.planId, // Use provided planId or from subscription metadata
         priceId: subscription.items.data[0].price.id,
-        current_period_end: new Date(subscription.current_period_end * 1000),
-        created: new Date(subscription.created * 1000),
+        // Robust handling of the end date.
+        current_period_end: subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null,
+        created: subscription.created ? new Date(subscription.created * 1000) : null,
         cancel_at_period_end: subscription.cancel_at_period_end,
         stripeCustomerId: subscription.customer.toString(),
     };
