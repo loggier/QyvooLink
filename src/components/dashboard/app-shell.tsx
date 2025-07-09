@@ -31,6 +31,7 @@ import OnboardingGuide from '@/components/dashboard/onboarding-guide';
 import {
   Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare, Bot, Contact2, Zap, Shield, CreditCard, HelpCircle, PanelLeft, Users2, Briefcase, Folder,
 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 interface NavItem {
   href: string;
@@ -159,7 +160,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-6">
               <Link href={homeUrl} className="flex items-center gap-2" aria-label="Dashboard">
                 <EvolveLinkLogo className="h-8 w-auto text-primary" data-ai-hint="company logo" />
-                <span className="hidden sm:inline text-xl font-semibold text-primary">Qyvoo</span>
+                <div className="hidden sm:flex items-center gap-2">
+                  <span className="text-xl font-semibold text-primary">Qyvoo</span>
+                  <Badge variant="secondary" className="px-1.5 py-0.5 text-xs font-normal">
+                    Beta
+                  </Badge>
+                </div>
               </Link>
               
               {/* Desktop Navigation */}
@@ -262,7 +268,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                    <div className="p-4 border-b">
                       <Link href={homeUrl} className="flex items-center gap-2" aria-label="Dashboard" onClick={() => setIsMobileMenuOpen(false)}>
                         <EvolveLinkLogo className="h-8 w-auto text-primary" data-ai-hint="company logo" />
-                        <span className="text-xl font-semibold text-primary">Qyvoo</span>
+                        <div className="flex items-center gap-2">
+                           <span className="text-xl font-semibold text-primary">Qyvoo</span>
+                           <Badge variant="secondary" className="px-1.5 py-0.5 text-xs font-normal">
+                             Beta
+                           </Badge>
+                        </div>
                       </Link>
                    </div>
                   <nav className="flex-grow p-4">
