@@ -8,7 +8,7 @@ import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc, collection, query, where, orderBy, onSnapshot, Timestamp as FirestoreTimestamp } from 'firebase/firestore';
 import type { WhatsAppInstance } from '@/app/(app)/dashboard/configuration/page';
-import type { ChatMessageDocument } from '@/app/(app)/dashboard/chat/page'; // Asumiendo que esta interfaz está bien definida aquí
+import type { ChatMessageDocument as BaseChatMessageDocument } from '@/app/(app)/dashboard/chat/page';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,10 +17,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardFooter, CardTitle }
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ArrowLeft, Save, User, Bot, MessageCircle, UserRound, Building, Mail, Phone, UserCheck, MapPin, MessageSquareDashed, ListTodo } from 'lucide-react';
+import { Loader2, ArrowLeft, Save, User, Bot, MessageCircle, UserRound, Building, Mail, Phone, UserCheck, MapPin, MessageSquareDashed, ListTodo, StickyNote } from 'lucide-react';
+import { format, isToday, parseISO } from 'date-fns';
+import { es } from 'date-fns/locale';
+
+interface ChatMessageDocument extends BaseChatMessageDocument {
+  type?: 'message' | 'internal_note';
+  author?: {
+    uid: string;
+    name: string;
+  };
+}
 
 interface ContactDetails {
   id: string;
@@ -45,6 +54,17 @@ const formatPhoneNumber = (chat_id: string | undefined): string => {
   if (!chat_id) return "Desconocido";
   return chat_id.split('@')[0];
 };
+
+const formatChatMessageTimestamp = (timestampInput: FirestoreTimestamp | Date | undefined): string => {
+  if (!timestampInput) return "";
+  const date = timestampInput instanceof FirestoreTimestamp ? timestampInput.toDate() : (typeof timestampInput === 'string' ? parseISO(timestampInput) : timestampInput);
+
+  if (isToday(date)) {
+    return format(date, 'HH:mm', { locale: es });
+  }
+  return format(date, 'dd/MM/yy HH:mm', { locale: es });
+};
+
 
 function formatWhatsAppMessage(text: string | undefined | null): React.ReactNode[] {
   if (typeof text !== 'string' || !text) {
@@ -188,7 +208,7 @@ export default function ContactDetailPage() {
   }, [contact, whatsAppInstance, toast]);
 
 
-  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
@@ -225,12 +245,6 @@ export default function ContactDetailPage() {
     }
   };
   
-  const formatTimestamp = (timestamp: FirestoreTimestamp | Date | undefined): string => {
-    if (!timestamp) return "";
-    const date = timestamp instanceof FirestoreTimestamp ? timestamp.toDate() : timestamp;
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
   if (isLoading || !contact) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -311,7 +325,7 @@ export default function ContactDetailPage() {
               </div>
                <div>
                 <Label htmlFor="_chatIdOriginal" className="flex items-center text-sm text-muted-foreground"><MessageCircle className="h-3 w-3 mr-1.5"/>Chat ID Original (WhatsApp)</Label>
-                <Input id="_chatIdOriginal" name="_chatIdOriginal" value={formData._chatIdOriginal || ""} onChange={handleInputChange} placeholder="Ej: 1234567890@s.whatsapp.net"/>
+                <Input id="_chatIdOriginal" name="_chatIdOriginal" value={formData._chatIdOriginal || ""} readOnly placeholder="Ej: 1234567890@s.whatsapp.net"/>
                  <p className="text-xs text-muted-foreground mt-1">Este ID se usa para vincular las conversaciones de WhatsApp. Edítalo con cuidado.</p>
               </div>
               <div className="flex items-center space-x-2 pt-2">
@@ -358,6 +372,22 @@ export default function ContactDetailPage() {
               ) : (
                 <ScrollArea className="flex-1 pr-4 space-y-3"> {/* ScrollArea toma el espacio restante */}
                   {messages.map((msg) => {
+                     if (msg.type === 'internal_note') {
+                        return (
+                          <div key={msg.id} className="relative my-4 flex items-center justify-center">
+                              <div className="absolute inset-x-0 h-px bg-yellow-300 dark:bg-yellow-700"></div>
+                              <div className="relative flex items-start gap-3 rounded-full bg-yellow-100 dark:bg-yellow-900/50 px-4 py-2 text-xs text-yellow-800 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800 shadow-sm">
+                                  <StickyNote className="h-4 w-4 mt-0.5 shrink-0" />
+                                  <div className="max-w-sm">
+                                      <p className="font-bold">{msg.author?.name || 'Agente'}</p>
+                                      <p className="whitespace-pre-wrap">{msg.mensaje}</p>
+                                      <p className="text-right text-yellow-600 dark:text-yellow-500 mt-1">{formatChatMessageTimestamp(msg.timestamp)}</p>
+                                  </div>
+                              </div>
+                          </div>
+                        );
+                      }
+
                      const userNameLower = msg.user_name?.toLowerCase();
                      const isExternalUser = userNameLower === 'user'; 
    
@@ -405,11 +435,11 @@ export default function ContactDetailPage() {
                             </Avatar>
                           )}
                           <div className={`py-2 px-3 rounded-lg shadow-md ${bubbleClass}`}>
-                            <p className="text-sm break-all whitespace-pre-wrap">
+                            <div className="text-sm break-all whitespace-pre-wrap">
                               {formatWhatsAppMessage(msg.mensaje)}
-                            </p>
+                            </div>
                             <p className={`text-xs mt-1 ${timestampAlignmentClass}`}>
-                              {formatTimestamp(msg.timestamp)}
+                              {formatChatMessageTimestamp(msg.timestamp)}
                             </p>
                           </div>
                           {IconComponent && !isExternalUser && (
@@ -443,5 +473,3 @@ export default function ContactDetailPage() {
     </div>
   );
 }
-
-    
