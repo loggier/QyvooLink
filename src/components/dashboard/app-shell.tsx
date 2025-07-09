@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
+import { cn } from '@/lib/utils';
 
 import { EvolveLinkLogo } from '@/components/icons';
 import { Button } from '@/components/ui/button';
@@ -18,33 +19,68 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { AppFooter } from '@/components/layout/footer';
 import OnboardingGuide from '@/components/dashboard/onboarding-guide';
 import {
-  Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare, Bot, Contact2, Zap, Shield, CreditCard, HelpCircle, PanelLeft, Users2,
+  Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare, Bot, Contact2, Zap, Shield, CreditCard, HelpCircle, PanelLeft, Users2, Briefcase, Folder,
 } from 'lucide-react';
 
 interface NavItem {
   href: string;
   label: string;
-  shortLabel: string;
   icon: React.ElementType;
-  adminOnly?: boolean;
-  restrictedTo?: ('owner' | 'admin')[];
 }
 
-const navItems: NavItem[] = [
-  { href: '/dashboard', label: 'Panel', shortLabel: 'Panel', icon: Home },
-  { href: '/dashboard/chat', label: 'Chat', shortLabel: 'Chat', icon: MessageSquare },
-  { href: '/dashboard/bots', label: 'Mis Bots', shortLabel: 'Bots', icon: Bot, restrictedTo: ['owner', 'admin'] },
-  { href: '/dashboard/contacts', label: 'Contactos', shortLabel: 'Contactos', icon: Contact2 },
-  { href: '/dashboard/team', label: 'Equipo', shortLabel: 'Equipo', icon: Users2, restrictedTo: ['owner', 'admin'] },
-  { href: '/dashboard/quick-replies', label: 'Respuestas', shortLabel: 'Respuestas', icon: Zap },
-  { href: '/dashboard/configuration', label: 'Configuración', shortLabel: 'Config', icon: Settings, restrictedTo: ['owner', 'admin'] },
-  { href: '/dashboard/reports', label: 'Reportes', shortLabel: 'Reportes', icon: BarChart2, restrictedTo: ['owner', 'admin'] },
-  { href: '/admin/dashboard', label: 'Admin Panel', shortLabel: 'Admin', icon: Shield, adminOnly: true },
-  { href: '/admin/subscriptions', label: 'Planes', shortLabel: 'Planes', icon: CreditCard, adminOnly: true },
+interface NavGroup {
+  title: string;
+  shortTitle: string;
+  icon: React.ElementType;
+  items: (NavItem & { restrictedTo?: ('owner' | 'admin')[] })[];
+  restrictedTo?: ('owner' | 'admin')[];
+  adminOnly?: boolean;
+}
+
+const navStructure: (NavItem | NavGroup)[] = [
+  { href: '/dashboard', label: 'Panel', icon: Home },
+  { href: '/dashboard/chat', label: 'Chat', icon: MessageSquare },
+  {
+    title: 'Clientes',
+    shortTitle: 'Clientes',
+    icon: Folder,
+    items: [
+      { href: '/dashboard/contacts', label: 'Contactos', icon: Contact2 },
+      { href: '/dashboard/quick-replies', label: 'Respuestas', icon: Zap },
+    ]
+  },
+  {
+    title: 'Administración',
+    shortTitle: 'Admin',
+    icon: Briefcase,
+    restrictedTo: ['owner', 'admin'],
+    items: [
+      { href: '/dashboard/bots', label: 'Mis Bots', icon: Bot },
+      { href: '/dashboard/team', label: 'Equipo', icon: Users2 },
+      { href: '/dashboard/configuration', label: 'Configuración', icon: Settings },
+      { href: '/dashboard/reports', label: 'Reportes', icon: BarChart2 },
+    ]
+  },
+  {
+    title: 'Plataforma',
+    shortTitle: 'Plataforma',
+    icon: Shield,
+    adminOnly: true,
+    items: [
+      { href: '/admin/dashboard', label: 'Admin Panel', icon: Shield },
+      { href: '/admin/subscriptions', label: 'Planes', icon: CreditCard },
+    ]
+  }
 ];
 
 const getInitials = (name?: string) => {
@@ -55,6 +91,8 @@ const getInitials = (name?: string) => {
     }
     return name.substring(0, 2).toUpperCase();
 };
+
+const isGroup = (item: NavItem | NavGroup): item is NavGroup => 'title' in item;
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -69,36 +107,45 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [user, pathname]);
 
   const userRole = user?.role;
-  const visibleNavItems = navItems.filter(item => {
-    // Hide global admin links from anyone who isn't a global 'admin'
-    if (item.adminOnly && userRole !== 'admin') {
-      return false;
-    }
-    // Hide org-restricted links from users not in the allowed roles (e.g., 'agent')
-    if (item.restrictedTo && !item.restrictedTo.includes(userRole as 'owner' | 'admin')) {
-      return false;
-    }
-    return true;
-  });
-
   const homeUrl = userRole === 'admin' ? '/admin/dashboard' : '/dashboard';
 
-  const NavLink = ({ item, isMobile }: { item: NavItem, isMobile?: boolean }) => {
-    const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+  const visibleNavStructure = navStructure.map(item => {
+    if (isGroup(item)) {
+      if (item.adminOnly && userRole !== 'admin') return null;
+      if (item.restrictedTo && !item.restrictedTo.includes(userRole as 'owner' | 'admin')) return null;
+      
+      const visibleItems = item.items.filter(subItem => {
+        if (subItem.restrictedTo && !subItem.restrictedTo.includes(userRole as 'owner' | 'admin')) {
+          return false;
+        }
+        return true;
+      });
+
+      if (visibleItems.length === 0) return null;
+      return { ...item, items: visibleItems };
+    }
+    return item;
+  }).filter(Boolean) as (NavItem | NavGroup)[];
+  
+  const activeGroupTitle = (visibleNavStructure.find(item => 
+    isGroup(item) && item.items.some(subItem => pathname.startsWith(subItem.href))
+  ) as NavGroup)?.title;
+
+  const NavLink = ({ href, label, icon: Icon, className = '' }: NavItem & { className?: string }) => {
+    const isActive = pathname === href || (href !== '/' && pathname.startsWith(href));
     return (
       <Link
-        href={item.href}
-        onClick={() => isMobile && setIsMobileMenuOpen(false)}
-        className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors
-          ${isActive
+        href={href}
+        onClick={() => setIsMobileMenuOpen(false)}
+        className={cn(`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors`,
+          isActive
             ? 'bg-primary text-primary-foreground'
-            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-          }
-          ${isMobile ? 'text-base py-3' : ''}
-        `}
+            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+          className
+        )}
       >
-        <item.icon className={`h-5 w-5 ${isMobile ? 'mr-3' : 'mr-2'}`} />
-        {isMobile ? item.label : item.shortLabel}
+        <Icon className="h-5 w-5 mr-3" />
+        {label}
       </Link>
     );
   };
@@ -117,9 +164,50 @@ export function AppShell({ children }: { children: ReactNode }) {
               
               {/* Desktop Navigation */}
               <nav className="hidden md:flex items-center gap-1">
-                {visibleNavItems.map((item) => (
-                  <NavLink key={item.href} item={item} />
-                ))}
+                {visibleNavStructure.map((item) => {
+                  if (isGroup(item)) {
+                    const isGroupActive = item.items.some(subItem => pathname.startsWith(subItem.href));
+                    return (
+                      <DropdownMenu key={item.title}>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" className={cn(
+                            'flex items-center px-3 py-2 text-sm font-medium rounded-md',
+                            isGroupActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                          )}>
+                             <item.icon className="h-5 w-5 mr-2" />
+                             {item.shortTitle}
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                          {item.items.map(subItem => (
+                            <DropdownMenuItem key={subItem.href} asChild>
+                              <Link href={subItem.href} className="flex items-center w-full">
+                                <subItem.icon className="h-4 w-4 mr-2"/>
+                                {subItem.label}
+                              </Link>
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )
+                  }
+                  const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+                  return (
+                     <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors
+                          ${isActive
+                            ? 'bg-primary text-primary-foreground'
+                            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                          }
+                        `}
+                      >
+                        <item.icon className="h-5 w-5 mr-2" />
+                        {item.label}
+                      </Link>
+                  )
+                })}
               </nav>
             </div>
 
@@ -170,15 +258,34 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <span className="sr-only">Abrir menú</span>
                   </Button>
                 </SheetTrigger>
-                <SheetContent side="left" className="w-[280px] p-4">
-                   <Link href={homeUrl} className="flex items-center gap-2 mb-6" aria-label="Dashboard" onClick={() => setIsMobileMenuOpen(false)}>
-                      <EvolveLinkLogo className="h-8 w-auto text-primary" data-ai-hint="company logo" />
-                      <span className="text-xl font-semibold text-primary">Qyvoo</span>
-                  </Link>
-                  <nav className="flex flex-col gap-2">
-                    {visibleNavItems.map((item) => (
-                      <NavLink key={item.href} item={item} isMobile />
-                    ))}
+                <SheetContent side="left" className="w-[280px] p-0 flex flex-col">
+                   <div className="p-4 border-b">
+                      <Link href={homeUrl} className="flex items-center gap-2" aria-label="Dashboard" onClick={() => setIsMobileMenuOpen(false)}>
+                        <EvolveLinkLogo className="h-8 w-auto text-primary" data-ai-hint="company logo" />
+                        <span className="text-xl font-semibold text-primary">Qyvoo</span>
+                      </Link>
+                   </div>
+                  <nav className="flex-grow p-4">
+                    <Accordion type="single" collapsible className="w-full space-y-1" defaultValue={activeGroupTitle}>
+                       {visibleNavStructure.map((item) => {
+                          if (!isGroup(item)) {
+                            return <NavLink key={item.href} {...item} />
+                          }
+                          return (
+                            <AccordionItem value={item.title} key={item.title} className="border-b-0">
+                                <AccordionTrigger className={cn(
+                                  "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors text-muted-foreground hover:bg-muted/50 hover:text-foreground hover:no-underline"
+                                )}>
+                                    <item.icon className="h-5 w-5 mr-3" />
+                                    {item.title}
+                                </AccordionTrigger>
+                                <AccordionContent className="pl-6 space-y-1 mt-1">
+                                    {item.items.map(subItem => <NavLink key={subItem.href} {...subItem} />)}
+                                </AccordionContent>
+                            </AccordionItem>
+                          )
+                       })}
+                    </Accordion>
                   </nav>
                 </SheetContent>
               </Sheet>
