@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EvolveLinkLogo } from '@/components/icons';
-import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft, ListTodo, UserCog, Filter } from 'lucide-react'; 
+import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft, ListTodo, UserCog, Filter, StickyNote } from 'lucide-react'; 
 import type { WhatsAppInstance } from '../configuration/page'; 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from '@/components/ui/button';
@@ -43,6 +43,11 @@ interface ChatMessageDocument {
   timestamp: FirestoreTimestamp; 
   to: string;
   user_name: 'User' | 'bot' | 'agente' | string; 
+  type?: 'message' | 'internal_note';
+  author?: {
+    uid: string;
+    name: string;
+  };
 }
 
 interface ChatMessage extends ChatMessageDocument {
@@ -157,6 +162,7 @@ export default function ChatPage() {
   const [activeMessages, setActiveMessages] = useState<ChatMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [replyMessage, setReplyMessage] = useState("");
+  const [chatMode, setChatMode] = useState<'message' | 'note'>('message');
 
   const [contactDetails, setContactDetails] = useState<ContactDetails | null>(null);
   const [initialContactDetails, setInitialContactDetails] = useState<ContactDetails | null>(null);
@@ -512,48 +518,58 @@ export default function ChatPage() {
       mensaje: trimmedMessage,
       user_name: 'agente', 
       timestamp: serverTimestamp(), 
+      type: chatMode,
     };
+    
+    if (chatMode === 'note') {
+      newMessageData.author = {
+        uid: user.uid,
+        name: user.fullName || user.username || 'Agente',
+      };
+    }
 
     try {
       await addDoc(collection(db, 'chat'), newMessageData);
       setReplyMessage("");
 
-      const webhookPayload = [{
-        chat_id: selectedChatId,
-        instanceId: whatsAppInstance.id,
-        mensaje: trimmedMessage,
-        instance: whatsAppInstance.name,
-        user_name: "agent", 
-        timestamp: new Date().toISOString(),
-      }];
+      if (chatMode === 'message') {
+        const webhookPayload = [{
+          chat_id: selectedChatId,
+          instanceId: whatsAppInstance.id,
+          mensaje: trimmedMessage,
+          instance: whatsAppInstance.name,
+          user_name: "agent", 
+          timestamp: new Date().toISOString(),
+        }];
 
-      const webhookUrl = "https://n8n.vemontech.com/webhook/qyvoo";
+        const webhookUrl = "https://n8n.vemontech.com/webhook/qyvoo";
 
-      try {
-        const webhookResponse = await fetch(webhookUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(webhookPayload),
-        });
+        try {
+          const webhookResponse = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(webhookPayload),
+          });
 
-        if (webhookResponse.ok) {
-          console.log("Message successfully sent to webhook:", webhookPayload);
-        } else {
-          const errorData = await webhookResponse.text();
-          console.error("Error sending message to webhook:", webhookResponse.status, errorData);
-          toast({ variant: "destructive", title: "Error de Webhook", description: `No se pudo enviar el mensaje a Qyvoo: ${webhookResponse.status}` });
+          if (webhookResponse.ok) {
+            console.log("Message successfully sent to webhook:", webhookPayload);
+          } else {
+            const errorData = await webhookResponse.text();
+            console.error("Error sending message to webhook:", webhookResponse.status, errorData);
+            toast({ variant: "destructive", title: "Error de Webhook", description: `No se pudo enviar el mensaje a Qyvoo: ${webhookResponse.status}` });
+          }
+        } catch (webhookError) {
+          console.error("Error calling webhook:", webhookError);
+          toast({ variant: "destructive", title: "Error de Red Webhook", description: "No se pudo conectar con el servicio de Qyvoo." });
         }
-      } catch (webhookError) {
-        console.error("Error calling webhook:", webhookError);
-        toast({ variant: "destructive", title: "Error de Red Webhook", description: "No se pudo conectar con el servicio de Qyvoo." });
       }
 
     } catch (error) {
-      console.error("Error sending message (Firestore):", error);
-      setError("Error al enviar el mensaje a Firestore.");
-      toast({ variant: "destructive", title: "Error en Firestore", description: "No se pudo guardar el mensaje." });
+      console.error("Error saving message/note (Firestore):", error);
+      setError("Error al guardar el mensaje o nota en Firestore.");
+      toast({ variant: "destructive", title: "Error en Firestore", description: "No se pudo guardar el mensaje/nota." });
     }
   };
   
@@ -561,9 +577,6 @@ export default function ChatPage() {
     if (!selectedChatId || !user || !whatsAppInstance || !contactDetails) return;
     setIsSavingContact(true);
 
-    const compositeContactId = getContactDocId(user.uid, selectedChatId);
-    const contactDocRef = doc(db, 'contacts', compositeContactId);
-    
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id: _docIdFromState, ...dataToPersist } = contactDetails; 
     
@@ -578,9 +591,9 @@ export default function ChatPage() {
     };
 
     try {
-      await setDoc(contactDocRef, finalDataToPersist, { merge: true });
+      await setDoc(doc(db, 'contacts', finalDataToPersist.id!), finalDataToPersist, { merge: true });
       
-      const updatedContactState = { ...finalDataToPersist, id: compositeContactId };
+      const updatedContactState = { ...finalDataToPersist, id: finalDataToPersist.id! };
       
       // Check if assignee has changed and send notification
       const oldAssigneeId = initialContactDetails?.assignedTo;
@@ -881,7 +894,7 @@ export default function ChatPage() {
             </div>
 
             {/* Messages Area */}
-            <ScrollArea className="flex-grow p-4 space-y-4 bg-muted/20">
+            <ScrollArea className="flex-grow p-4 space-y-2 bg-muted/20">
               {isLoadingMessages ? (
                 <div className="flex justify-center items-center h-full">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -894,6 +907,22 @@ export default function ChatPage() {
                 </div>
               ) : (
                 activeMessages.map((msg) => {
+                  if (msg.type === 'internal_note') {
+                    return (
+                      <div key={msg.id} className="relative my-4 flex items-center justify-center">
+                          <div className="absolute inset-x-0 h-px bg-yellow-300 dark:bg-yellow-700"></div>
+                          <div className="relative flex items-start gap-3 rounded-full bg-yellow-100 dark:bg-yellow-900/50 px-4 py-2 text-xs text-yellow-800 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800 shadow-sm">
+                              <StickyNote className="h-4 w-4 mt-0.5 shrink-0" />
+                              <div className="max-w-sm">
+                                  <p className="font-bold">{msg.author?.name || 'Agente'}</p>
+                                  <p className="whitespace-pre-wrap">{msg.mensaje}</p>
+                                  <p className="text-right text-yellow-600 dark:text-yellow-500 mt-1">{formatChatMessageTimestamp(msg.timestamp)}</p>
+                              </div>
+                          </div>
+                      </div>
+                    );
+                  }
+
                   const userNameLower = msg.user_name?.toLowerCase();
                   const isExternalUser = userNameLower === 'user'; 
 
@@ -952,54 +981,64 @@ export default function ChatPage() {
 
             {/* Message Input Area */}
             <div className="p-4 border-t bg-card flex flex-col space-y-2 sticky bottom-0">
-              <div className="w-full">
-                <Select onValueChange={handleQuickReplySelect} disabled={isLoadingQuickReplies || quickReplies.length === 0}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={
-                      isLoadingQuickReplies ? "Cargando respuestas..." :
-                      quickReplies.length === 0 ? "No hay respuestas rápidas" :
-                      "Seleccionar respuesta rápida..."
-                    } />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none" disabled>Seleccionar respuesta rápida...</SelectItem>
-                    {quickReplies.map((qr) => (
-                      <SelectItem key={qr.id} value={qr.tag}>
-                        {qr.tag} - <span className="text-xs text-muted-foreground truncate max-w-[200px] inline-block">{qr.message}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground mt-1 text-right">
-                  <Link href="/dashboard/quick-replies" className="hover:underline">
-                    Gestionar respuestas rápidas <Zap className="inline h-3 w-3" />
-                  </Link>
-                </p>
-              </div>
-              <div className="flex w-full items-center space-x-2">
-                <Textarea
-                  placeholder="Escribe tu mensaje como administrador..."
-                  value={replyMessage}
-                  onChange={(e) => setReplyMessage(e.target.value)}
-                  className="flex-grow resize-none"
-                  rows={1}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage();
-                    }
-                  }}
-                />
-                <Button 
-                  onClick={handleSendMessage} 
-                  disabled={!replyMessage.trim() || isLoadingMessages}
-                  className="shrink-0"
-                  size="lg"
-                >
-                  <Send className="h-4 w-4" />
-                  <span className="sr-only">Enviar</span>
-                </Button>
-              </div>
+               <Tabs value={chatMode} onValueChange={(value) => setChatMode(value as any)} className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="message">Mensaje al Cliente</TabsTrigger>
+                  <TabsTrigger value="note">Nota Interna</TabsTrigger>
+                </TabsList>
+                <div className="mt-2">
+                  {chatMode === 'message' && (
+                    <div className="w-full mb-2">
+                      <Select onValueChange={handleQuickReplySelect} disabled={isLoadingQuickReplies || quickReplies.length === 0}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder={
+                            isLoadingQuickReplies ? "Cargando respuestas..." :
+                            quickReplies.length === 0 ? "No hay respuestas rápidas" :
+                            "Seleccionar respuesta rápida..."
+                          } />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none" disabled>Seleccionar respuesta rápida...</SelectItem>
+                          {quickReplies.map((qr) => (
+                            <SelectItem key={qr.id} value={qr.tag}>
+                              {qr.tag} - <span className="text-xs text-muted-foreground truncate max-w-[200px] inline-block">{qr.message}</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground mt-1 text-right">
+                        <Link href="/dashboard/quick-replies" className="hover:underline">
+                          Gestionar respuestas rápidas <Zap className="inline h-3 w-3" />
+                        </Link>
+                      </p>
+                    </div>
+                  )}
+                  <div className="flex w-full items-center space-x-2">
+                    <Textarea
+                      placeholder={chatMode === 'message' ? "Escribe tu mensaje como administrador..." : "Añade una nota para tu equipo (no se enviará al cliente)..."}
+                      value={replyMessage}
+                      onChange={(e) => setReplyMessage(e.target.value)}
+                      className="flex-grow resize-none"
+                      rows={1}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                    />
+                    <Button 
+                      onClick={handleSendMessage} 
+                      disabled={!replyMessage.trim() || isLoadingMessages}
+                      className="shrink-0"
+                      size="lg"
+                    >
+                      <Send className="h-4 w-4" />
+                      <span className="sr-only">Enviar</span>
+                    </Button>
+                  </div>
+                </div>
+              </Tabs>
             </div>
           </>
         ) : ( 
