@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ArrowLeft, Save, User, Bot, MessageCircle, UserRound, Building, Mail, Phone, UserCheck, MapPin, MessageSquareDashed } from 'lucide-react';
+import { Loader2, ArrowLeft, Save, User, Bot, MessageCircle, UserRound, Building, Mail, Phone, UserCheck, MapPin, MessageSquareDashed, ListTodo } from 'lucide-react';
 
 interface ContactDetails {
   id: string;
@@ -31,6 +31,7 @@ interface ContactDetails {
   empresa?: string;
   ubicacion?: string;
   tipoCliente?: 'Prospecto' | 'Cliente' | 'Proveedor' | 'Otro';
+  estadoConversacion?: 'Abierto' | 'Pendiente' | 'Cerrado';
   chatbotEnabledForContact?: boolean;
   userId: string;
   _chatIdOriginal?: string;
@@ -121,6 +122,7 @@ export default function ContactDetailPage() {
           empresa: data.empresa || "",
           ubicacion: data.ubicacion || "",
           tipoCliente: data.tipoCliente,
+          estadoConversacion: data.estadoConversacion || 'Abierto',
           chatbotEnabledForContact: data.chatbotEnabledForContact ?? true,
           _chatIdOriginal: data._chatIdOriginal
         });
@@ -191,8 +193,8 @@ export default function ContactDetailPage() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSelectChange = (value: string) => {
-    setFormData(prev => ({ ...prev, tipoCliente: value as ContactDetails['tipoCliente'] }));
+  const handleSelectChange = (name: 'tipoCliente' | 'estadoConversacion', value: string) => {
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSwitchChange = (checked: boolean) => {
@@ -207,6 +209,7 @@ export default function ContactDetailPage() {
     const updatedContactData: Partial<ContactDetails> = {
       ...formData,
       chatbotEnabledForContact: formData.chatbotEnabledForContact ?? true,
+      estadoConversacion: formData.estadoConversacion ?? 'Abierto',
     };
 
     try {
@@ -281,7 +284,7 @@ export default function ContactDetailPage() {
               </div>
               <div>
                 <Label htmlFor="tipoCliente" className="flex items-center text-sm text-muted-foreground"><UserCheck className="h-3 w-3 mr-1.5"/>Tipo de Cliente</Label>
-                <Select name="tipoCliente" value={formData.tipoCliente || ""} onValueChange={handleSelectChange}>
+                <Select name="tipoCliente" value={formData.tipoCliente || ""} onValueChange={(value) => handleSelectChange('tipoCliente', value)}>
                   <SelectTrigger id="tipoCliente">
                     <SelectValue placeholder="Seleccionar tipo" />
                   </SelectTrigger>
@@ -290,6 +293,19 @@ export default function ContactDetailPage() {
                     <SelectItem value="Cliente">Cliente</SelectItem>
                     <SelectItem value="Proveedor">Proveedor</SelectItem>
                     <SelectItem value="Otro">Otro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="estadoConversacion" className="flex items-center text-sm text-muted-foreground"><ListTodo className="h-3 w-3 mr-1.5"/>Estado Conversación</Label>
+                <Select name="estadoConversacion" value={formData.estadoConversacion || "Abierto"} onValueChange={(value) => handleSelectChange('estadoConversacion', value)}>
+                  <SelectTrigger id="estadoConversacion">
+                    <SelectValue placeholder="Seleccionar estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Abierto">Abierto</SelectItem>
+                    <SelectItem value="Pendiente">Pendiente</SelectItem>
+                    <SelectItem value="Cerrado">Cerrado</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

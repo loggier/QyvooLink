@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EvolveLinkLogo } from '@/components/icons';
-import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft } from 'lucide-react'; 
+import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft, ListTodo } from 'lucide-react'; 
 import type { WhatsAppInstance } from '../configuration/page'; 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from '@/components/ui/button';
@@ -54,6 +54,7 @@ interface ConversationSummary {
   nameLine1: string;
   nameLine2: string | null;
   avatarFallback?: string; 
+  status?: ContactDetails['estadoConversacion'];
 }
 
 interface QuickReply {
@@ -325,7 +326,8 @@ export default function ChatPage() {
                   lastMessageSender: summaryValue.lastMessageSender,
                   nameLine1: nameL1,
                   nameLine2: nameL2,
-                  avatarFallback: avatarFb
+                  avatarFallback: avatarFb,
+                  status: contactData?.estadoConversacion || 'Abierto'
               });
           }
 
@@ -398,10 +400,11 @@ export default function ChatPage() {
           const contactDocSnap = await getDoc(contactDocRef);
           if (contactDocSnap.exists()) {
             const data = { id: contactDocSnap.id, ...contactDocSnap.data() } as ContactDetails;
-            data.chatbotEnabledForContact = data.chatbotEnabledForContact ?? true; 
+            data.chatbotEnabledForContact = data.chatbotEnabledForContact ?? true;
+            data.estadoConversacion = data.estadoConversacion ?? 'Abierto';
             setContactDetails(data);
             setInitialContactDetails(data);
-            setIsEditingContact(false); // Set to false for existing contacts
+            setIsEditingContact(false);
           } else {
             const initialData: ContactDetails = { 
               id: compositeContactId, 
@@ -412,6 +415,7 @@ export default function ChatPage() {
               empresa: "",
               ubicacion: "",
               tipoCliente: undefined,
+              estadoConversacion: 'Abierto',
               instanceId: whatsAppInstance.id,
               userId: user.uid, 
               _chatIdOriginal: selectedChatId,
@@ -419,7 +423,7 @@ export default function ChatPage() {
             };
             setContactDetails(initialData); 
             setInitialContactDetails(initialData);
-            setIsEditingContact(true); // Set to true for new contacts
+            setIsEditingContact(true);
           }
         } catch (error) {
           console.error("Error fetching contact details:", error);
@@ -535,6 +539,7 @@ export default function ChatPage() {
       telefono: dataToPersist.telefono || formatPhoneNumber(selectedChatId), 
       _chatIdOriginal: selectedChatId,
       chatbotEnabledForContact: dataToPersist.chatbotEnabledForContact ?? true,
+      estadoConversacion: dataToPersist.estadoConversacion ?? 'Abierto',
     };
 
     try {
@@ -554,7 +559,7 @@ export default function ChatPage() {
     }
   };
 
-  const handleContactInputChange = (field: keyof Omit<ContactDetails, 'id' | 'instanceId' | 'userId' | 'tipoCliente' | '_chatIdOriginal' | 'chatbotEnabledForContact'>, value: string) => {
+  const handleContactInputChange = (field: keyof Omit<ContactDetails, 'id' | 'instanceId' | 'userId' | 'tipoCliente' | '_chatIdOriginal' | 'chatbotEnabledForContact' | 'estadoConversacion'>, value: string) => {
     setContactDetails(prev => prev ? { ...prev, [field]: value } : null);
   };
   
@@ -564,6 +569,10 @@ export default function ChatPage() {
   
   const handleContactSwitchChange = (checked: boolean) => {
      setContactDetails(prev => prev ? { ...prev, chatbotEnabledForContact: checked } : null);
+  };
+
+  const handleContactStatusChange = (value: ContactDetails['estadoConversacion']) => {
+    setContactDetails(prev => prev ? { ...prev, estadoConversacion: value } : null);
   };
 
   const handleQuickReplySelect = (tag: string) => {
@@ -625,6 +634,16 @@ export default function ChatPage() {
 
   const currentConvoDetails = conversations.find(c => c.chat_id === selectedChatId);
 
+  const getStatusIndicator = (status?: ContactDetails['estadoConversacion']) => {
+    switch(status) {
+        case 'Pendiente': return <div className="h-2.5 w-2.5 rounded-full bg-yellow-500 shrink-0"></div>;
+        case 'Cerrado': return <div className="h-2.5 w-2.5 rounded-full bg-gray-500 shrink-0"></div>;
+        case 'Abierto':
+        default:
+            return <div className="h-2.5 w-2.5 rounded-full bg-green-500 shrink-0"></div>;
+    }
+  }
+
   return (
     <div className="flex h-[calc(100vh-theme(spacing.16)-theme(spacing.12))] border bg-card text-card-foreground shadow-sm rounded-lg overflow-hidden">
       {/* Conversation List - Always visible on desktop, conditionally on mobile */}
@@ -668,15 +687,16 @@ export default function ChatPage() {
                       </Avatar>
                       <div className="flex-1 min-w-0 overflow-hidden">
                         <div className="flex justify-between items-baseline">
-                          <div className="min-w-0 overflow-hidden mr-2">
+                          <div className="min-w-0 overflow-hidden mr-2 flex items-center gap-2">
+                            {getStatusIndicator(convo.status)}
                             <p className="font-semibold text-sm truncate">{convo.nameLine1}</p>
-                            {convo.nameLine2 && <p className="text-xs text-muted-foreground truncate">{convo.nameLine2}</p>}
                           </div>
                           <p className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
                             {formatConversationTimestamp(convo.lastMessageTimestamp)}
                           </p>
                         </div>
-                        <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                        {convo.nameLine2 && <p className="text-xs text-muted-foreground truncate pl-4">{convo.nameLine2}</p>}
+                        <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5 pl-4">
                           <span className="font-medium">
                             {convo.lastMessageSender?.toLowerCase() === 'bot' ? 'Bot' : 
                              convo.lastMessageSender?.toLowerCase() === 'agente' ? 'Agente' : 
@@ -754,6 +774,7 @@ export default function ChatPage() {
                         onInputChange={handleContactInputChange}
                         onSelectChange={handleContactSelectChange}
                         onSwitchChange={handleContactSwitchChange}
+                        onStatusChange={handleContactStatusChange}
                         formatPhoneNumber={formatPhoneNumber}
                       />
                     )}
@@ -919,6 +940,7 @@ export default function ChatPage() {
             onInputChange={handleContactInputChange}
             onSelectChange={handleContactSelectChange}
             onSwitchChange={handleContactSwitchChange}
+            onStatusChange={handleContactStatusChange}
             formatPhoneNumber={formatPhoneNumber}
           />
         </div>

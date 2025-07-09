@@ -18,7 +18,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Users, UserPlus, Edit3, Trash2, Building, Mail, Phone, UserCheck, Bot, UserRound, Briefcase, Star, MessageSquareDashed } from 'lucide-react';
+import { Loader2, Users, UserPlus, Edit3, Trash2, Building, Mail, Phone, UserCheck, Bot, UserRound, Briefcase, Star, MessageSquareDashed, ListTodo } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+
 
 interface ContactDetails {
   id: string; // Firestore document ID
@@ -29,6 +32,7 @@ interface ContactDetails {
   empresa?: string;
   ubicacion?: string;
   tipoCliente?: 'Prospecto' | 'Cliente' | 'Proveedor' | 'Otro';
+  estadoConversacion?: 'Abierto' | 'Pendiente' | 'Cerrado';
   chatbotEnabledForContact?: boolean;
   userId: string;
   _chatIdOriginal?: string; 
@@ -50,6 +54,7 @@ const initialContactFormState: Omit<ContactDetails, 'id' | 'userId'> = {
   empresa: "",
   ubicacion: "",
   tipoCliente: 'Cliente',
+  estadoConversacion: 'Abierto',
   chatbotEnabledForContact: true,
   _chatIdOriginal: undefined,
 };
@@ -113,8 +118,8 @@ export default function ContactsPage() {
     setCurrentContactData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSelectChange = (value: string) => {
-    setCurrentContactData(prev => ({ ...prev, tipoCliente: value as ContactDetails['tipoCliente'] }));
+  const handleSelectChange = (name: 'tipoCliente' | 'estadoConversacion', value: string) => {
+    setCurrentContactData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSwitchChange = (checked: boolean) => {
@@ -165,6 +170,7 @@ export default function ContactsPage() {
       ...currentContactData,
       userId: user.uid,
       chatbotEnabledForContact: currentContactData.chatbotEnabledForContact ?? true,
+      estadoConversacion: currentContactData.estadoConversacion ?? 'Abierto'
     };
 
     try {
@@ -180,6 +186,14 @@ export default function ContactsPage() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const getStatusBadge = (status?: ContactDetails['estadoConversacion']) => {
+    const statusText = status || 'Abierto';
+    const variant = status === 'Cerrado' ? 'secondary' : status === 'Pendiente' ? 'destructive' : 'default';
+    const className = status === 'Pendiente' ? 'bg-yellow-400 text-yellow-900' : 
+                      status === 'Abierto' ? 'bg-green-500 text-white' : '';
+    return <Badge variant={variant} className={cn(className)}>{statusText}</Badge>
   };
 
   if (isLoading && !user) {
@@ -264,8 +278,7 @@ export default function ContactsPage() {
                     <TableHead>Nombre Completo</TableHead>
                     <TableHead>Empresa</TableHead>
                     <TableHead>Teléfono</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Tipo</TableHead>
+                    <TableHead>Estado</TableHead>
                     <TableHead>Chatbot</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
@@ -276,8 +289,7 @@ export default function ContactsPage() {
                       <TableCell className="font-medium">{contact.nombre || ""} {contact.apellido || ""}</TableCell>
                       <TableCell>{contact.empresa || "-"}</TableCell>
                       <TableCell>{contact.telefono || "-"}</TableCell>
-                      <TableCell>{contact.email || "-"}</TableCell>
-                      <TableCell>{contact.tipoCliente || "No definido"}</TableCell>
+                      <TableCell>{getStatusBadge(contact.estadoConversacion)}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 text-xs rounded-full ${contact.chatbotEnabledForContact ?? true ? 'bg-green-100 text-green-700 dark:bg-green-700 dark:text-green-100' : 'bg-red-100 text-red-700 dark:bg-red-700 dark:text-red-100'}`}>
                           {contact.chatbotEnabledForContact ?? true ? "Activado" : "Desactivado"}
@@ -346,7 +358,7 @@ export default function ContactsPage() {
                 <Select 
                   name="tipoCliente"
                   value={currentContactData.tipoCliente || ""} 
-                  onValueChange={handleSelectChange}
+                  onValueChange={(value) => handleSelectChange('tipoCliente', value)}
                 >
                   <SelectTrigger id="tipoCliente">
                     <SelectValue placeholder="Seleccionar tipo" />
@@ -356,6 +368,23 @@ export default function ContactsPage() {
                     <SelectItem value="Cliente">Cliente</SelectItem>
                     <SelectItem value="Proveedor">Proveedor</SelectItem>
                     <SelectItem value="Otro">Otro</SelectItem>
+                  </SelectContent>
+                </Select>
+            </div>
+             <div>
+              <Label htmlFor="estadoConversacion" className="flex items-center text-sm text-muted-foreground"><ListTodo className="h-3 w-3 mr-1.5"/>Estado Conversación</Label>
+                <Select 
+                  name="estadoConversacion"
+                  value={currentContactData.estadoConversacion || "Abierto"} 
+                  onValueChange={(value) => handleSelectChange('estadoConversacion', value)}
+                >
+                  <SelectTrigger id="estadoConversacion">
+                    <SelectValue placeholder="Seleccionar estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Abierto">Abierto</SelectItem>
+                    <SelectItem value="Pendiente">Pendiente</SelectItem>
+                    <SelectItem value="Cerrado">Cerrado</SelectItem>
                   </SelectContent>
                 </Select>
             </div>

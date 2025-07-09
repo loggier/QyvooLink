@@ -9,7 +9,7 @@ import { CardHeader, CardFooter, CardTitle, CardContent } from '@/components/ui/
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Save, XCircle, Edit3, UserRound, Building, Mail, Phone, UserCheck, MapPin, Bot, MessageSquareDashed, MessageCircle } from 'lucide-react';
+import { Loader2, Save, XCircle, Edit3, UserRound, Building, Mail, Phone, UserCheck, MapPin, Bot, MessageSquareDashed, MessageCircle, ListTodo } from 'lucide-react';
 
 export interface ContactDetails {
   id?: string;
@@ -20,6 +20,7 @@ export interface ContactDetails {
   empresa?: string;
   ubicacion?: string;
   tipoCliente?: 'Prospecto' | 'Cliente' | 'Proveedor' | 'Otro';
+  estadoConversacion?: 'Abierto' | 'Pendiente' | 'Cerrado';
   instanceId?: string;
   userId?: string;
   _chatIdOriginal?: string;
@@ -35,8 +36,9 @@ interface ContactDetailsPanelProps {
   isSavingContact: boolean;
   onSave: () => Promise<void>;
   onCancel: () => void;
-  onInputChange: (field: keyof Omit<ContactDetails, 'id' | 'instanceId' | 'userId' | 'tipoCliente' | '_chatIdOriginal' | 'chatbotEnabledForContact'>, value: string) => void;
+  onInputChange: (field: keyof Omit<ContactDetails, 'id' | 'instanceId' | 'userId' | 'tipoCliente' | '_chatIdOriginal' | 'chatbotEnabledForContact' | 'estadoConversacion'>, value: string) => void;
   onSelectChange: (value: ContactDetails['tipoCliente']) => void;
+  onStatusChange: (value: ContactDetails['estadoConversacion']) => void;
   onSwitchChange: (checked: boolean) => void;
   formatPhoneNumber: (chat_id: string | undefined) => string;
 }
@@ -52,6 +54,7 @@ export default function ContactDetailsPanel({
   onCancel,
   onInputChange,
   onSelectChange,
+  onStatusChange,
   onSwitchChange,
   formatPhoneNumber,
 }: ContactDetailsPanelProps) {
@@ -94,6 +97,23 @@ export default function ContactDetailsPanel({
       </CardHeader>
       <ScrollArea className="flex-grow p-4">
         <div className="space-y-4">
+           <div>
+            <Label htmlFor="contactStatus" className="flex items-center text-sm text-muted-foreground"><ListTodo className="h-4 w-4 mr-2" />Estado Conversación</Label>
+            <Select
+              value={currentDisplayDetails.estadoConversacion || 'Abierto'}
+              onValueChange={(value) => onStatusChange(value as ContactDetails['estadoConversacion'])}
+              disabled={!isEditingContact}
+            >
+              <SelectTrigger id="contactStatus">
+                <SelectValue placeholder="Seleccionar estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Abierto">Abierto</SelectItem>
+                <SelectItem value="Pendiente">Pendiente</SelectItem>
+                <SelectItem value="Cerrado">Cerrado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div>
             <Label htmlFor="contactNombre" className="flex items-center text-sm text-muted-foreground"><UserRound className="h-4 w-4 mr-2" />Nombre</Label>
             <Input id="contactNombre" value={currentDisplayDetails.nombre || ""} onChange={(e) => onInputChange('nombre', e.target.value)} readOnly={!isEditingContact} placeholder="No disponible" />
