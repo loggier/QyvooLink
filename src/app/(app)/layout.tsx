@@ -23,8 +23,8 @@ export default function AuthenticatedAppLayout({ children }: { children: ReactNo
       return;
     }
     
-    // --- Subscription check (for non-admins) ---
-    if (user.role !== 'admin') {
+    // --- Subscription check (only for owners) ---
+    if (user.role === 'owner') {
       const hasActiveSubscription = user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing';
       const isVip = user.isVip === true;
       const isAllowed = hasActiveSubscription || isVip;

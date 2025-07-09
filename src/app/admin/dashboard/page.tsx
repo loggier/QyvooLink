@@ -98,7 +98,7 @@ export default function AdminDashboardPage() {
               if (plan.monthlyPriceId === sub.priceId) {
                   estimatedMRR += plan.priceMonthly || 0;
               } else if (plan.yearlyPriceId === sub.priceId) {
-                  estimatedMRR += (plan.yearlyPriceId || 0) / 12;
+                  estimatedMRR += (plan.priceYearly || 0) / 12;
               }
           }
       });

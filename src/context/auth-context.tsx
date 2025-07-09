@@ -19,7 +19,7 @@ import { doc, setDoc, getDoc, Timestamp, collection, query, where, getDocs, addD
 import type { RegisterFormData } from '@/components/auth/register-form';
 import type { LoginFormData } from '@/components/auth/login-form';
 import { useRouter } from 'next/navigation';
-import { sendWelcomeEmail } from '@/lib/email';
+import { sendWelcomeEmail, sendInvitationEmail } from '@/lib/email';
 
 interface UserProfile {
   uid: string;
