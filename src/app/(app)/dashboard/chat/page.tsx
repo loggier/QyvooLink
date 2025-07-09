@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EvolveLinkLogo } from '@/components/icons';
-import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft, ListTodo, UserCog } from 'lucide-react'; 
+import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft, ListTodo, UserCog, Filter } from 'lucide-react'; 
 import type { WhatsAppInstance } from '../configuration/page'; 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from '@/components/ui/button';
@@ -58,6 +58,7 @@ interface ConversationSummary {
   nameLine2: string | null;
   avatarFallback?: string; 
   status?: ContactDetails['estadoConversacion'];
+  assignedTo?: string; // Add assignedTo for filtering
   assignedToName?: string;
 }
 
@@ -168,6 +169,7 @@ export default function ChatPage() {
   const [isLoadingQuickReplies, setIsLoadingQuickReplies] = useState(false);
   
   const [statusFilter, setStatusFilter] = useState<'all' | 'Abierto' | 'Pendiente' | 'Cerrado'>('all');
+  const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'mine'>('all');
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -357,6 +359,7 @@ export default function ChatPage() {
                   nameLine2: nameL2,
                   avatarFallback: avatarFb,
                   status: contactData?.estadoConversacion || 'Abierto',
+                  assignedTo: contactData?.assignedTo,
                   assignedToName: contactData?.assignedToName,
               });
           }
@@ -711,8 +714,9 @@ export default function ChatPage() {
   }
 
   const filteredConversations = conversations.filter(convo => {
-    if (statusFilter === 'all') return true;
-    return convo.status === statusFilter;
+    const statusMatch = statusFilter === 'all' || convo.status === statusFilter;
+    const assignmentMatch = assignmentFilter === 'all' || (assignmentFilter === 'mine' && convo.assignedTo === user?.uid);
+    return statusMatch && assignmentMatch;
   });
 
   return (
@@ -725,6 +729,12 @@ export default function ChatPage() {
         `}>
           <div className="p-4 border-b">
             <h2 className="text-xl font-semibold">Conversaciones</h2>
+             <Tabs defaultValue="all" onValueChange={(value) => setAssignmentFilter(value as any)} className="mt-3">
+                <TabsList className="grid w-full grid-cols-2 h-9">
+                    <TabsTrigger value="all">Todos los Chats</TabsTrigger>
+                    <TabsTrigger value="mine">Asignados a Mí</TabsTrigger>
+                </TabsList>
+            </Tabs>
              <Tabs defaultValue="all" onValueChange={(value) => setStatusFilter(value as any)} className="mt-2">
               <TabsList className="grid w-full grid-cols-4 h-9">
                 <TabsTrigger value="all" className="text-xs">Todos</TabsTrigger>
