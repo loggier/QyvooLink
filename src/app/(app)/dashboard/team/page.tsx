@@ -22,6 +22,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { sendInvitationEmail } from '@/lib/email';
 
 export interface TeamMember {
   uid: string;
@@ -90,6 +91,14 @@ export default function TeamPage() {
   }, [fetchTeamMembers]);
 
   const openRoleDialog = (member: TeamMember) => {
+    if (member.role === 'owner') {
+        toast({
+            variant: 'default',
+            title: 'Acción no permitida',
+            description: 'El rol del propietario de la organización no se puede cambiar.',
+        });
+        return;
+    }
     setMemberToEdit(member);
     setSelectedRole(member.role);
     setIsRoleDialogOpen(true);
@@ -145,6 +154,7 @@ export default function TeamPage() {
           title: 'Usuario existente',
           description: `${inviteEmail.trim()} ya es miembro de esta organización.`,
         });
+        setIsInviting(false);
         return;
       }
       
@@ -159,19 +169,28 @@ export default function TeamPage() {
           title: 'Invitación pendiente',
           description: `Ya existe una invitación pendiente para este correo electrónico.`,
         });
+        setIsInviting(false);
         return;
       }
       
       // 3. Create a new invitation document
+      const organizationName = user.company || `${user.fullName}'s Team`;
       await addDoc(invitationsRef, {
         organizationId: user.organizationId,
-        organizationName: user.company || `${user.fullName}'s Team`,
+        organizationName: organizationName,
         inviterId: user.uid,
         inviterName: user.fullName || user.email,
         inviteeEmail: inviteEmail.trim(),
         role: inviteRole,
         status: 'pending',
         createdAt: serverTimestamp(),
+      });
+      
+      // 4. Send the invitation email
+      await sendInvitationEmail({
+        inviteeEmail: inviteEmail.trim(),
+        organizationName: organizationName,
+        inviterName: user.fullName || user.email || 'Un miembro del equipo',
       });
 
       toast({
@@ -201,9 +220,11 @@ export default function TeamPage() {
           </h2>
           <p className="text-muted-foreground">Gestiona los miembros de tu organización y sus roles.</p>
         </div>
-        <Button onClick={() => setIsInviteDialogOpen(true)} className="mt-4 sm:mt-0">
-          <UserPlus className="mr-2 h-4 w-4" /> Invitar Miembro
-        </Button>
+        {(user?.role === 'owner' || user?.role === 'admin') && (
+           <Button onClick={() => setIsInviteDialogOpen(true)} className="mt-4 sm:mt-0">
+             <UserPlus className="mr-2 h-4 w-4" /> Invitar Miembro
+           </Button>
+        )}
       </div>
 
       <Card>
@@ -233,12 +254,18 @@ export default function TeamPage() {
                     <TableCell>{member.email}</TableCell>
                     <TableCell>{getRoleBadge(member.role)}</TableCell>
                     <TableCell className="text-right">
-                      {(user?.role === 'owner' && member.uid !== user.uid) && (
+                      {user?.role === 'owner' && (
                         <Button variant="outline" size="sm" onClick={() => openRoleDialog(member)}>
                           <Edit className="h-4 w-4 mr-2" />
-                          Gestionar
+                          Gestionar Rol
                         </Button>
                       )}
+                       {user?.role === 'admin' && member.role !== 'owner' && (
+                         <Button variant="outline" size="sm" onClick={() => openRoleDialog(member)}>
+                          <Edit className="h-4 w-4 mr-2" />
+                          Gestionar Rol
+                        </Button>
+                       )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -264,8 +291,8 @@ export default function TeamPage() {
                     <SelectValue placeholder="Seleccionar un rol" />
                 </SelectTrigger>
                 <SelectContent>
-                    <SelectItem value="admin">Admin (Acceso total)</SelectItem>
-                    <SelectItem value="agent">Agente (Acceso limitado)</SelectItem>
+                    <SelectItem value="admin">Admin (Acceso a configuración y reportes)</SelectItem>
+                    <SelectItem value="agent">Agente (Acceso limitado a chats y contactos)</SelectItem>
                 </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
@@ -311,7 +338,7 @@ export default function TeamPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="agent">Agente (Acceso limitado a chats y contactos)</SelectItem>
-                  <SelectItem value="admin">Admin (Acceso total)</SelectItem>
+                  <SelectItem value="admin">Admin (Acceso a configuración y reportes)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
