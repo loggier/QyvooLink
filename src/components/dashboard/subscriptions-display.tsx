@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
@@ -34,7 +35,7 @@ interface UserSubscription {
     status: string;
     planId: string;
     priceId: string;
-    current_period_end: Date; // Changed to Date object
+    current_period_end: Date | null;
     cancel_at_period_end: boolean;
 }
 
@@ -91,25 +92,15 @@ export default function SubscriptionManager() {
       if (!snapshot.empty) {
         const docData = snapshot.docs[0].data();
 
-        // Safely convert Firestore timestamp to JS Date
-        let endDate: Date;
         const firestoreTimestamp = docData.current_period_end;
-        if (firestoreTimestamp && typeof firestoreTimestamp.toDate === 'function') {
-            endDate = firestoreTimestamp.toDate();
-        } else if (firestoreTimestamp && firestoreTimestamp.seconds) {
-            endDate = new Date(firestoreTimestamp.seconds * 1000);
-        } else {
-            // Fallback for invalid data, though it shouldn't happen with correct webhook setup
-            endDate = new Date(0); 
-        }
-
+        
         const subData: UserSubscription = {
             id: docData.id,
             status: docData.status,
             planId: docData.planId,
             priceId: docData.priceId,
             cancel_at_period_end: docData.cancel_at_period_end,
-            current_period_end: endDate,
+            current_period_end: firestoreTimestamp?.toDate() ?? null,
         };
         setSubscription(subData);
       } else {
@@ -207,16 +198,20 @@ export default function SubscriptionManager() {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <div className="space-y-1">
-                    <p className="text-sm">
-                        {subscription.status === 'trialing' && 'Tu período de prueba termina y tu plan se renovará el '}
-                        {subscription.status === 'active' && 'Tu plan se renovará el '}
-                        <span className="font-semibold">{format(subscription.current_period_end, "dd 'de' MMMM 'de' yyyy", { locale: es })}</span>.
-                    </p>
-                     <p className="text-xs text-muted-foreground">
-                        (Renovación en {formatDistanceToNow(subscription.current_period_end, { locale: es })})
-                    </p>
-                </div>
+                {subscription.current_period_end ? (
+                    <div className="space-y-1">
+                        <p className="text-sm">
+                            {subscription.status === 'trialing' && 'Tu período de prueba termina y tu plan se renovará el '}
+                            {subscription.status === 'active' && 'Tu plan se renovará el '}
+                            <span className="font-semibold">{format(subscription.current_period_end, "dd 'de' MMMM 'de' yyyy", { locale: es })}</span>.
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                            (Renovación en {formatDistanceToNow(subscription.current_period_end, { locale: es })})
+                        </p>
+                    </div>
+                ) : (
+                    <p className="text-sm font-semibold">Fecha de renovación no disponible.</p>
+                )}
                 {subscription.cancel_at_period_end && (
                     <Badge variant="destructive" className="mt-2 block w-fit">Cancelación programada.</Badge>
                 )}

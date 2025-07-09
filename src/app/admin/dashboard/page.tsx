@@ -26,7 +26,7 @@ import { differenceInDays } from 'date-fns';
 interface SubscriptionDetails {
   planName: string;
   status: 'active' | 'trialing' | 'canceled' | string;
-  renewsOn: Date;
+  renewsOn: Date | null;
   isTrial: boolean;
   trialEndsInDays?: number;
   willCancel: boolean;
@@ -128,9 +128,9 @@ export default function AdminDashboardPage() {
             const sub = userSubscriptionsSnapshot.docs[0].data();
             const plan = plansMap.get(sub.planId);
             if (plan) {
-                const renewsOn = sub.current_period_end.toDate();
+                const renewsOn = sub.current_period_end?.toDate() ?? null;
                 let trialEndsInDays;
-                if (sub.status === 'trialing') {
+                if (sub.status === 'trialing' && renewsOn) {
                     trialEndsInDays = differenceInDays(renewsOn, new Date());
                 }
                 subscriptionData = {
@@ -267,7 +267,7 @@ export default function AdminDashboardPage() {
     }
   };
   
-  const formatDate = (date?: Date | Timestamp) => {
+  const formatDate = (date?: Date | Timestamp | null) => {
     if (!date) return 'N/A';
     const dateObj = date instanceof Timestamp ? date.toDate() : date;
     return dateObj.toLocaleDateString('es-ES', {
