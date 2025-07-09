@@ -31,17 +31,18 @@ interface NavItem {
   shortLabel: string;
   icon: React.ElementType;
   adminOnly?: boolean;
+  restrictedTo?: ('owner' | 'admin')[];
 }
 
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Panel', shortLabel: 'Panel', icon: Home },
   { href: '/dashboard/chat', label: 'Chat', shortLabel: 'Chat', icon: MessageSquare },
-  { href: '/dashboard/bots', label: 'Mis Bots', shortLabel: 'Bots', icon: Bot },
+  { href: '/dashboard/bots', label: 'Mis Bots', shortLabel: 'Bots', icon: Bot, restrictedTo: ['owner', 'admin'] },
   { href: '/dashboard/contacts', label: 'Contactos', shortLabel: 'Contactos', icon: Contact },
-  { href: '/dashboard/team', label: 'Equipo', shortLabel: 'Equipo', icon: Users2 },
+  { href: '/dashboard/team', label: 'Equipo', shortLabel: 'Equipo', icon: Users2, restrictedTo: ['owner', 'admin'] },
   { href: '/dashboard/quick-replies', label: 'Respuestas', shortLabel: 'Respuestas', icon: Zap },
-  { href: '/dashboard/configuration', label: 'Configuración', shortLabel: 'Config', icon: Settings },
-  { href: '/dashboard/reports', label: 'Reportes', shortLabel: 'Reportes', icon: BarChart2 },
+  { href: '/dashboard/configuration', label: 'Configuración', shortLabel: 'Config', icon: Settings, restrictedTo: ['owner', 'admin'] },
+  { href: '/dashboard/reports', label: 'Reportes', shortLabel: 'Reportes', icon: BarChart2, restrictedTo: ['owner', 'admin'] },
   { href: '/admin/dashboard', label: 'Admin Panel', shortLabel: 'Admin', icon: Shield, adminOnly: true },
   { href: '/admin/subscriptions', label: 'Planes', shortLabel: 'Planes', icon: CreditCard, adminOnly: true },
 ];
@@ -67,9 +68,20 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   }, [user, pathname]);
 
-  const isAdminOrOwner = user?.role === 'admin' || user?.role === 'owner';
-  const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdminOrOwner);
-  const homeUrl = isAdminOrOwner ? '/admin/dashboard' : '/dashboard';
+  const userRole = user?.role;
+  const visibleNavItems = navItems.filter(item => {
+    // Hide global admin links from anyone who isn't a global 'admin'
+    if (item.adminOnly && userRole !== 'admin') {
+      return false;
+    }
+    // Hide org-restricted links from users not in the allowed roles (e.g., 'agent')
+    if (item.restrictedTo && !item.restrictedTo.includes(userRole as 'owner' | 'admin')) {
+      return false;
+    }
+    return true;
+  });
+
+  const homeUrl = userRole === 'admin' ? '/admin/dashboard' : '/dashboard';
 
   const NavLink = ({ item, isMobile }: { item: NavItem, isMobile?: boolean }) => {
     const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));

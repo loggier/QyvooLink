@@ -23,22 +23,33 @@ export default function AuthenticatedAppLayout({ children }: { children: ReactNo
       return;
     }
     
-    // El admin siempre tiene acceso a todo
-    if (user.role === 'admin') {
-      return;
+    // --- Subscription check (for non-admins) ---
+    if (user.role !== 'admin') {
+      const hasActiveSubscription = user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing';
+      const isVip = user.isVip === true;
+      const isAllowed = hasActiveSubscription || isVip;
+      
+      const allowedPathsWithoutSub = ['/subscribe', '/dashboard/profile'];
+
+      if (!isAllowed && !allowedPathsWithoutSub.some(p => pathname.startsWith(p))) {
+        router.replace('/subscribe');
+        return; 
+      }
     }
 
-    // Comprobar si tiene suscripción activa O si tiene el modo VIP activado
-    const hasActiveSubscription = user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing';
-    const isVip = user.isVip === true;
-    const isAllowed = hasActiveSubscription || isVip;
-    
-    // Lista de rutas permitidas sin acceso completo
-    const allowedPaths = ['/subscribe', '/profile', '/dashboard/configuration'];
+    // --- Role-based access control (for agents) ---
+    if (user.role === 'agent') {
+      const agentRestrictedPaths = [
+        '/dashboard/bots',
+        '/dashboard/configuration',
+        '/dashboard/reports',
+        '/dashboard/team',
+      ];
 
-    // Si no tiene acceso y no está en una de las páginas permitidas, redirigir a /subscribe
-    if (!isAllowed && !allowedPaths.some(p => pathname.startsWith(p))) {
-      router.replace('/subscribe');
+      if (agentRestrictedPaths.some(p => pathname.startsWith(p))) {
+        router.replace('/dashboard');
+        return;
+      }
     }
 
   }, [user, loading, router, pathname]);
@@ -51,19 +62,23 @@ export default function AuthenticatedAppLayout({ children }: { children: ReactNo
     );
   }
 
-  // Prevenir renderizado del layout para usuarios no permitidos que no estén en páginas de escape
-  const hasActiveSubscription = user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing';
-  const isVip = user.isVip === true;
-  const isAllowed = user.role === 'admin' || hasActiveSubscription || isVip;
-  
-  if (!isAllowed && !['/subscribe', '/profile', '/dashboard/configuration'].some(p => pathname.startsWith(p))) {
+  // Prevent render flicker while redirecting
+  if (user.role === 'agent') {
+    const agentRestrictedPaths = [
+      '/dashboard/bots',
+      '/dashboard/configuration',
+      '/dashboard/reports',
+      '/dashboard/team',
+    ];
+    if (agentRestrictedPaths.some(p => pathname.startsWith(p))) {
       return (
-        <div className="flex min-h-screen items-center justify-center bg-background">
+         <div className="flex min-h-screen items-center justify-center bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            <p className="ml-2">Redirigiendo a la página de suscripción...</p>
         </div>
-      );
+      )
+    }
   }
+
 
   return <AppShell>{children}</AppShell>;
 }
