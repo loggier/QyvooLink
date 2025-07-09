@@ -37,7 +37,7 @@ const onboardingSteps = [
     icon: Bot,
     title: 'Paso 2: Configura tu Asistente Virtual',
     description: '¡Genial! Ahora, dale una personalidad a tu bot. Define su rol, sus reglas y el catálogo de servicios que ofrecerá a tus clientes.',
-    ctaLink: '/dashboard/bot-config',
+    ctaLink: '/dashboard/bots',
     ctaText: 'Configurar mi Bot',
   },
   {
