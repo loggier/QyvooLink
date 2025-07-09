@@ -67,8 +67,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   }, [user, pathname]);
 
-  const visibleNavItems = navItems.filter(item => !item.adminOnly || user?.role === 'admin');
-  const homeUrl = user?.role === 'admin' ? '/admin/dashboard' : '/dashboard';
+  const isAdminOrOwner = user?.role === 'admin' || user?.role === 'owner';
+  const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdminOrOwner);
+  const homeUrl = isAdminOrOwner ? '/admin/dashboard' : '/dashboard';
 
   const NavLink = ({ item, isMobile }: { item: NavItem, isMobile?: boolean }) => {
     const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));

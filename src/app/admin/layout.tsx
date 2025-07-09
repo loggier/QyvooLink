@@ -13,12 +13,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && (!user || user.role !== 'admin')) {
-      router.replace('/dashboard'); // Redirect non-admins
+    if (!loading) {
+      const isAllowed = user?.role === 'admin' || user?.role === 'owner';
+      if (!user || !isAllowed) {
+        router.replace('/dashboard'); // Redirect non-admins/owners
+      }
     }
   }, [user, loading, router]);
 
-  if (loading || !user || user.role !== 'admin') {
+  const isAllowed = user?.role === 'admin' || user?.role === 'owner';
+  if (loading || !user || !isAllowed) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
