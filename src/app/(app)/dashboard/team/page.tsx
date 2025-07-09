@@ -4,11 +4,11 @@
 import { useState, useEffect, useCallback, type FormEvent } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, addDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Users2, UserPlus, Shield, UserCog, Edit } from 'lucide-react';
+import { Loader2, Users2, UserPlus, Shield, UserCog, Edit, Trash2, MailX } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -19,16 +19,37 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { sendInvitationEmail } from '@/lib/email';
+import { Switch } from '@/components/ui/switch';
+import { formatDistanceToNow } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 export interface TeamMember {
   uid: string;
   fullName?: string;
   email?: string;
   role: 'owner' | 'admin' | 'agent';
+  isActive: boolean;
+}
+
+interface Invitation {
+    id: string;
+    inviteeEmail: string;
+    role: 'admin' | 'agent';
+    createdAt: any;
 }
 
 export default function TeamPage() {
@@ -36,21 +57,24 @@ export default function TeamPage() {
   const { toast } = useToast();
 
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState<Record<string, boolean>>({});
 
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
   const [memberToEdit, setMemberToEdit] = useState<TeamMember | null>(null);
   const [selectedRole, setSelectedRole] = useState<TeamMember['role']>('agent');
-  const [isSavingRole, setIsSavingRole] = useState(false);
+  
+  const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false);
+  const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null);
 
   // State for invitations
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'agent'>('agent');
-  const [isInviting, setIsInviting] = useState(false);
+  
 
-
-  const fetchTeamMembers = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     if (!user || !user.organizationId) {
       setIsLoading(false);
       return;
@@ -58,18 +82,30 @@ export default function TeamPage() {
 
     setIsLoading(true);
     try {
-      const q = query(collection(db, 'users'), where('organizationId', '==', user.organizationId));
-      const querySnapshot = await getDocs(q);
+      const usersQuery = query(collection(db, 'users'), where('organizationId', '==', user.organizationId));
+      const invitationsQuery = query(
+          collection(db, 'invitations'), 
+          where('organizationId', '==', user.organizationId),
+          where('status', '==', 'pending')
+      );
+      
+      const [usersSnapshot, invitationsSnapshot] = await Promise.all([
+          getDocs(usersQuery),
+          getDocs(invitationsQuery)
+      ]);
+
       const fetchedMembers: TeamMember[] = [];
-      querySnapshot.forEach((doc) => {
+      usersSnapshot.forEach((doc) => {
         const data = doc.data();
         fetchedMembers.push({
           uid: doc.id,
           fullName: data.fullName,
           email: data.email,
           role: data.role || 'agent',
+          isActive: data.isActive ?? true,
         });
       });
+      
       fetchedMembers.sort((a, b) => {
           if (a.role === 'owner') return -1;
           if (b.role === 'owner') return 1;
@@ -78,17 +114,30 @@ export default function TeamPage() {
           return (a.fullName || '').localeCompare(b.fullName || '');
       });
       setMembers(fetchedMembers);
+
+      const fetchedInvitations: Invitation[] = [];
+      invitationsSnapshot.forEach((doc) => {
+          const data = doc.data();
+          fetchedInvitations.push({
+              id: doc.id,
+              inviteeEmail: data.inviteeEmail,
+              role: data.role,
+              createdAt: data.createdAt?.toDate(),
+          });
+      });
+      setInvitations(fetchedInvitations);
+
     } catch (error) {
-      console.error("Error fetching team members:", error);
-      toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los miembros del equipo.' });
+      console.error("Error fetching team data:", error);
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los datos del equipo.' });
     } finally {
       setIsLoading(false);
     }
   }, [user, toast]);
 
   useEffect(() => {
-    fetchTeamMembers();
-  }, [fetchTeamMembers]);
+    fetchData();
+  }, [fetchData]);
 
   const openRoleDialog = (member: TeamMember) => {
     if (member.role === 'owner') {
@@ -106,33 +155,70 @@ export default function TeamPage() {
   
   const handleUpdateRole = async () => {
       if (!memberToEdit) return;
-      setIsSavingRole(true);
+      setIsProcessing({ [memberToEdit.uid]: true });
       try {
         const userDocRef = doc(db, 'users', memberToEdit.uid);
         await updateDoc(userDocRef, { role: selectedRole });
         toast({ title: "Rol Actualizado", description: `El rol de ${memberToEdit.fullName} ahora es ${selectedRole}.` });
         setIsRoleDialogOpen(false);
-        await fetchTeamMembers(); // Refresh the list
+        await fetchData(); // Refresh the list
       } catch (error) {
         console.error("Error updating role:", error);
         toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar el rol del miembro.' });
       } finally {
-        setIsSavingRole(false);
+        setIsProcessing({});
       }
   };
+
+  const handleToggleActiveStatus = async (member: TeamMember, newStatus: boolean) => {
+    if (member.role === 'owner') {
+        toast({ variant: 'default', title: 'Acción no permitida', description: 'No puedes desactivar al propietario de la organización.' });
+        return;
+    }
+    setIsProcessing({ [member.uid]: true });
+    try {
+        const userDocRef = doc(db, 'users', member.uid);
+        await updateDoc(userDocRef, { isActive: newStatus });
+        toast({ title: "Estado Actualizado", description: `${member.fullName} ha sido ${newStatus ? 'activado' : 'desactivado'}.`});
+        await fetchData();
+    } catch (error) {
+        console.error("Error toggling active status:", error);
+        toast({ variant: 'destructive', title: 'Error', description: 'No se pudo cambiar el estado del miembro.' });
+    } finally {
+        setIsProcessing({});
+    }
+  };
   
-  const getRoleBadge = (role: TeamMember['role']) => {
-      switch(role) {
-          case 'owner':
-              return <Badge className="bg-amber-500 text-white hover:bg-amber-600"><Shield className="h-3 w-3 mr-1"/>Propietario</Badge>;
-          case 'admin':
-              return <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200"><Shield className="h-3 w-3 mr-1"/>Admin</Badge>;
-          case 'agent':
-              return <Badge variant="outline"><UserCog className="h-3 w-3 mr-1"/>Agente</Badge>;
-          default:
-              return <Badge variant="outline">{role}</Badge>
-      }
+  const handleRemoveMember = (member: TeamMember) => {
+     if (member.role === 'owner') {
+        toast({ variant: 'default', title: 'Acción no permitida', description: 'No puedes eliminar al propietario de la organización.' });
+        return;
+    }
+    setMemberToRemove(member);
+    setIsRemoveDialogOpen(true);
   }
+
+  const confirmRemoveMember = async () => {
+    if (!memberToRemove) return;
+    setIsProcessing({ [memberToRemove.uid]: true });
+    try {
+        const userDocRef = doc(db, 'users', memberToRemove.uid);
+        // Soft delete: remove from org and deactivate, but keep user record for history
+        await updateDoc(userDocRef, {
+            isActive: false,
+            organizationId: null,
+            role: null,
+        });
+        toast({ title: "Miembro Eliminado", description: `${memberToRemove.fullName} ha sido eliminado de la organización.`});
+        setIsRemoveDialogOpen(false);
+        await fetchData();
+    } catch (error) {
+        console.error("Error removing member:", error);
+        toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar al miembro.' });
+    } finally {
+        setIsProcessing({});
+    }
+  };
 
   const handleInviteSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -141,7 +227,7 @@ export default function TeamPage() {
       return;
     }
     
-    setIsInviting(true);
+    setIsProcessing({ invite: true });
     try {
       // 1. Check if user with this email is already in the organization
       const usersRef = collection(db, 'users');
@@ -154,7 +240,7 @@ export default function TeamPage() {
           title: 'Usuario existente',
           description: `${inviteEmail.trim()} ya es miembro de esta organización.`,
         });
-        setIsInviting(false);
+        setIsProcessing({});
         return;
       }
       
@@ -169,7 +255,7 @@ export default function TeamPage() {
           title: 'Invitación pendiente',
           description: `Ya existe una invitación pendiente para este correo electrónico.`,
         });
-        setIsInviting(false);
+        setIsProcessing({});
         return;
       }
       
@@ -201,14 +287,42 @@ export default function TeamPage() {
       setIsInviteDialogOpen(false);
       setInviteEmail('');
       setInviteRole('agent');
+      await fetchData();
 
     } catch (error) {
       console.error("Error sending invitation:", error);
       toast({ variant: 'destructive', title: 'Error', description: 'No se pudo enviar la invitación.' });
     } finally {
-      setIsInviting(false);
+      setIsProcessing({});
     }
   };
+
+  const handleCancelInvitation = async (invitationId: string) => {
+    setIsProcessing({ [invitationId]: true });
+    try {
+        await deleteDoc(doc(db, 'invitations', invitationId));
+        toast({ title: 'Invitación Cancelada', description: 'La invitación ha sido eliminada.'});
+        await fetchData();
+    } catch(error) {
+        console.error("Error cancelling invitation:", error);
+        toast({ variant: 'destructive', title: 'Error', description: 'No se pudo cancelar la invitación.' });
+    } finally {
+        setIsProcessing({});
+    }
+  };
+  
+  const getRoleBadge = (role: TeamMember['role']) => {
+      switch(role) {
+          case 'owner':
+              return <Badge className="bg-amber-500 text-white hover:bg-amber-600"><Shield className="h-3 w-3 mr-1"/>Propietario</Badge>;
+          case 'admin':
+              return <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200"><Shield className="h-3 w-3 mr-1"/>Admin</Badge>;
+          case 'agent':
+              return <Badge variant="outline"><UserCog className="h-3 w-3 mr-1"/>Agente</Badge>;
+          default:
+              return <Badge variant="outline">{role}</Badge>
+      }
+  }
 
   return (
     <div className="space-y-6">
@@ -229,7 +343,7 @@ export default function TeamPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Listado de Miembros</CardTitle>
+          <CardTitle>Listado de Miembros Activos</CardTitle>
           <CardDescription>Estos son los usuarios que tienen acceso a este espacio de trabajo.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -242,30 +356,43 @@ export default function TeamPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nombre Completo</TableHead>
-                  <TableHead>Correo Electrónico</TableHead>
                   <TableHead>Rol</TableHead>
+                  <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {members.map((member) => (
-                  <TableRow key={member.uid}>
-                    <TableCell className="font-medium">{member.fullName}</TableCell>
-                    <TableCell>{member.email}</TableCell>
+                  <TableRow key={member.uid} className={!member.isActive ? 'bg-muted/50' : ''}>
+                    <TableCell>
+                      <div className="font-medium">{member.fullName}</div>
+                      <div className="text-sm text-muted-foreground">{member.email}</div>
+                    </TableCell>
                     <TableCell>{getRoleBadge(member.role)}</TableCell>
-                    <TableCell className="text-right">
-                      {user?.role === 'owner' && (
-                        <Button variant="outline" size="sm" onClick={() => openRoleDialog(member)}>
-                          <Edit className="h-4 w-4 mr-2" />
-                          Gestionar Rol
-                        </Button>
+                    <TableCell>
+                        <div className="flex items-center space-x-2">
+                         <Switch
+                           checked={member.isActive}
+                           onCheckedChange={(checked) => handleToggleActiveStatus(member, checked)}
+                           disabled={isProcessing[member.uid] || member.role === 'owner'}
+                           aria-label={`Activar o desactivar cuenta de ${member.fullName}`}
+                         />
+                         <Label htmlFor={`switch-${member.uid}`} className="text-xs">{member.isActive ? 'Activo' : 'Inactivo'}</Label>
+                        </div>
+                    </TableCell>
+                    <TableCell className="text-right space-x-2">
+                      {(user?.role === 'owner' || (user?.role === 'admin' && member.role !== 'owner')) && (
+                        <>
+                          <Button variant="outline" size="sm" onClick={() => openRoleDialog(member)} disabled={isProcessing[member.uid]}>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Rol
+                          </Button>
+                           <Button variant="destructive" size="sm" onClick={() => handleRemoveMember(member)} disabled={isProcessing[member.uid] || member.role === 'owner'}>
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Eliminar
+                          </Button>
+                        </>
                       )}
-                       {user?.role === 'admin' && member.role !== 'owner' && (
-                         <Button variant="outline" size="sm" onClick={() => openRoleDialog(member)}>
-                          <Edit className="h-4 w-4 mr-2" />
-                          Gestionar Rol
-                        </Button>
-                       )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -275,6 +402,45 @@ export default function TeamPage() {
         </CardContent>
       </Card>
       
+      {/* Pending Invitations Table */}
+      {(user?.role === 'owner' || user?.role === 'admin') && invitations.length > 0 && (
+          <Card>
+              <CardHeader>
+                  <CardTitle>Invitaciones Pendientes</CardTitle>
+                  <CardDescription>Estas invitaciones han sido enviadas pero aún no han sido aceptadas.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                   <Table>
+                      <TableHeader>
+                          <TableRow>
+                              <TableHead>Correo Electrónico</TableHead>
+                              <TableHead>Rol Asignado</TableHead>
+                              <TableHead>Enviada</TableHead>
+                              <TableHead className="text-right">Acciones</TableHead>
+                          </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                          {invitations.map((inv) => (
+                              <TableRow key={inv.id}>
+                                  <TableCell className="font-medium">{inv.inviteeEmail}</TableCell>
+                                  <TableCell>{getRoleBadge(inv.role)}</TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">
+                                      {inv.createdAt ? formatDistanceToNow(inv.createdAt, { addSuffix: true, locale: es }) : 'Recientemente'}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                      <Button variant="ghost" size="sm" onClick={() => handleCancelInvitation(inv.id)} disabled={isProcessing[inv.id]}>
+                                          <MailX className="h-4 w-4 mr-2 text-destructive"/>
+                                          Cancelar
+                                      </Button>
+                                  </TableCell>
+                              </TableRow>
+                          ))}
+                      </TableBody>
+                  </Table>
+              </CardContent>
+          </Card>
+      )}
+
       {/* Role Management Dialog */}
       <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>
         <DialogContent>
@@ -301,13 +467,34 @@ export default function TeamPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsRoleDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleUpdateRole} disabled={isSavingRole}>
-                {isSavingRole && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button onClick={handleUpdateRole} disabled={isProcessing[memberToEdit?.uid || '']}>
+                {isProcessing[memberToEdit?.uid || ''] && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Guardar Cambios
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Remove Member Confirmation Dialog */}
+      <AlertDialog open={isRemoveDialogOpen} onOpenChange={setIsRemoveDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Estás seguro de eliminar a este miembro?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará a <strong>{memberToRemove?.fullName}</strong> de la organización. No podrán acceder a este espacio de trabajo. Esta acción es irreversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setMemberToRemove(null)} disabled={isProcessing[memberToRemove?.uid || '']}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRemoveMember} className="bg-destructive hover:bg-destructive/90" disabled={isProcessing[memberToRemove?.uid || '']}>
+               {isProcessing[memberToRemove?.uid || ''] ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+               Eliminar Miembro
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Invitation Dialog */}
       <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
@@ -343,18 +530,17 @@ export default function TeamPage() {
               </Select>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsInviteDialogOpen(false)} disabled={isInviting}>
+              <Button type="button" variant="outline" onClick={() => setIsInviteDialogOpen(false)} disabled={isProcessing.invite}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isInviting}>
-                {isInviting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button type="submit" disabled={isProcessing.invite}>
+                {isProcessing.invite && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Enviar Invitación
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
-
     </div>
   );
 }
