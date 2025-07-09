@@ -30,6 +30,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import ContactDetailsPanel, { type ContactDetails } from '@/components/dashboard/chat/contact-details-panel'; 
 import { format, isToday, isYesterday, parseISO, differenceInCalendarDays } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface ChatMessageDocument {
   chat_id: string;
@@ -162,6 +163,8 @@ export default function ChatPage() {
 
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [isLoadingQuickReplies, setIsLoadingQuickReplies] = useState(false);
+  
+  const [statusFilter, setStatusFilter] = useState<'all' | 'Abierto' | 'Pendiente' | 'Cerrado'>('all');
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -644,6 +647,11 @@ export default function ChatPage() {
     }
   }
 
+  const filteredConversations = conversations.filter(convo => {
+    if (statusFilter === 'all') return true;
+    return convo.status === statusFilter;
+  });
+
   return (
     <div className="flex h-[calc(100vh-theme(spacing.16)-theme(spacing.12))] border bg-card text-card-foreground shadow-sm rounded-lg overflow-hidden">
       {/* Conversation List - Always visible on desktop, conditionally on mobile */}
@@ -653,7 +661,15 @@ export default function ChatPage() {
           border-r flex flex-col
         `}>
           <div className="p-4 border-b">
-            <h2 className="text-xl font-semibold">Conversaciones Activas</h2>
+            <h2 className="text-xl font-semibold">Conversaciones</h2>
+             <Tabs defaultValue="all" onValueChange={(value) => setStatusFilter(value as any)} className="mt-2">
+              <TabsList className="grid w-full grid-cols-4 h-9">
+                <TabsTrigger value="all" className="text-xs">Todos</TabsTrigger>
+                <TabsTrigger value="Abierto" className="text-xs">Abiertos</TabsTrigger>
+                <TabsTrigger value="Pendiente" className="text-xs">Pend.</TabsTrigger>
+                <TabsTrigger value="Cerrado" className="text-xs">Cerrados</TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
           <ScrollArea className="flex-grow">
             {isLoadingChats ? (
@@ -661,10 +677,10 @@ export default function ChatPage() {
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <span className="ml-3 text-muted-foreground">Cargando chats...</span>
               </div>
-            ) : conversations.length === 0 && !error ? (
+            ) : filteredConversations.length === 0 && !error ? (
               <div className="p-6 text-center text-muted-foreground">
                 <MessageCircle className="mx-auto h-12 w-12 text-gray-400 mb-2" />
-                No hay conversaciones activas.
+                No hay conversaciones que coincidan con el filtro.
               </div>
             ) : error && !isLoadingChats ? ( 
               <div className="p-6 text-center text-destructive">
@@ -673,7 +689,7 @@ export default function ChatPage() {
               </div>
             ) : (
               <ul>
-                {conversations.map((convo) => (
+                {filteredConversations.map((convo) => (
                   <li key={convo.chat_id}>
                     <Link
                       href={`/dashboard/chat?chatId=${convo.chat_id}`}
