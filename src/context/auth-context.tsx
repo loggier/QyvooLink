@@ -156,19 +156,62 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!querySnapshot.empty) {
         throw new Error("Este nombre de usuario ya está en uso. Por favor, elige otro.");
       }
+      
+      // Check for pending invitations
+      const invitationsRef = collection(db, 'invitations');
+      const invQuery = query(invitationsRef, where('inviteeEmail', '==', data.email.trim()), where('status', '==', 'pending'));
+      const invSnapshot = await getDocs(invQuery);
 
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const firebaseUser = userCredential.user;
-      if (firebaseUser) {
 
-        // Create the organization first
+      if (!firebaseUser) {
+        throw new Error("No se pudo crear el usuario en Firebase Authentication.");
+      }
+
+      if (!invSnapshot.empty) {
+        // --- User has a pending invitation ---
+        const invitationDoc = invSnapshot.docs[0]; // Assume one pending invitation per email
+        const invitationData = invitationDoc.data();
+        
+        const userProfileData = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          fullName: data.fullName,
+          company: invitationData.organizationName, // Use the organization's name from invitation
+          phone: data.phone,
+          username: data.username,
+          country: '', 
+          city: '',
+          sector: '',
+          employeeCount: '',
+          role: invitationData.role, // Set role from invitation
+          organizationId: invitationData.organizationId, // Set organization from invitation
+          createdAt: serverTimestamp(),
+          isActive: true,
+          isVip: false,
+          onboardingCompleted: true, // They are joining an existing team, skip onboarding
+        };
+        await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
+
+        // Update invitation status to 'accepted'
+        await updateDoc(doc(db, 'invitations', invitationDoc.id), {
+            status: 'accepted',
+            acceptedAt: serverTimestamp(),
+            acceptedByUid: firebaseUser.uid,
+        });
+
+        router.push('/dashboard'); // Go straight to dashboard
+      } else {
+        // --- No invitation found, standard registration ---
+        // Create a new organization
         const orgRef = await addDoc(collection(db, 'organizations'), {
             name: data.company,
             ownerId: firebaseUser.uid,
             createdAt: serverTimestamp()
         });
         
-        // Then create the user with the organizationId
+        // Create the user with the new organizationId
         const userProfileData = {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
@@ -189,9 +232,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         };
         await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
         
-        router.push('/subscribe'); 
-        return userCredential;
+        router.push('/subscribe'); // New user needs to subscribe
       }
+
+      return userCredential;
+
     } catch (error: any) {
       console.error("Error de registro:", error);
       let errorMessage = error.message || "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.";
