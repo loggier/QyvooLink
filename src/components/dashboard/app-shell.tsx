@@ -22,7 +22,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { AppFooter } from '@/components/layout/footer';
 import OnboardingGuide from '@/components/dashboard/onboarding-guide';
 import {
-  Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare, Bot, Users, Zap, Shield, CreditCard, HelpCircle, PanelLeft,
+  Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare, Bot, Contact, Zap, Shield, CreditCard, HelpCircle, PanelLeft, Users2,
 } from 'lucide-react';
 
 interface NavItem {
@@ -37,7 +37,8 @@ const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Panel', shortLabel: 'Panel', icon: Home },
   { href: '/dashboard/chat', label: 'Chat', shortLabel: 'Chat', icon: MessageSquare },
   { href: '/dashboard/bots', label: 'Mis Bots', shortLabel: 'Bots', icon: Bot },
-  { href: '/dashboard/contacts', label: 'Contactos', shortLabel: 'Contactos', icon: Users },
+  { href: '/dashboard/contacts', label: 'Contactos', shortLabel: 'Contactos', icon: Contact },
+  { href: '/dashboard/team', label: 'Equipo', shortLabel: 'Equipo', icon: Users2 },
   { href: '/dashboard/quick-replies', label: 'Respuestas', shortLabel: 'Respuestas', icon: Zap },
   { href: '/dashboard/configuration', label: 'Configuración', shortLabel: 'Config', icon: Settings },
   { href: '/dashboard/reports', label: 'Reportes', shortLabel: 'Reportes', icon: BarChart2 },

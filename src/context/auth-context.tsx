@@ -15,7 +15,7 @@ import {
   reauthenticateWithCredential,
   sendPasswordResetEmail,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, Timestamp, collection, query, where, getDocs } from 'firebase/firestore'; // Import Timestamp
+import { doc, setDoc, getDoc, Timestamp, collection, query, where, getDocs, addDoc, updateDoc } from 'firebase/firestore'; // Import Timestamp
 import type { RegisterFormData } from '@/components/auth/register-form';
 import type { LoginFormData } from '@/components/auth/login-form';
 import { useRouter } from 'next/navigation';
@@ -31,7 +31,8 @@ interface UserProfile {
   city?: string;
   sector?: string;
   employeeCount?: string;
-  role?: 'admin' | 'user'; // User role
+  role?: 'owner' | 'admin' | 'agent'; // User role within the organization
+  organizationId?: string; // ID of the organization the user belongs to
   createdAt?: Timestamp; // Registration date
   isActive?: boolean; // Account status
   isVip?: boolean; // VIP access flag
@@ -61,17 +62,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
-        // Fetch all user-related data in parallel
         const userDocRef = doc(db, 'users', firebaseUser.uid);
-        const instanceDocRef = doc(db, 'instances', firebaseUser.uid);
-        const subscriptionsRef = collection(db, 'users', firebaseUser.uid, 'subscriptions');
-        const q = query(subscriptionsRef, where('status', 'in', ['trialing', 'active']));
-        
-        const [userDocSnap, instanceDocSnap, subscriptionSnap] = await Promise.all([
-            getDoc(userDocRef),
-            getDoc(instanceDocRef),
-            getDocs(q),
-        ]);
+        const userDocSnap = await getDoc(userDocRef);
         
         let dbData: any = {};
         if (userDocSnap.exists()) {
@@ -83,7 +75,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
              router.push('/login?error=account-disabled');
              return;
           }
+
+          // --- On-the-fly migration for existing users ---
+          if (!dbData.organizationId) {
+            console.log(`Migrating user ${firebaseUser.uid} to an organization...`);
+            const orgRef = await addDoc(collection(db, 'organizations'), {
+              name: dbData.company || `${dbData.fullName}'s Team`,
+              ownerId: firebaseUser.uid,
+              createdAt: serverTimestamp(),
+            });
+            await updateDoc(userDocRef, { 
+              organizationId: orgRef.id,
+              role: 'owner',
+            });
+            dbData.organizationId = orgRef.id;
+            dbData.role = 'owner';
+            console.log(`User ${firebaseUser.uid} migrated to new organization ${orgRef.id}`);
+          }
+          // --- End of migration ---
+
         }
+
+        // Parallel fetch for other data
+        const instanceDocRef = doc(db, 'instances', firebaseUser.uid);
+        const subscriptionsRef = collection(db, 'users', firebaseUser.uid, 'subscriptions');
+        const q = query(subscriptionsRef, where('status', 'in', ['trialing', 'active']));
+        
+        const [instanceDocSnap, subscriptionSnap] = await Promise.all([
+            getDoc(instanceDocRef),
+            getDocs(q),
+        ]);
 
         let instanceData: any = {};
         if (instanceDocSnap.exists()) {
@@ -106,7 +127,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           city: dbData.city,
           sector: dbData.sector,
           employeeCount: dbData.employeeCount,
-          role: dbData.role || 'user',
+          role: dbData.role || 'agent', // Default to agent if something is wrong
+          organizationId: dbData.organizationId,
           createdAt: dbData.createdAt,
           isActive: dbData.isActive ?? true,
           isVip: dbData.isVip ?? false,
@@ -128,7 +150,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const registerUser = async (data: RegisterFormData) => {
     setLoading(true);
     try {
-      // Check for unique username
       const usersRef = collection(db, 'users');
       const q = query(usersRef, where('username', '==', data.username));
       const querySnapshot = await getDocs(q);
@@ -139,6 +160,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const firebaseUser = userCredential.user;
       if (firebaseUser) {
+
+        // Create the organization first
+        const orgRef = await addDoc(collection(db, 'organizations'), {
+            name: data.company,
+            ownerId: firebaseUser.uid,
+            createdAt: serverTimestamp()
+        });
+        
+        // Then create the user with the organizationId
         const userProfileData = {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
@@ -150,16 +180,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           city: '',
           sector: '',
           employeeCount: '',
-          role: 'user', 
+          role: 'owner', // The creator is the owner
+          organizationId: orgRef.id,
           createdAt: serverTimestamp(),
           isActive: true,
           isVip: false,
-          onboardingCompleted: false, // Set onboarding to false for new users
+          onboardingCompleted: false,
         };
         await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
         
-        // onAuthStateChanged will handle the user state update.
-        // We redirect to the subscription page immediately.
         router.push('/subscribe'); 
         return userCredential;
       }
@@ -185,8 +214,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
         const firebaseUser = userCredential.user;
 
-        // The onAuthStateChanged listener will handle redirecting and setting user state.
-        // We just need to check for active status here as a pre-check.
         if (firebaseUser) {
             const userDocRef = doc(db, 'users', firebaseUser.uid);
             const userDocSnap = await getDoc(userDocRef);
@@ -195,7 +222,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 throw new Error("Tu cuenta ha sido desactivada por un administrador.");
             }
         }
-        // Redirect will be handled by onAuthStateChanged and the layout component logic
         return userCredential;
     } catch (error: any) {
       console.error("Error de inicio de sesión:", error.code, error.message);
@@ -208,7 +234,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else if (error.code === 'auth/network-request-failed') {
           errorMessage = "Error de red. Por favor, comprueba tu conexión a internet e inténtalo de nuevo.";
       }
-      // For auth/user-not-found, auth/wrong-password, and auth/invalid-credential, we use the generic message to prevent user enumeration.
       
       throw new Error(errorMessage);
     } finally {
