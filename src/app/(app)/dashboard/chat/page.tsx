@@ -743,17 +743,17 @@ export default function ChatPage() {
           <div className="p-4 border-b">
             <h2 className="text-xl font-semibold">Conversaciones</h2>
              <Tabs defaultValue="all" onValueChange={(value) => setAssignmentFilter(value as any)} className="mt-3">
-                <TabsList className="grid w-full grid-cols-2 h-9">
-                    <TabsTrigger value="all">Todos los Chats</TabsTrigger>
-                    <TabsTrigger value="mine">Asignados a Mí</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="all" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Todos los Chats</TabsTrigger>
+                    <TabsTrigger value="mine" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Asignados a Mí</TabsTrigger>
                 </TabsList>
             </Tabs>
              <Tabs defaultValue="all" onValueChange={(value) => setStatusFilter(value as any)} className="mt-2">
-              <TabsList className="grid w-full grid-cols-4 h-9">
-                <TabsTrigger value="all" className="text-xs">Todos</TabsTrigger>
-                <TabsTrigger value="Abierto" className="text-xs">Abiertos</TabsTrigger>
-                <TabsTrigger value="Pendiente" className="text-xs">Pend.</TabsTrigger>
-                <TabsTrigger value="Cerrado" className="text-xs">Cerrados</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="all" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Todos</TabsTrigger>
+                <TabsTrigger value="Abierto" className="text-xs data-[state=active]:bg-green-500 data-[state=active]:text-primary-foreground">Abiertos</TabsTrigger>
+                <TabsTrigger value="Pendiente" className="text-xs data-[state=active]:bg-yellow-500 data-[state=active]:text-secondary-foreground">Pend.</TabsTrigger>
+                <TabsTrigger value="Cerrado" className="text-xs data-[state=active]:bg-slate-500 data-[state=active]:text-primary-foreground">Cerrados</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
