@@ -270,6 +270,10 @@ export default function AdminDashboardPage() {
   const formatDate = (date?: Date | Timestamp | null) => {
     if (!date) return 'N/A';
     const dateObj = date instanceof Timestamp ? date.toDate() : date;
+    // Add a more robust check for a valid date
+    if (!dateObj || isNaN(dateObj.getTime()) || dateObj.getFullYear() < 1971) {
+        return 'N/A';
+    }
     return dateObj.toLocaleDateString('es-ES', {
       year: 'numeric',
       month: 'long',

@@ -198,7 +198,7 @@ export default function SubscriptionManager() {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                {subscription.current_period_end ? (
+                {subscription.current_period_end && subscription.current_period_end.getFullYear() > 1971 ? (
                     <div className="space-y-1">
                         <p className="text-sm">
                             {subscription.status === 'trialing' && 'Tu período de prueba termina y tu plan se renovará el '}
