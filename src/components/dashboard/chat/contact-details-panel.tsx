@@ -124,15 +124,15 @@ export default function ContactDetailsPanel({
            <div>
             <Label htmlFor="contactAssignee" className="flex items-center text-sm text-muted-foreground"><UserCog className="h-4 w-4 mr-2" />Asignado a</Label>
             <Select
-              value={currentDisplayDetails.assignedTo || ""}
-              onValueChange={onAssigneeChange}
+              value={currentDisplayDetails.assignedTo || "unassigned"}
+              onValueChange={(value) => onAssigneeChange(value === 'unassigned' ? '' : value)}
               disabled={!isEditingContact}
             >
               <SelectTrigger id="contactAssignee">
                 <SelectValue placeholder="Sin asignar" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Sin asignar</SelectItem>
+                <SelectItem value="unassigned">Sin asignar</SelectItem>
                 {teamMembers.map(member => (
                     <SelectItem key={member.uid} value={member.uid}>{member.fullName || member.email}</SelectItem>
                 ))}
