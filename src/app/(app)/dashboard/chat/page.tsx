@@ -578,22 +578,22 @@ export default function ChatPage() {
     if (!selectedChatId || !dataFetchUserId || !whatsAppInstance || !contactDetails) return;
     setIsSavingContact(true);
 
-    const { id: _docIdFromState, ...dataToPersist } = contactDetails; 
+    const docId = contactDetails.id || getContactDocId(dataFetchUserId, selectedChatId);
     
     const finalDataToPersist: ContactDetails = {
-      ...dataToPersist,
+      ...contactDetails,
       userId: dataFetchUserId, 
-      instanceId: dataToPersist.instanceId || whatsAppInstance.id, 
-      telefono: dataToPersist.telefono || formatPhoneNumber(selectedChatId), 
+      instanceId: contactDetails.instanceId || whatsAppInstance.id, 
+      telefono: contactDetails.telefono || formatPhoneNumber(selectedChatId), 
       _chatIdOriginal: selectedChatId,
-      chatbotEnabledForContact: dataToPersist.chatbotEnabledForContact ?? true,
-      estadoConversacion: dataToPersist.estadoConversacion ?? 'Abierto',
+      chatbotEnabledForContact: contactDetails.chatbotEnabledForContact ?? true,
+      estadoConversacion: contactDetails.estadoConversacion ?? 'Abierto',
     };
 
     try {
-      await setDoc(doc(db, 'contacts', finalDataToPersist.id!), finalDataToPersist, { merge: true });
+      await setDoc(doc(db, 'contacts', docId), finalDataToPersist, { merge: true });
       
-      const updatedContactState = { ...finalDataToPersist, id: finalDataToPersist.id! };
+      const updatedContactState = { ...finalDataToPersist, id: docId };
       
       const oldAssigneeId = initialContactDetails?.assignedTo;
       const newAssigneeId = finalDataToPersist.assignedTo;
@@ -1097,7 +1097,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
-    
-
-    
