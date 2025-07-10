@@ -180,6 +180,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       if (!invSnapshot.empty) {
+        // --- Invited User Flow ---
         const invitationDoc = invSnapshot.docs[0];
         const invitationData = invitationDoc.data();
         
@@ -187,7 +188,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
           fullName: data.fullName,
-          company: invitationData.organizationName,
+          company: invitationData.organizationName, // Use company name from invitation
           phone: data.phone,
           username: data.username,
           country: '', 
@@ -199,18 +200,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           createdAt: serverTimestamp(),
           isActive: true,
           isVip: false,
-          onboardingCompleted: true,
+          onboardingCompleted: true, // Invited users skip the tour
         };
         await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
 
+        // Mark the invitation as accepted
         await updateDoc(doc(db, 'invitations', invitationDoc.id), {
             status: 'accepted',
             acceptedAt: serverTimestamp(),
             acceptedByUid: firebaseUser.uid,
         });
 
+        // Redirect directly to the dashboard, skipping subscription
         router.push('/dashboard');
       } else {
+        // --- New Organization Owner Flow ---
         const orgRef = await addDoc(collection(db, 'organizations'), {
             name: data.company,
             ownerId: firebaseUser.uid,
@@ -246,6 +250,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           console.error("Failed to send welcome email:", emailError);
         }
 
+        // Redirect to subscription page for new owners
         router.push('/subscribe');
       }
 
