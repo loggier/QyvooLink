@@ -165,7 +165,7 @@ export default function ChatPage() {
   const [activeMessages, setActiveMessages] = useState<ChatMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [replyMessage, setReplyMessage] = useState("");
-  const [chatMode, setChatMode] = useState<'message' | 'note'>('message');
+  const [chatMode, setChatMode] = useState<'message' | 'internal_note'>('message');
 
   const [contactDetails, setContactDetails] = useState<ContactDetails | null>(null);
   const [initialContactDetails, setInitialContactDetails] = useState<ContactDetails | null>(null);
@@ -577,10 +577,11 @@ export default function ChatPage() {
   const handleSaveContactDetails = async () => {
     if (!selectedChatId || !dataFetchUserId || !whatsAppInstance || !contactDetails) return;
     setIsSavingContact(true);
-
-    const { id: _docIdFromState, ...dataToPersist } = contactDetails; 
     
     const docId = contactDetails.id || getContactDocId(dataFetchUserId, selectedChatId);
+
+    // Create a new object to avoid mutating state directly and remove the ID from the data payload
+    const { id: _docIdFromState, ...dataToPersist } = contactDetails; 
 
     const finalDataToPersist: ContactDetails = {
       ...dataToPersist,
@@ -882,15 +883,15 @@ export default function ChatPage() {
                         setIsEditingContact={setIsEditingContact}
                         isLoadingContact={isLoadingContact}
                         isSavingContact={isSavingContact}
+                        teamMembers={teamMembers}
                         onSave={handleSaveContactDetails}
                         onCancel={() => { setIsEditingContact(false); setContactDetails(initialContactDetails); }}
                         onInputChange={handleContactInputChange}
                         onSelectChange={handleContactSelectChange}
                         onSwitchChange={handleContactSwitchChange}
                         onStatusChange={handleContactStatusChange}
-                        formatPhoneNumber={formatPhoneNumber}
-                        teamMembers={teamMembers}
                         onAssigneeChange={handleAssigneeChange}
+                        formatPhoneNumber={formatPhoneNumber}
                       />
                     )}
                   </SheetContent>
@@ -998,7 +999,7 @@ export default function ChatPage() {
                <Tabs value={chatMode} onValueChange={(value) => setChatMode(value as any)} className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="message">Mensaje al Cliente</TabsTrigger>
-                  <TabsTrigger value="note">Nota Interna</TabsTrigger>
+                  <TabsTrigger value="internal_note">Nota Interna</TabsTrigger>
                 </TabsList>
                 <div className="mt-2">
                   {chatMode === 'message' && (
@@ -1085,20 +1086,18 @@ export default function ChatPage() {
             setIsEditingContact={setIsEditingContact}
             isLoadingContact={isLoadingContact}
             isSavingContact={isSavingContact}
+            teamMembers={teamMembers}
             onSave={handleSaveContactDetails}
             onCancel={() => { setIsEditingContact(false); setContactDetails(initialContactDetails); }}
             onInputChange={handleContactInputChange}
             onSelectChange={handleContactSelectChange}
             onSwitchChange={handleContactSwitchChange}
             onStatusChange={handleContactStatusChange}
-            formatPhoneNumber={formatPhoneNumber}
-            teamMembers={teamMembers}
             onAssigneeChange={handleAssigneeChange}
+            formatPhoneNumber={formatPhoneNumber}
           />
         </div>
       )}
     </div>
   );
 }
-
-    

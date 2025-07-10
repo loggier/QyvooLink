@@ -469,8 +469,3 @@ export default function ContactDetailPage() {
     </div>
   );
 }
-
-
-    
-
-    
