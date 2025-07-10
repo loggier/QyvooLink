@@ -580,7 +580,6 @@ export default function ChatPage() {
 
     const { id: _docIdFromState, ...dataToPersist } = contactDetails; 
     
-    // If the contact is new, the ID might not be set. Let's ensure it is.
     const docId = contactDetails.id || getContactDocId(dataFetchUserId, selectedChatId);
 
     const finalDataToPersist: ContactDetails = {
