@@ -14,13 +14,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EvolveLinkLogo } from '@/components/icons';
-import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft, ListTodo, UserCog, Filter } from 'lucide-react'; 
+import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft, ListTodo, UserCog, Filter, StickyNote } from 'lucide-react'; 
 import type { WhatsAppInstance } from '../configuration/page'; 
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input"; 
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label"; 
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input'; 
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label'; 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -48,6 +48,7 @@ interface ChatMessageDocument {
     uid: string;
     name: string;
   };
+  type?: 'message' | 'internal_note';
 }
 
 interface ChatMessage extends ChatMessageDocument {
@@ -112,339 +113,520 @@ function formatWhatsAppMessage(text: string | undefined | null): React.ReactNode
   }
   
   if (elements.length === 0 && text.length > 0) {
-      elements.push(text);
+    elements.push(text);
   }
 
   return elements;
 }
 
-const formatTimestamp = (timestampInput: FirestoreTimestamp | Date | undefined): string => {
-    if (!timestampInput) return "";
-    const date = timestampInput instanceof FirestoreTimestamp ? timestampInput.toDate() : (typeof timestampInput === 'string' ? parseISO(timestampInput) : timestampInput);
+const formatConversationTimestamp = (timestampInput: Date | string | undefined): string => {
+  if (!timestampInput) return "";
+  const date = typeof timestampInput === 'string' ? parseISO(timestampInput) : timestampInput;
+  const now = new Date();
+
+  if (isToday(date)) {
     return format(date, 'HH:mm', { locale: es });
+  }
+  if (isYesterday(date)) {
+    return "Ayer";
+  }
+  if (differenceInCalendarDays(now, date) < 7) {
+    const dayName = format(date, 'EEE', { locale: es });
+    return dayName.charAt(0).toUpperCase() + dayName.slice(1) + '.';
+  }
+  return format(date, 'dd/MM/yy', { locale: es });
 };
 
-const formatConversationTimestamp = (timestamp: Date | undefined): string => {
-    if (!timestamp) return 'No time';
-    if (isToday(timestamp)) {
-      return format(timestamp, 'HH:mm', { locale: es });
-    }
-    if (isYesterday(timestamp)) {
-      return 'Ayer';
-    }
-    if (differenceInCalendarDays(new Date(), timestamp) < 7) {
-        return format(timestamp, 'EEEE', { locale: es });
-    }
-    return format(timestamp, 'dd/MM/yy', { locale: es });
+const formatChatMessageTimestamp = (timestampInput: FirestoreTimestamp | Date | undefined): string => {
+  if (!timestampInput) return "";
+  const date = timestampInput instanceof FirestoreTimestamp ? timestampInput.toDate() : (typeof timestampInput === 'string' ? parseISO(timestampInput) : timestampInput);
+
+  if (isToday(date)) {
+    return format(date, 'HH:mm', { locale: es });
+  }
+  return format(date, 'dd/MM/yy HH:mm', { locale: es });
 };
 
-// Main Component
 export default function ChatPage() {
   const { user } = useAuth();
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
+  const router = useRouter(); 
   const isMobile = useIsMobile();
-  
+  const dataFetchUserId = user?.role === 'agent' ? user?.ownerId : user?.uid;
+
   const [whatsAppInstance, setWhatsAppInstance] = useState<WhatsAppInstance | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [filteredConversations, setFilteredConversations] = useState<ConversationSummary[]>([]);
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [isSendingMessage, setIsSendingMessage] = useState(false);
-  const [isLoadingConversations, setIsLoadingConversations] = useState(true);
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null); 
+  const [isLoadingInstance, setIsLoadingInstance] = useState(true);
+  const [isLoadingChats, setIsLoadingChats] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [activeMessages, setActiveMessages] = useState<ChatMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-  
+  const [replyMessage, setReplyMessage] = useState("");
+  const [chatMode, setChatMode] = useState<'message' | 'note'>('message');
+
   const [contactDetails, setContactDetails] = useState<ContactDetails | null>(null);
   const [initialContactDetails, setInitialContactDetails] = useState<ContactDetails | null>(null);
   const [isEditingContact, setIsEditingContact] = useState(false);
   const [isLoadingContact, setIsLoadingContact] = useState(false);
   const [isSavingContact, setIsSavingContact] = useState(false);
-  
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [isContactSheetOpen, setIsContactSheetOpen] = useState(false);
+
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
+  const [isLoadingQuickReplies, setIsLoadingQuickReplies] = useState(false);
   
-  const [filter, setFilter] = useState<'all' | 'mine' | 'unassigned'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'Abierto' | 'Pendiente' | 'Cerrado'>('all');
+  const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'mine'>('all');
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const dataFetchUserId = user?.role === 'agent' ? user?.ownerId : user?.uid;
 
+  // Mobile layout controls
+  const showConversationList = isMobile ? !selectedChatId : true;
+  const showChatArea = isMobile ? !!selectedChatId : true;
+  const showContactPanelDesktop = !isMobile && selectedChatId && contactDetails && initialContactDetails;
+
+  const formatPhoneNumber = (chat_id: string | undefined): string => {
+    if (!chat_id) return "Desconocido";
+    return chat_id.split('@')[0];
+  };
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-  
-  // Fetch WhatsApp Instance
-  const fetchWhatsAppInstance = useCallback(async () => {
-    if (!dataFetchUserId) return;
-    try {
-      const instanceDocRef = doc(db, 'instances', dataFetchUserId);
-      const instanceDocSnap = await getDoc(instanceDocRef);
-      if (instanceDocSnap.exists()) {
-        setWhatsAppInstance(instanceDocSnap.data() as WhatsAppInstance);
-      } else {
-        toast({ variant: "destructive", title: "Configuración Requerida", description: "No se encontró una instancia de WhatsApp. Por favor, configúrala.", duration: 5000 });
-      }
-    } catch (error) {
-      console.error("Error fetching WhatsApp instance:", error);
-      toast({ variant: "destructive", title: "Error", description: "No se pudo cargar la instancia de WhatsApp." });
-    }
-  }, [dataFetchUserId, toast]);
+    scrollToBottom();
+  }, [activeMessages]);
 
-  // Fetch Team Members
-  const fetchTeamMembers = useCallback(async () => {
-    if (!user?.organizationId) return;
-    try {
-      const q = query(collection(db, 'users'), where('organizationId', '==', user.organizationId), where('isActive', '==', true));
-      const querySnapshot = await getDocs(q);
-      const members: TeamMember[] = [];
-      querySnapshot.forEach(doc => {
-          const data = doc.data();
-          members.push({ uid: doc.id, fullName: data.fullName, email: data.email, role: data.role, isActive: data.isActive });
-      });
-      setTeamMembers(members);
-    } catch (error) {
-      console.error('Error fetching team members:', error);
+  useEffect(() => {
+    if (dataFetchUserId) {
+      const fetchInstance = async () => {
+        setIsLoadingInstance(true);
+        setError(null);
+        try {
+          const instanceDocRef = doc(db, 'instances', dataFetchUserId);
+          const instanceDocSnap = await getDoc(instanceDocRef);
+          if (instanceDocSnap.exists()) {
+            const instanceData = instanceDocSnap.data() as WhatsAppInstance;
+            setWhatsAppInstance(instanceData);
+            if (instanceData.status !== 'Conectado') {
+              setError("Tu instancia de Qyvoo no está conectada. Por favor, ve a Configuración para conectarla.");
+            }
+          } else {
+            setError("No se encontró una instancia de Qyvoo configurada. Por favor, ve a Configuración.");
+            setWhatsAppInstance(null);
+          }
+        } catch (err) {
+          console.error("Error fetching WhatsApp instance:", err);
+          setError("Error al cargar la configuración de la instancia de Qyvoo.");
+        } finally {
+          setIsLoadingInstance(false);
+        }
+      };
+      fetchInstance();
+    } else {
+      setIsLoadingInstance(false);
     }
+  }, [dataFetchUserId]);
+  
+  useEffect(() => {
+    if (!user?.organizationId) return;
+
+    const fetchTeamMembers = async () => {
+        const teamQuery = query(collection(db, 'users'), where('organizationId', '==', user.organizationId));
+        const querySnapshot = await getDocs(teamQuery);
+        const members: TeamMember[] = [];
+        querySnapshot.forEach(doc => {
+            const data = doc.data();
+            members.push({
+                uid: doc.id,
+                fullName: data.fullName,
+                email: data.email,
+                role: data.role,
+                isActive: data.isActive,
+            });
+        });
+        setTeamMembers(members);
+    };
+
+    fetchTeamMembers();
   }, [user?.organizationId]);
 
-  // Fetch Quick Replies
-  const fetchQuickReplies = useCallback(async () => {
-    if (!user) return;
-    try {
-      const q = query(collection(db, 'quickReplies'), where('userId', '==', user.uid));
-      const querySnapshot = await getDocs(q);
-      const replies: QuickReply[] = [];
-      querySnapshot.forEach(doc => replies.push({ id: doc.id, ...doc.data() } as QuickReply));
-      setQuickReplies(replies);
-    } catch (error) {
-      console.error('Error fetching quick replies:', error);
+  useEffect(() => {
+    if (whatsAppInstance && whatsAppInstance.status === 'Conectado' && (whatsAppInstance.id || whatsAppInstance.name) && dataFetchUserId) {
+      const fetchConversations = async () => {
+        setIsLoadingChats(true);
+        setError(null);
+        try {
+          const instanceIdentifier = whatsAppInstance.id || whatsAppInstance.name;
+          
+          const q = query(
+            collection(db, 'chat'),
+            where('instanceId', '==', instanceIdentifier),
+            orderBy('timestamp', 'desc'),
+            limit(200)
+          );
+          
+          const querySnapshot = await getDocs(q);
+          const messages: ChatMessage[] = [];
+          querySnapshot.forEach((doc) => {
+            messages.push({ id: doc.id, ...(doc.data() as ChatMessageDocument) });
+          });
+          
+          const chatMap = new Map<string, {
+              chat_id: string;
+              lastMessage: string;
+              lastMessageTimestamp: Date;
+              lastMessageSender: string;
+              lastMessageAuthorName?: string;
+          }>();
+
+          messages.forEach(msg => {
+            let currentChatId = msg.chat_id; 
+             if (msg.from === instanceIdentifier) { 
+                currentChatId = msg.to;
+            } else if (msg.to === instanceIdentifier) { 
+                currentChatId = msg.from;
+            }
+            if (msg.chat_id.endsWith('@g.us')) { 
+                currentChatId = msg.chat_id;
+            }
+
+            if (!chatMap.has(currentChatId) || msg.timestamp.toDate() > chatMap.get(currentChatId)!.lastMessageTimestamp) {
+              chatMap.set(currentChatId, {
+                chat_id: currentChatId,
+                lastMessage: msg.mensaje,
+                lastMessageTimestamp: msg.timestamp.toDate(),
+                lastMessageSender: msg.user_name,
+                lastMessageAuthorName: msg.author?.name
+              });
+            }
+          });
+          
+          const contactPromises = Array.from(chatMap.keys()).map(async (chat_id) => {
+            if (!dataFetchUserId) return { chatId: chat_id, data: null }; 
+            const contactDocId = getContactDocId(dataFetchUserId, chat_id);
+            try {
+                const contactDocRef = doc(db, 'contacts', contactDocId);
+                const contactDocSnap = await getDoc(contactDocRef);
+                if (contactDocSnap.exists()) {
+                    return { chatId: chat_id, data: contactDocSnap.data() as ContactDetails };
+                }
+            } catch (contactError) {
+                console.warn(`Error fetching contact for ${chat_id}:`, contactError);
+            }
+            return { chatId: chat_id, data: null };
+          });
+
+          const contactResults = await Promise.all(contactPromises);
+          const contactsDataMap = new Map<string, ContactDetails | null>();
+          contactResults.forEach(result => {
+              if (result) {
+                  contactsDataMap.set(result.chatId, result.data);
+              }
+          });
+
+          const enrichedConversations: ConversationSummary[] = [];
+          for (const [chat_id_key, summaryValue] of chatMap.entries()) {
+              const contactData = contactsDataMap.get(chat_id_key);
+              
+              let nameL1 = formatPhoneNumber(chat_id_key);
+              let nameL2: string | null = null;
+              let avatarFb = nameL1.length >= 2 ? nameL1.slice(0,2).toUpperCase() : nameL1.toUpperCase();
+
+              if (contactData) {
+                  const nombreCompleto = [contactData.nombre, contactData.apellido].filter(Boolean).join(' ').trim();
+                  const empresa = contactData.empresa?.trim();
+
+                  if (nombreCompleto) {
+                      nameL1 = nombreCompleto;
+                      if (empresa) {
+                          nameL2 = `[${empresa}]`;
+                      }
+                  } else if (empresa) {
+                      nameL1 = empresa;
+                  }
+                  
+                  if (contactData.nombre && contactData.nombre.trim() && contactData.apellido && contactData.apellido.trim()) {
+                      avatarFb = `${contactData.nombre.trim()[0]}${contactData.apellido.trim()[0]}`.toUpperCase();
+                  } else if (contactData.nombre && contactData.nombre.trim()) {
+                       avatarFb = contactData.nombre.trim().substring(0, Math.min(2, contactData.nombre.trim().length)).toUpperCase();
+                  } else if (contactData.empresa && contactData.empresa.trim()) {
+                       avatarFb = contactData.empresa.trim().substring(0, Math.min(2, contactData.empresa.trim().length)).toUpperCase();
+                  }
+              }
+
+              enrichedConversations.push({
+                  chat_id: chat_id_key,
+                  lastMessage: summaryValue.lastMessage,
+                  lastMessageTimestamp: summaryValue.lastMessageTimestamp,
+                  lastMessageSender: summaryValue.lastMessageSender,
+                  lastMessageAuthorName: summaryValue.lastMessageAuthorName,
+                  nameLine1: nameL1,
+                  nameLine2: nameL2,
+                  avatarFallback: avatarFb,
+                  status: contactData?.estadoConversacion || 'Abierto',
+                  assignedTo: contactData?.assignedTo,
+                  assignedToName: contactData?.assignedToName,
+              });
+          }
+
+          const sortedConversations = enrichedConversations.sort(
+            (a,b) => b.lastMessageTimestamp.getTime() - a.lastMessageTimestamp.getTime()
+          );
+          setConversations(sortedConversations);
+
+        } catch (err) {
+          console.error("Error fetching conversations:", err);
+          setError("Error al cargar las conversaciones de Qyvoo.");
+        } finally {
+          setIsLoadingChats(false);
+        }
+      };
+      fetchConversations();
     }
-  }, [user]);
+  }, [whatsAppInstance, dataFetchUserId]); 
 
   useEffect(() => {
-    fetchWhatsAppInstance();
-    fetchTeamMembers();
-    fetchQuickReplies();
-  }, [fetchWhatsAppInstance, fetchTeamMembers, fetchQuickReplies]);
+    const chatIdFromUrl = searchParams.get('chatId');
+    if (chatIdFromUrl && !isLoadingChats && conversations.length > 0) {
+      const conversationExists = conversations.find(c => c.chat_id === chatIdFromUrl);
+      if (conversationExists) {
+        if (selectedChatId !== chatIdFromUrl) {
+           setSelectedChatId(chatIdFromUrl);
+        }
+      }
+    }
+  }, [searchParams, isLoadingChats, conversations, selectedChatId]); 
 
-  // Fetch and summarize conversations
-  const fetchConversations = useCallback(async () => {
-    if (!whatsAppInstance || !dataFetchUserId) return;
-    setIsLoadingConversations(true);
-
-    try {
+  useEffect(() => {
+    if (selectedChatId && whatsAppInstance) {
+      setIsLoadingMessages(true);
       const instanceIdentifier = whatsAppInstance.id || whatsAppInstance.name;
+      
       const q = query(
         collection(db, 'chat'),
         where('instanceId', '==', instanceIdentifier),
-        orderBy('timestamp', 'desc'),
-        limit(500)
+        where('chat_id', '==', selectedChatId), 
+        orderBy('timestamp', 'asc')
       );
 
-      const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-        const messagesByChatId = new Map<string, ChatMessageDocument>();
-        querySnapshot.forEach(doc => {
-          const msg = doc.data() as ChatMessageDocument;
-          // Robustly get the external chat ID
-          let chatId = msg.chat_id;
-          if (!chatId.endsWith('@g.us')) { // Not a group chat
-             if (msg.user_name?.toLowerCase() === 'user' || msg.from.includes('@c.us')) {
-                chatId = msg.from;
-             } else if (msg.to.includes('@c.us')) {
-                chatId = msg.to;
-             }
-          }
-          if (!messagesByChatId.has(chatId)) {
-            messagesByChatId.set(chatId, msg);
-          }
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const messages: ChatMessage[] = [];
+        querySnapshot.forEach((doc) => {
+          messages.push({ id: doc.id, ...(doc.data() as ChatMessageDocument) });
         });
-
-        const contactDetailsPromises = Array.from(messagesByChatId.keys()).map(async chatId => {
-          const contactDocId = getContactDocId(dataFetchUserId, chatId);
-          const contactDocRef = doc(db, 'contacts', contactDocId);
-          const contactDocSnap = await getDoc(contactDocRef);
-          return contactDocSnap.exists() ? { chatId, data: contactDocSnap.data() as ContactDetails } : { chatId, data: null };
-        });
-
-        const contactDetailsResults = await Promise.all(contactDetailsPromises);
-        const contactsMap = new Map(contactDetailsResults.map(r => [r.chatId, r.data]));
-        
-        const conversationSummaries = Array.from(messagesByChatId.entries()).map(([chatId, msg]) => {
-            const contactData = contactsMap.get(chatId);
-
-            const name = (contactData?.nombre && contactData?.apellido) ? `${contactData.nombre} ${contactData.apellido}` : contactData?.nombre || formatPhoneNumber(chatId);
-            const subName = contactData?.empresa || (name !== formatPhoneNumber(chatId) ? formatPhoneNumber(chatId) : null);
-            const avatarFallback = (contactData?.nombre ? contactData.nombre[0] : '') + (contactData?.apellido ? contactData.apellido[0] : '');
-
-            return {
-              chat_id: chatId,
-              lastMessage: msg.mensaje,
-              lastMessageTimestamp: msg.timestamp.toDate(),
-              lastMessageSender: msg.user_name,
-              lastMessageAuthorName: msg.author?.name,
-              nameLine1: name,
-              nameLine2: subName,
-              avatarFallback: avatarFallback || formatPhoneNumber(chatId).slice(-2),
-              status: contactData?.estadoConversacion || 'Abierto',
-              assignedTo: contactData?.assignedTo,
-              assignedToName: teamMembers.find(m => m.uid === contactData?.assignedTo)?.fullName,
-            };
-        });
-
-        setConversations(conversationSummaries);
-        setIsLoadingConversations(false);
+        setActiveMessages(messages);
+        setIsLoadingMessages(false);
       }, (error) => {
-        console.error("Error fetching conversations in real-time:", error);
-        toast({ variant: "destructive", title: "Error de Sincronización", description: "No se pudieron cargar las conversaciones." });
-        setIsLoadingConversations(false);
+        console.error("Error fetching active messages:", error);
+        setError("Error al cargar los mensajes del chat.");
+        setIsLoadingMessages(false);
       });
 
-      return unsubscribe;
-
-    } catch (error) {
-      console.error("Error setting up conversation listener:", error);
-      setIsLoadingConversations(false);
+      return () => unsubscribe();
+    } else {
+      setActiveMessages([]);
     }
-  }, [whatsAppInstance, dataFetchUserId, toast, teamMembers]);
-  
+  }, [selectedChatId, whatsAppInstance]);
+
   useEffect(() => {
-    const unsubscribePromise = fetchConversations();
-    return () => {
-      unsubscribePromise?.then(unsubscribe => unsubscribe?.());
-    };
-  }, [fetchConversations]);
-
-  // Apply filters
-  useEffect(() => {
-    if (!user) return;
-    let filtered = conversations;
-    if (filter === 'mine') {
-      filtered = conversations.filter(c => c.assignedTo === user.uid);
-    } else if (filter === 'unassigned') {
-      filtered = conversations.filter(c => !c.assignedTo);
-    }
-    setFilteredConversations(filtered);
-  }, [conversations, filter, user]);
-
-  const handleSelectChat = useCallback((chatId: string) => {
-    setSelectedChatId(chatId);
-    setIsEditingContact(false); // Reset editing state on chat change
-    // Update URL without reloading page
-    router.push(`/dashboard/chat?chatId=${chatId}`, { scroll: false });
-  }, [router]);
-
-  // Effect to handle initial chat selection from URL
-  useEffect(() => {
-    const chatIdFromUrl = searchParams.get('chatId');
-    if (chatIdFromUrl && conversations.length > 0) {
-      if (conversations.some(c => c.chat_id === chatIdFromUrl)) {
-        setSelectedChatId(chatIdFromUrl);
-      }
-    }
-  }, [searchParams, conversations]);
-
-  // Fetch messages for the selected chat
-  useEffect(() => {
-    if (!selectedChatId || !whatsAppInstance) return;
-
-    setIsLoadingMessages(true);
-    const instanceIdentifier = whatsAppInstance.id || whatsAppInstance.name;
-    const q = query(
-      collection(db, 'chat'),
-      where('instanceId', '==', instanceIdentifier),
-      where('chat_id', 'in', [selectedChatId, `${selectedChatId.split('@')[0]}@c.us`]),
-      orderBy('timestamp', 'asc')
-    );
-
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const fetchedMessages: ChatMessage[] = [];
-      querySnapshot.forEach((doc) => {
-        fetchedMessages.push({ id: doc.id, ...(doc.data() as ChatMessageDocument) });
-      });
-      setMessages(fetchedMessages);
-      setIsLoadingMessages(false);
-    }, (error) => {
-      console.error("Error fetching messages:", error);
-      toast({ variant: "destructive", title: "Error", description: "No se pudieron cargar los mensajes." });
-      setIsLoadingMessages(false);
-    });
-
-    return () => unsubscribe();
-  }, [selectedChatId, whatsAppInstance, toast]);
-
-  // Fetch contact details for the selected chat
-  useEffect(() => {
-    if (!selectedChatId || !dataFetchUserId) {
+    if (selectedChatId && dataFetchUserId && whatsAppInstance) {
+      setIsLoadingContact(true);
+      const fetchDetails = async () => {
+        const compositeContactId = getContactDocId(dataFetchUserId, selectedChatId);
+        try {
+          const contactDocRef = doc(db, 'contacts', compositeContactId);
+          const contactDocSnap = await getDoc(contactDocRef);
+          if (contactDocSnap.exists()) {
+            const data = { id: contactDocSnap.id, ...contactDocSnap.data() } as ContactDetails;
+            data.chatbotEnabledForContact = data.chatbotEnabledForContact ?? true;
+            data.estadoConversacion = data.estadoConversacion ?? 'Abierto';
+            setContactDetails(data);
+            setInitialContactDetails(data);
+            setIsEditingContact(false);
+          } else {
+            const initialData: ContactDetails = { 
+              id: compositeContactId, 
+              telefono: formatPhoneNumber(selectedChatId),
+              nombre: "",
+              apellido: "",
+              email: "",
+              empresa: "",
+              ubicacion: "",
+              tipoCliente: undefined,
+              estadoConversacion: 'Abierto',
+              instanceId: whatsAppInstance.id,
+              userId: dataFetchUserId, 
+              _chatIdOriginal: selectedChatId,
+              chatbotEnabledForContact: true, 
+              assignedTo: '',
+              assignedToName: '',
+            };
+            setContactDetails(initialData); 
+            setInitialContactDetails(initialData);
+            setIsEditingContact(true);
+          }
+        } catch (error) {
+          console.error("Error fetching contact details:", error);
+           toast({ variant: "destructive", title: "Error", description: "Error al cargar detalles del contacto." });
+        } finally {
+          setIsLoadingContact(false);
+        }
+      };
+      fetchDetails();
+    } else {
       setContactDetails(null);
       setInitialContactDetails(null);
-      return;
-    }
-
-    setIsLoadingContact(true);
-    const contactDocId = getContactDocId(dataFetchUserId, selectedChatId);
-    const contactDocRef = doc(db, 'contacts', contactDocId);
-
-    const unsubscribe = onSnapshot(contactDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = { id: docSnap.id, ...docSnap.data() } as ContactDetails;
-        setContactDetails(data);
-        setInitialContactDetails(data);
-      } else {
-        const newContact: ContactDetails = {
-          id: contactDocId,
-          _chatIdOriginal: selectedChatId,
-          telefono: formatPhoneNumber(selectedChatId),
-          userId: dataFetchUserId,
-          estadoConversacion: 'Abierto',
-          chatbotEnabledForContact: true,
-          assignedTo: '',
-        };
-        setContactDetails(newContact);
-        setInitialContactDetails(newContact);
-      }
-      setIsLoadingContact(false);
-    }, (error) => {
-      console.error("Error fetching contact details:", error);
-      setIsLoadingContact(false);
-    });
-
-    return () => unsubscribe();
-  }, [selectedChatId, dataFetchUserId]);
-
-  const handleSaveContactDetails = async () => {
-    if (!contactDetails || !dataFetchUserId) return;
-
-    // Ensure we have a valid document ID before saving.
-    const contactDocId = contactDetails.id || getContactDocId(dataFetchUserId, contactDetails._chatIdOriginal!);
-     if (!contactDocId) {
-      toast({ variant: "destructive", title: "Error", description: "No se pudo determinar el ID del contacto para guardar." });
-      return;
-    }
-
-    setIsSavingContact(true);
-    try {
-      const contactDocRef = doc(db, 'contacts', contactDocId);
-      await setDoc(contactDocRef, contactDetails, { merge: true });
-      toast({ title: "Contacto Actualizado", description: "La información del contacto ha sido guardada." });
       setIsEditingContact(false);
-      
-      // If assignee changed, send email
-      if (initialContactDetails?.assignedTo !== contactDetails.assignedTo && contactDetails.assignedTo) {
-          const assignee = teamMembers.find(m => m.uid === contactDetails.assignedTo);
-          if (assignee && user && assignee.email) {
-              await sendAssignmentNotificationEmail({
-                  assigneeEmail: assignee.email,
-                  assigneeName: assignee.fullName,
-                  assignerName: user.fullName || user.email || 'Un administrador',
-                  contactName: contactDetails.nombre || formatPhoneNumber(contactDetails._chatIdOriginal),
-                  chatLink: `${process.env.NEXT_PUBLIC_BASE_URL}/dashboard/chat?chatId=${selectedChatId}`,
-              });
-               toast({ title: "Notificación Enviada", description: `Se ha notificado a ${assignee.fullName} sobre la asignación.`});
+    }
+  }, [selectedChatId, dataFetchUserId, whatsAppInstance, toast]);
+
+  const fetchQuickReplies = useCallback(async () => {
+    if (!dataFetchUserId) return;
+    setIsLoadingQuickReplies(true);
+    try {
+      const q = query(collection(db, 'quickReplies'), where('userId', '==', dataFetchUserId));
+      const querySnapshot = await getDocs(q);
+      const fetchedReplies: QuickReply[] = [];
+      querySnapshot.forEach((docSnap) => {
+        fetchedReplies.push({ id: docSnap.id, ...(docSnap.data() as Omit<QuickReply, 'id'|'userId'>) } as QuickReply);
+      });
+      setQuickReplies(fetchedReplies.sort((a,b) => a.tag.localeCompare(b.tag)));
+    } catch (error) {
+      console.error("Error fetching quick replies for chat:", error);
+      toast({ variant: "destructive", title: "Error", description: "No se pudieron cargar las respuestas rápidas para el chat." });
+    } finally {
+      setIsLoadingQuickReplies(false);
+    }
+  }, [dataFetchUserId, toast]);
+
+  useEffect(() => {
+    fetchQuickReplies();
+  }, [fetchQuickReplies]);
+
+  const handleSendMessage = async () => {
+    if (!replyMessage.trim() || !selectedChatId || !whatsAppInstance || !user) return;
+
+    const trimmedMessage = replyMessage.trim();
+
+    const newMessageData: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
+      chat_id: selectedChatId, 
+      from: whatsAppInstance.phoneNumber || `instance_${whatsAppInstance.id}`, 
+      to: selectedChatId, 
+      instance: whatsAppInstance.name,
+      instanceId: whatsAppInstance.id,
+      mensaje: trimmedMessage,
+      user_name: 'agente',
+      timestamp: serverTimestamp(), 
+      type: chatMode,
+      author: {
+        uid: user.uid,
+        name: user.fullName || user.username || 'Agente',
+      },
+    };
+
+    try {
+      await addDoc(collection(db, 'chat'), newMessageData);
+      setReplyMessage("");
+
+      if (chatMode === 'message') {
+        const webhookPayload = [{
+          chat_id: selectedChatId,
+          instanceId: whatsAppInstance.id,
+          mensaje: trimmedMessage,
+          instance: whatsAppInstance.name,
+          user_name: "agente", // Keep 'agente' for backend compatibility, UI will use author.name
+          timestamp: new Date().toISOString(),
+        }];
+
+        const webhookUrl = "https://n8n.vemontech.com/webhook/qyvoo";
+
+        try {
+          const webhookResponse = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(webhookPayload),
+          });
+
+          if (webhookResponse.ok) {
+            console.log("Message successfully sent to webhook:", webhookPayload);
+          } else {
+            const errorData = await webhookResponse.text();
+            console.error("Error sending message to webhook:", webhookResponse.status, errorData);
+            toast({ variant: "destructive", title: "Error de Webhook", description: `No se pudo enviar el mensaje a Qyvoo: ${webhookResponse.status}` });
           }
+        } catch (webhookError) {
+          console.error("Error calling webhook:", webhookError);
+          toast({ variant: "destructive", title: "Error de Red Webhook", description: "No se pudo conectar con el servicio de Qyvoo." });
+        }
       }
 
+    } catch (error) {
+      console.error("Error saving message/note (Firestore):", error);
+      setError("Error al guardar el mensaje o nota en Firestore.");
+      toast({ variant: "destructive", title: "Error en Firestore", description: "No se pudo guardar el mensaje/nota." });
+    }
+  };
+  
+  const handleSaveContactDetails = async () => {
+    if (!selectedChatId || !dataFetchUserId || !whatsAppInstance || !contactDetails) return;
+    setIsSavingContact(true);
+
+    const { id: _docIdFromState, ...dataToPersist } = contactDetails; 
+    
+    // If the contact is new, the ID might not be set. Let's ensure it is.
+    const docId = contactDetails.id || getContactDocId(dataFetchUserId, selectedChatId);
+
+    const finalDataToPersist: ContactDetails = {
+      ...dataToPersist,
+      id: docId,
+      userId: dataFetchUserId, 
+      instanceId: dataToPersist.instanceId || whatsAppInstance.id, 
+      telefono: dataToPersist.telefono || formatPhoneNumber(selectedChatId), 
+      _chatIdOriginal: selectedChatId,
+      chatbotEnabledForContact: dataToPersist.chatbotEnabledForContact ?? true,
+      estadoConversacion: dataToPersist.estadoConversacion ?? 'Abierto',
+    };
+
+    try {
+      await setDoc(doc(db, 'contacts', docId), finalDataToPersist, { merge: true });
+      
+      const updatedContactState = { ...finalDataToPersist, id: docId };
+      
+      const oldAssigneeId = initialContactDetails?.assignedTo;
+      const newAssigneeId = finalDataToPersist.assignedTo;
+      if (newAssigneeId && newAssigneeId !== oldAssigneeId) {
+        const newAssignee = teamMembers.find(m => m.uid === newAssigneeId);
+        if (newAssignee && newAssignee.email) {
+          try {
+            const contactName = `${contactDetails.nombre || ''} ${contactDetails.apellido || ''}`.trim() || contactDetails.telefono || selectedChatId;
+            const chatLink = `${process.env.NEXT_PUBLIC_BASE_URL || window.location.origin}/dashboard/chat?chatId=${selectedChatId}`;
+            
+            await sendAssignmentNotificationEmail({
+              assigneeEmail: newAssignee.email,
+              assigneeName: newAssignee.fullName,
+              assignerName: user?.fullName || user?.email || 'un administrador',
+              contactName: contactName,
+              chatLink: chatLink,
+            });
+            toast({ title: "Notificación Enviada", description: `Se ha notificado a ${newAssignee.fullName || newAssignee.email} sobre la asignación.` });
+          } catch (emailError) {
+             console.error("Error sending assignment notification:", emailError);
+             toast({ variant: "destructive", title: "Error de Notificación", description: "No se pudo enviar el correo de notificación al agente." });
+          }
+        }
+      }
+
+      setContactDetails(updatedContactState);
+      setInitialContactDetails(updatedContactState); 
+      setIsEditingContact(false);
+      toast({ title: "Contacto Actualizado", description: "La información del contacto ha sido guardada." });
     } catch (error) {
       console.error("Error saving contact details:", error);
       toast({ variant: "destructive", title: "Error", description: "No se pudo guardar la información del contacto." });
@@ -453,423 +635,471 @@ export default function ChatPage() {
     }
   };
 
-  const handleCancelEditContact = () => {
-    setContactDetails(initialContactDetails);
-    setIsEditingContact(false);
-  };
-  
-  const handleInputChange = (field: keyof Omit<ContactDetails, 'id' | 'instanceId' | 'userId' | 'tipoCliente' | '_chatIdOriginal' | 'chatbotEnabledForContact' | 'estadoConversacion'| 'assignedTo' | 'assignedToName'>, value: string) => {
+  const handleContactInputChange = (field: keyof Omit<ContactDetails, 'id' | 'instanceId' | 'userId' | 'tipoCliente' | '_chatIdOriginal' | 'chatbotEnabledForContact' | 'estadoConversacion' | 'assignedTo' | 'assignedToName'>, value: string) => {
     setContactDetails(prev => prev ? { ...prev, [field]: value } : null);
   };
   
-  const handleSelectChange = (value: ContactDetails['tipoCliente']) => {
+  const handleContactSelectChange = (value: ContactDetails['tipoCliente']) => {
     setContactDetails(prev => prev ? { ...prev, tipoCliente: value } : null);
   };
-
-  const handleStatusChange = (value: ContactDetails['estadoConversacion']) => {
-    setContactDetails(prev => prev ? { ...prev, estadoConversacion: value } : null);
-  };
   
-  const handleSwitchChange = (checked: boolean) => {
-    setContactDetails(prev => prev ? { ...prev, chatbotEnabledForContact: checked } : null);
+  const handleContactSwitchChange = (checked: boolean) => {
+     setContactDetails(prev => prev ? { ...prev, chatbotEnabledForContact: checked } : null);
+  };
+
+  const handleContactStatusChange = (value: ContactDetails['estadoConversacion']) => {
+    setContactDetails(prev => prev ? { ...prev, estadoConversacion: value } : null);
   };
 
   const handleAssigneeChange = (memberId: string) => {
-      const member = teamMembers.find(m => m.uid === memberId);
-      setContactDetails(prev => prev ? {
-          ...prev,
-          assignedTo: memberId,
-          assignedToName: member?.fullName,
-      } : null);
+    const selectedMember = teamMembers.find(m => m.uid === memberId);
+    setContactDetails(prev => prev ? { 
+        ...prev, 
+        assignedTo: selectedMember?.uid || '',
+        assignedToName: selectedMember?.fullName || selectedMember?.email || ''
+    } : null);
   };
 
-  const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedChatId || !whatsAppInstance || !user) return;
-    
-    setIsSendingMessage(true);
-    
-    try {
-        const messageData = {
-            chat_id: selectedChatId,
-            from: 'agente',
-            to: selectedChatId,
-            instance: whatsAppInstance.name,
-            instanceId: whatsAppInstance.id || whatsAppInstance.name,
-            mensaje: newMessage,
-            timestamp: serverTimestamp(),
-            user_name: user.role === 'agent' ? 'agente' : 'administrador',
-            author: {
-                uid: user.uid,
-                name: user.fullName || user.email,
-            },
-        };
-
-        // Add message to Firestore 'chat' collection
-        await addDoc(collection(db, 'chat'), messageData);
-        
-        // Also send via Qyvoo API
-        const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
-        const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL;
-        const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL;
-
-        let baseWebhookUrl: string | undefined;
-        if (useTestWebhook) {
-            baseWebhookUrl = testWebhookBase;
-        } else {
-            baseWebhookUrl = prodWebhookBase;
-        }
-        if (!baseWebhookUrl) {
-            throw new Error("La URL del webhook no está configurada.");
-        }
-        const webhookUrl = `${baseWebhookUrl}?action=send_message`;
-        
-        await fetch(webhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                instanceName: whatsAppInstance.name,
-                number: selectedChatId,
-                message: newMessage,
-            }),
-        });
-
-        setNewMessage('');
-    } catch (error) {
-        console.error("Error sending message:", error);
-        toast({ variant: 'destructive', title: 'Error de Envío', description: 'No se pudo enviar el mensaje.' });
-    } finally {
-        setIsSendingMessage(false);
+  const handleQuickReplySelect = (tag: string) => {
+    if (tag === "none") {
+        return;
+    }
+    const selectedReply = quickReplies.find(qr => qr.tag === tag);
+    if (selectedReply) {
+      setReplyMessage(prev => prev ? `${prev} ${selectedReply.message}` : selectedReply.message);
     }
   };
 
-  const handleQuickReplySelect = (message: string) => {
-      setNewMessage(prev => prev ? `${prev} ${message}`.trim() : message);
-  };
-  
-  const formatPhoneNumber = (chat_id: string | undefined): string => {
-    if (!chat_id) return "Desconocido";
-    return chat_id.split('@')[0];
-  };
-
-  const getChatName = (chatId: string) => {
-      const convo = conversations.find(c => c.chat_id === chatId);
-      return convo ? convo.nameLine1 : formatPhoneNumber(chatId);
-  }
-
-  // Mobile view logic
-  if (isMobile) {
+  if (isLoadingInstance) {
     return (
-      <div className="flex h-[calc(100vh-8rem)]">
-        {selectedChatId ? (
-           <div className="flex flex-col w-full h-full">
-            <header className="flex items-center p-3 border-b bg-background">
-                <Button variant="ghost" size="icon" onClick={() => setSelectedChatId(null)}>
-                    <ArrowLeft className="h-5 w-5" />
-                </Button>
-                <div className="ml-3">
-                   <h2 className="font-semibold text-lg">{getChatName(selectedChatId)}</h2>
-                </div>
-            </header>
-            <main className="flex-1 overflow-y-auto p-4 space-y-4">
-                 {isLoadingMessages ? (
-                    <div className="flex justify-center items-center h-full"><Loader2 className="h-6 w-6 animate-spin"/></div>
-                ) : (
-                  messages.map(msg => <ChatMessageComponent key={msg.id} msg={msg} />)
-                )}
-                <div ref={messagesEndRef} />
-            </main>
-             <MessageInputArea
-                newMessage={newMessage}
-                setNewMessage={setNewMessage}
-                isSendingMessage={isSendingMessage}
-                handleSendMessage={handleSendMessage}
-                quickReplies={quickReplies}
-                onQuickReplySelect={handleQuickReplySelect}
-                userRole={user?.role}
-             />
-          </div>
-        ) : (
-          <ConversationList
-            conversations={filteredConversations}
-            selectedChatId={selectedChatId}
-            onSelectChat={handleSelectChat}
-            isLoading={isLoadingConversations}
-          />
-        )}
+      <div className="flex h-[calc(100vh-theme(spacing.16)-theme(spacing.12))] items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-4 text-muted-foreground">Cargando datos de la instancia...</p>
       </div>
     );
   }
+
+  if (error && (!whatsAppInstance || whatsAppInstance.status !== 'Conectado')) {
+    return (
+      <Card className="m-auto mt-10 max-w-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center text-destructive">
+            <AlertTriangle className="mr-2 h-6 w-6" />
+            Error de Instancia
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p>{error}</p>
+          <p className="mt-4 text-sm text-muted-foreground">
+            Por favor, ve a la página de <Link href="/dashboard/configuration" className="text-primary underline hover:text-primary/80">Configuración</Link> para conectar o verificar tu instancia.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
   
-  // Desktop view
+  if (!whatsAppInstance || whatsAppInstance.status !== 'Conectado') {
+     return (
+      <Card className="m-auto mt-10 max-w-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center text-primary">
+            <Info className="mr-2 h-6 w-6" />
+            Instancia no Conectada
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p>La instancia de Qyvoo WhatsApp de tu organización no está conectada.</p>
+          <p className="mt-4 text-sm text-muted-foreground">
+            Contacta al administrador de tu organización para que la conecte.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const currentConvoDetails = conversations.find(c => c.chat_id === selectedChatId);
+
+  const getStatusIndicator = (status?: ContactDetails['estadoConversacion']) => {
+    switch(status) {
+        case 'Pendiente': return <div className="h-2.5 w-2.5 rounded-full bg-yellow-500 shrink-0"></div>;
+        case 'Cerrado': return <div className="h-2.5 w-2.5 rounded-full bg-gray-500 shrink-0"></div>;
+        case 'Abierto':
+        default:
+            return <div className="h-2.5 w-2.5 rounded-full bg-green-500 shrink-0"></div>;
+    }
+  }
+
+  const filteredConversations = conversations.filter(convo => {
+    const statusMatch = statusFilter === 'all' || convo.status === statusFilter;
+    const assignmentMatch = assignmentFilter === 'all' || (assignmentFilter === 'mine' && convo.assignedTo === user?.uid);
+    return statusMatch && assignmentMatch;
+  });
+
+  const messagePlaceholder = user?.role === 'agent'
+    ? "Escribe tu mensaje como agente..."
+    : "Escribe tu mensaje como administrador...";
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[350px_1fr] lg:grid-cols-[350px_1fr_350px] h-[calc(100vh-8rem)] border rounded-lg bg-card overflow-hidden">
-      {/* Conversation List */}
-      <div className="flex flex-col border-r">
+    <div className="flex h-[calc(100vh-theme(spacing.16)-theme(spacing.12))] border bg-card text-card-foreground shadow-sm rounded-lg overflow-hidden">
+      {showConversationList && (
+        <div className={`
+          w-full ${isMobile ? '' : 'md:w-1/3 lg:w-1/4 md:min-w-[300px] md:max-w-[380px]'}
+          border-r flex flex-col
+        `}>
           <div className="p-4 border-b">
-             <h1 className="text-xl font-bold">Conversaciones</h1>
-             <Tabs value={filter} onValueChange={(value) => setFilter(value as 'all' | 'mine' | 'unassigned')} className="mt-2">
-                <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="all">Todos</TabsTrigger>
-                    <TabsTrigger value="mine">Míos</TabsTrigger>
-                    <TabsTrigger value="unassigned">Sin Asignar</TabsTrigger>
+            <h2 className="text-xl font-semibold">Conversaciones</h2>
+             <Tabs defaultValue="all" onValueChange={(value) => setAssignmentFilter(value as any)} className="mt-3">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="all" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Todos los Chats</TabsTrigger>
+                    <TabsTrigger value="mine" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Asignados a Mí</TabsTrigger>
                 </TabsList>
             </Tabs>
+             <Tabs defaultValue="all" onValueChange={(value) => setStatusFilter(value as any)} className="mt-2">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="all" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Todos</TabsTrigger>
+                <TabsTrigger value="Abierto" className="text-xs data-[state=active]:bg-green-500 data-[state=active]:text-primary-foreground">Abiertos</TabsTrigger>
+                <TabsTrigger value="Pendiente" className="text-xs data-[state=active]:bg-yellow-500 data-[state=active]:text-secondary-foreground">Pend.</TabsTrigger>
+                <TabsTrigger value="Cerrado" className="text-xs data-[state=active]:bg-slate-500 data-[state=active]:text-primary-foreground">Cerrados</TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
-          <ScrollArea className="flex-1">
-            {isLoadingConversations ? (
-              <div className="flex h-full items-center justify-center">
+          <ScrollArea className="flex-grow">
+            {isLoadingChats ? (
+              <div className="flex items-center justify-center p-6">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <span className="ml-3 text-muted-foreground">Cargando chats...</span>
               </div>
-            ) : filteredConversations.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-center p-4">
-                    <MessageSquareDashed className="h-12 w-12 text-muted-foreground mb-2"/>
-                    <p className="text-muted-foreground">No hay conversaciones en esta vista.</p>
-                </div>
+            ) : filteredConversations.length === 0 && !error ? (
+              <div className="p-6 text-center text-muted-foreground">
+                <MessageCircle className="mx-auto h-12 w-12 text-gray-400 mb-2" />
+                No hay conversaciones que coincidan con el filtro.
+              </div>
+            ) : error && !isLoadingChats ? ( 
+              <div className="p-6 text-center text-destructive">
+                <AlertTriangle className="mx-auto h-12 w-12 mb-2" />
+                {error}
+              </div>
             ) : (
-               <ConversationList
-                  conversations={filteredConversations}
-                  selectedChatId={selectedChatId}
-                  onSelectChat={handleSelectChat}
-                  isLoading={false}
-              />
+              <ul className="space-y-1">
+                {filteredConversations.map((convo) => (
+                  <li key={convo.chat_id}>
+                    <Link
+                      href={`/dashboard/chat?chatId=${convo.chat_id}`}
+                      scroll={false}
+                      className={`flex w-full items-start p-3 rounded-none border-b overflow-hidden ${selectedChatId === convo.chat_id ? 'bg-primary/10 text-primary' : 'hover:bg-muted/50 transition-colors'}`}
+                    >
+                      <Avatar className="h-10 w-10 mr-3 mt-1 shrink-0">
+                        <AvatarFallback>
+                          {convo.avatarFallback || formatPhoneNumber(convo.chat_id).slice(-2)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <div className="flex justify-between items-baseline">
+                          <div className="min-w-0 overflow-hidden mr-2 flex items-center gap-2">
+                            {getStatusIndicator(convo.status)}
+                            <p className="font-semibold text-sm truncate">{convo.nameLine1}</p>
+                          </div>
+                          <p className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                            {formatConversationTimestamp(convo.lastMessageTimestamp)}
+                          </p>
+                        </div>
+                        {convo.nameLine2 && <p className="text-xs text-muted-foreground truncate pl-4">{convo.nameLine2}</p>}
+                        {convo.assignedToName && (
+                          <p className="text-xs text-muted-foreground truncate flex items-center mt-0.5">
+                              <UserCog className="h-3 w-3 mr-1.5 shrink-0" />
+                              Asignado a: {convo.assignedToName}
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                          <span className="font-medium">
+                           {convo.lastMessageSender === 'bot' ? 'Bot' :
+                             convo.lastMessageSender === 'User' ? 'Usuario' :
+                             convo.lastMessageAuthorName || 'Agente'}:
+                          </span>
+                          {convo.lastMessage}
+                        </p>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             )}
           </ScrollArea>
-      </div>
+        </div>
+      )}
 
-      {/* Chat Panel */}
-      <div className="flex flex-col">
+      {/* Main Chat Area */}
+      <div className={`flex-1 flex flex-col ${showChatArea ? 'flex' : 'hidden'}`}>
         {selectedChatId ? (
           <>
-            <header className="flex items-center p-4 border-b bg-background">
-                <Avatar className="h-10 w-10">
-                    <AvatarFallback>{conversations.find(c => c.chat_id === selectedChatId)?.avatarFallback}</AvatarFallback>
-                </Avatar>
-                <div className="ml-4">
-                    <h2 className="font-semibold text-lg">{conversations.find(c => c.chat_id === selectedChatId)?.nameLine1}</h2>
-                    <p className="text-sm text-muted-foreground">{conversations.find(c => c.chat_id === selectedChatId)?.nameLine2}</p>
-                </div>
-            </header>
-            <main className="flex-1 overflow-y-auto p-4 space-y-4 bg-muted/20">
-                {isLoadingMessages ? (
-                    <div className="flex justify-center items-center h-full"><Loader2 className="h-6 w-6 animate-spin"/></div>
-                ) : messages.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-center p-4">
-                        <MessageCircle className="h-12 w-12 text-muted-foreground mb-2"/>
-                        <p className="text-muted-foreground">Esta es una nueva conversación.</p>
-                        <p className="text-sm text-muted-foreground">Envía un mensaje para comenzar.</p>
-                    </div>
-                ) : (
-                  messages.map(msg => <ChatMessageComponent key={msg.id} msg={msg} />)
+            {/* Chat Header with mobile back button */}
+            <div className="p-4 border-b bg-card flex flex-row items-center justify-between sticky top-0 z-10">
+              <div className="flex items-center min-w-0"> 
+                {isMobile && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="mr-2"
+                    onClick={() => {
+                      setSelectedChatId(null);
+                      router.replace('/dashboard/chat', { scroll: false });
+                    }}
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                  </Button>
                 )}
-                <div ref={messagesEndRef} />
-            </main>
-            <MessageInputArea
-                newMessage={newMessage}
-                setNewMessage={setNewMessage}
-                isSendingMessage={isSendingMessage}
-                handleSendMessage={handleSendMessage}
-                quickReplies={quickReplies}
-                onQuickReplySelect={handleQuickReplySelect}
-                userRole={user?.role}
-            />
-          </>
-        ) : (
-            <div className="flex flex-col items-center justify-center h-full bg-muted/20">
-                <EvolveLinkLogo className="h-20 w-auto opacity-10" data-ai-hint="logo company" />
-                <p className="mt-4 text-lg text-muted-foreground">Selecciona una conversación para empezar</p>
-                <p className="text-sm text-muted-foreground">O inicia una nueva desde la lista de contactos.</p>
+                <div className="text-lg min-w-0"> 
+                  {isLoadingMessages && !currentConvoDetails ? (
+                    <span className="text-muted-foreground">Cargando...</span>
+                  ) : currentConvoDetails ? (
+                    <div className="flex flex-col">
+                      <span className="font-semibold truncate leading-tight">{currentConvoDetails.nameLine1}</span>
+                      {currentConvoDetails.nameLine2 && (
+                        <span className="text-xs text-muted-foreground truncate leading-tight">
+                          {currentConvoDetails.nameLine2}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="font-semibold truncate">{formatPhoneNumber(selectedChatId)}</span>
+                  )}
+                </div>
+              </div>
+              
+              {/* Mobile contact info button */}
+              {isMobile && (
+                <Sheet open={isContactSheetOpen} onOpenChange={setIsContactSheetOpen}>
+                  <SheetTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                      <Info className="h-5 w-5" />
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent className="p-0 w-[85vw] max-w-sm flex flex-col">
+                    {contactDetails && initialContactDetails && (
+                      <ContactDetailsPanel
+                        contactDetails={contactDetails}
+                        initialContactDetails={initialContactDetails}
+                        isEditingContact={isEditingContact}
+                        setIsEditingContact={setIsEditingContact}
+                        isLoadingContact={isLoadingContact}
+                        isSavingContact={isSavingContact}
+                        onSave={handleSaveContactDetails}
+                        onCancel={() => { setIsEditingContact(false); setContactDetails(initialContactDetails); }}
+                        onInputChange={handleContactInputChange}
+                        onSelectChange={handleContactSelectChange}
+                        onSwitchChange={handleContactSwitchChange}
+                        onStatusChange={handleContactStatusChange}
+                        formatPhoneNumber={formatPhoneNumber}
+                        teamMembers={teamMembers}
+                        onAssigneeChange={handleAssigneeChange}
+                      />
+                    )}
+                  </SheetContent>
+                </Sheet>
+              )}
             </div>
+
+            {/* Messages Area */}
+            <ScrollArea className="flex-grow p-4 space-y-2 bg-muted/20">
+              {isLoadingMessages ? (
+                <div className="flex justify-center items-center h-full">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : activeMessages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                  <MessageCircle className="h-16 w-16 mb-4" />
+                  <p>No hay mensajes en esta conversación.</p>
+                  <p className="text-sm">Envía un mensaje para comenzar.</p>
+                </div>
+              ) : (
+                <TooltipProvider>
+                  {activeMessages.map((msg) => {
+                    if (msg.type === 'internal_note') {
+                      return (
+                        <div key={msg.id} className="relative my-4 flex items-center justify-center">
+                            <div className="absolute inset-x-0 h-px bg-yellow-300 dark:bg-yellow-700"></div>
+                            <div className="relative flex items-start gap-3 rounded-full bg-yellow-100 dark:bg-yellow-900/50 px-4 py-2 text-xs text-yellow-800 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800 shadow-sm">
+                                <StickyNote className="h-4 w-4 mt-0.5 shrink-0" />
+                                <div className="max-w-sm">
+                                    <p className="font-bold">{msg.author?.name || 'Agente'}</p>
+                                    <p className="whitespace-pre-wrap break-all">{msg.mensaje}</p>
+                                    <p className="text-right text-yellow-600 dark:text-yellow-500 mt-1">{formatChatMessageTimestamp(msg.timestamp)}</p>
+                                </div>
+                            </div>
+                        </div>
+                      );
+                    }
+
+                    const isExternalUser = msg.user_name?.toLowerCase() === 'user'; 
+
+                    let alignmentClass: string;
+                    let bubbleClass: string;
+                    let timestampAlignmentClass: string;
+                    let IconComponent: React.ElementType | null = null;
+                    let avatarTooltipContent: string | null = null;
+                    
+                    if (isExternalUser) {
+                      alignmentClass = 'justify-start'; 
+                      bubbleClass = 'bg-card border'; 
+                      timestampAlignmentClass = 'text-muted-foreground text-left';
+                      IconComponent = UserRound; 
+                    } else { 
+                      alignmentClass = 'justify-end'; 
+                      timestampAlignmentClass = 'text-right';
+
+                      if (msg.user_name === 'bot') {
+                        bubbleClass = 'bg-primary text-primary-foreground';
+                        timestampAlignmentClass += ' text-primary-foreground/80';
+                        IconComponent = Bot;
+                        avatarTooltipContent = "Bot";
+                      } else { // Agent or Admin
+                        bubbleClass = 'bg-accent text-accent-foreground';
+                        timestampAlignmentClass += ' text-accent-foreground/80';
+                        IconComponent = User; 
+                        avatarTooltipContent = msg.author?.name || "Agente";
+                      }
+                    }
+
+                    return (
+                      <div
+                        key={msg.id}
+                        className={`flex w-full items-end gap-2 ${alignmentClass}`}
+                      >
+                        {isExternalUser && IconComponent && <IconComponent className="h-6 w-6 text-muted-foreground shrink-0 mb-1" />}
+                        
+                        <div className={`py-2 px-3 rounded-2xl shadow-sm max-w-[75%] ${bubbleClass}`}>
+                          <div className="text-sm break-all whitespace-pre-wrap leading-relaxed">
+                            {formatWhatsAppMessage(msg.mensaje)}
+                          </div>
+                          <p className={`text-xs mt-1.5 ${timestampAlignmentClass}`}>
+                            {formatChatMessageTimestamp(msg.timestamp)}
+                          </p>
+                        </div>
+
+                        {!isExternalUser && IconComponent && (
+                           <Tooltip>
+                              <TooltipTrigger asChild>
+                                  <IconComponent className="h-6 w-6 text-muted-foreground shrink-0 mb-1" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                  <p>{avatarTooltipContent}</p>
+                              </TooltipContent>
+                           </Tooltip>
+                        )}
+                      </div>
+                    );
+                  })}
+                </TooltipProvider>
+              )}
+              <div ref={messagesEndRef} />
+            </ScrollArea>
+
+            {/* Message Input Area */}
+            <div className="p-4 border-t bg-card flex flex-col space-y-2 sticky bottom-0">
+               <Tabs value={chatMode} onValueChange={(value) => setChatMode(value as any)} className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="message">Mensaje al Cliente</TabsTrigger>
+                  <TabsTrigger value="note">Nota Interna</TabsTrigger>
+                </TabsList>
+                <div className="mt-2">
+                  {chatMode === 'message' && (
+                    <div className="w-full mb-2">
+                      <Select onValueChange={handleQuickReplySelect} disabled={isLoadingQuickReplies || quickReplies.length === 0}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder={
+                            isLoadingQuickReplies ? "Cargando respuestas..." :
+                            quickReplies.length === 0 ? "No hay respuestas rápidas" :
+                            "Seleccionar respuesta rápida..."
+                          } />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none" disabled>Seleccionar respuesta rápida...</SelectItem>
+                          {quickReplies.map((qr) => (
+                            <SelectItem key={qr.id} value={qr.tag}>
+                              {qr.tag} - <span className="text-xs text-muted-foreground truncate max-w-[200px] inline-block">{qr.message}</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground mt-1 text-right">
+                        <Link href="/dashboard/quick-replies" className="hover:underline">
+                          Gestionar respuestas rápidas <Zap className="inline h-3 w-3" />
+                        </Link>
+                      </p>
+                    </div>
+                  )}
+                  <div className="flex w-full items-center space-x-2">
+                    <Textarea
+                      placeholder={chatMode === 'message' ? messagePlaceholder : "Añade una nota para tu equipo (no se enviará al cliente)..."}
+                      value={replyMessage}
+                      onChange={(e) => setReplyMessage(e.target.value)}
+                      className="flex-grow resize-none"
+                      rows={1}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                    />
+                    <Button 
+                      onClick={handleSendMessage} 
+                      disabled={!replyMessage.trim() || isLoadingMessages}
+                      className="shrink-0"
+                      size="lg"
+                    >
+                      <Send className="h-4 w-4" />
+                      <span className="sr-only">Enviar</span>
+                    </Button>
+                  </div>
+                </div>
+              </Tabs>
+            </div>
+          </>
+        ) : ( 
+          <div className={`${isMobile ? 'hidden' : 'flex'} flex-1 flex-col items-center justify-center p-6 bg-muted/20`}>
+            <div className="text-center max-w-md">
+              <EvolveLinkLogo className="h-16 w-auto mx-auto mb-6 text-primary" data-ai-hint="company logo"/>
+              <h2 className="text-2xl font-semibold mb-2">Bienvenido a Qyvoo</h2>
+              <p className="text-muted-foreground mb-6">
+                Selecciona una conversación de la lista de la izquierda para ver los mensajes.
+              </p>
+              <Alert className="bg-background border-border text-foreground">
+                <MessageCircle className="h-5 w-5" />
+                <AlertTitle className="font-semibold">Panel de Monitoreo</AlertTitle>
+                <AlertDescription>
+                  Esta interfaz te permite monitorear las conversaciones de tus campañas y responder como administrador.
+                </AlertDescription>
+              </Alert>
+            </div>
+          </div>
         )}
       </div>
 
-      {/* Contact Details Panel */}
-      <div className="flex flex-col border-l">
-        <ContactDetailsPanel
-          contactDetails={contactDetails}
-          initialContactDetails={initialContactDetails}
-          isEditingContact={isEditingContact}
-          setIsEditingContact={setIsEditingContact}
-          isLoadingContact={isLoadingContact}
-          isSavingContact={isSavingContact}
-          teamMembers={teamMembers}
-          onSave={handleSaveContactDetails}
-          onCancel={handleCancelEditContact}
-          onInputChange={handleInputChange}
-          onSelectChange={handleSelectChange}
-          onStatusChange={handleStatusChange}
-          onSwitchChange={handleSwitchChange}
-          onAssigneeChange={handleAssigneeChange}
-          formatPhoneNumber={formatPhoneNumber}
-        />
-      </div>
+      {/* Desktop Contact Panel - Only visible on desktop when chat is selected */}
+      {showContactPanelDesktop && (
+        <div className="hidden md:flex w-full md:w-1/3 lg:w-1/4 md:min-w-[300px] md:max-w-[380px] border-l flex-col bg-card">
+          <ContactDetailsPanel
+            contactDetails={contactDetails}
+            initialContactDetails={initialContactDetails}
+            isEditingContact={isEditingContact}
+            setIsEditingContact={setIsEditingContact}
+            isLoadingContact={isLoadingContact}
+            isSavingContact={isSavingContact}
+            onSave={handleSaveContactDetails}
+            onCancel={() => { setIsEditingContact(false); setContactDetails(initialContactDetails); }}
+            onInputChange={handleContactInputChange}
+            onSelectChange={handleContactSelectChange}
+            onSwitchChange={handleContactSwitchChange}
+            onStatusChange={handleContactStatusChange}
+            formatPhoneNumber={formatPhoneNumber}
+            teamMembers={teamMembers}
+            onAssigneeChange={handleAssigneeChange}
+          />
+        </div>
+      )}
     </div>
   );
-}
-
-
-// --- Sub-components --- //
-
-interface ConversationListProps {
-  conversations: ConversationSummary[];
-  selectedChatId: string | null;
-  onSelectChat: (chatId: string) => void;
-  isLoading: boolean;
-}
-
-function ConversationList({ conversations, selectedChatId, onSelectChat, isLoading }: ConversationListProps) {
-  if (isLoading) {
-      return (
-          <div className="p-4 space-y-3">
-              {[...Array(5)].map((_, i) => (
-                  <div key={i} className="flex items-center space-x-3">
-                      <div className="h-12 w-12 rounded-full bg-muted animate-pulse" />
-                      <div className="flex-1 space-y-2">
-                          <div className="h-4 w-3/4 rounded bg-muted animate-pulse" />
-                          <div className="h-3 w-1/2 rounded bg-muted animate-pulse" />
-                      </div>
-                  </div>
-              ))}
-          </div>
-      );
-  }
-
-  return (
-    <nav className="p-2 space-y-1">
-      {conversations.map((convo) => (
-        <button
-          key={convo.chat_id}
-          onClick={() => onSelectChat(convo.chat_id)}
-          className={`w-full text-left p-3 rounded-lg flex items-start space-x-3 transition-colors ${selectedChatId === convo.chat_id ? 'bg-primary/10 text-primary' : 'hover:bg-muted/50'}`}
-        >
-          <Avatar className="h-10 w-10">
-            <AvatarFallback>{convo.avatarFallback}</AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <div className="flex justify-between items-center">
-              <p className="font-semibold text-sm truncate">{convo.nameLine1}</p>
-              <p className="text-xs text-muted-foreground whitespace-nowrap">
-                {formatConversationTimestamp(convo.lastMessageTimestamp)}
-              </p>
-            </div>
-            <p className="text-xs text-muted-foreground truncate">
-              {convo.lastMessageSender === 'User' ? <span className="font-medium">Tú:</span> : ''}
-              {convo.lastMessage}
-            </p>
-          </div>
-        </button>
-      ))}
-    </nav>
-  );
-}
-
-
-function ChatMessageComponent({ msg }: { msg: ChatMessage }) {
-  const userNameLower = msg.user_name?.toLowerCase();
-  const isExternalUser = userNameLower === 'user';
-  const alignmentClass = isExternalUser ? 'justify-start' : 'justify-end';
-  const bubbleClass = isExternalUser ? 'bg-background' : 'bg-primary text-primary-foreground';
-  const IconComponent = isExternalUser ? UserRound : (userNameLower === 'bot' ? Bot : User);
-  const avatarFallbackClass = isExternalUser ? "bg-gray-400 text-white" : (userNameLower === 'bot' ? "bg-blue-500 text-white" : "bg-green-500 text-white");
-
-    return (
-        <div className={`flex w-full ${alignmentClass}`}>
-            <div className={`flex items-end max-w-[85%] sm:max-w-[75%] gap-2`}>
-                {isExternalUser && (
-                    <Avatar className="h-8 w-8 self-end mb-1">
-                        <AvatarFallback className={avatarFallbackClass}><IconComponent className="h-5 w-5" /></AvatarFallback>
-                    </Avatar>
-                )}
-                <div className={`py-2 px-3.5 rounded-2xl shadow-sm ${bubbleClass}`}>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                            <div>
-                                {msg.author?.name && userNameLower !== 'bot' && !isExternalUser && (
-                                    <p className="text-xs font-bold mb-1 opacity-90">{msg.author.name}</p>
-                                )}
-                                <div className="text-sm break-all whitespace-pre-wrap">
-                                    {formatWhatsAppMessage(msg.mensaje)}
-                                </div>
-                                <p className={`text-xs mt-1.5 opacity-80 ${isExternalUser ? 'text-right' : 'text-left'}`}>
-                                    {formatTimestamp(msg.timestamp)}
-                                </p>
-                            </div>
-                        </TooltipTrigger>
-                        {msg.author?.name && !isExternalUser && (
-                             <TooltipContent>
-                                <p>{msg.author.name}</p>
-                             </TooltipContent>
-                        )}
-                      </Tooltip>
-                    </TooltipProvider>
-                </div>
-                {!isExternalUser && (
-                    <Avatar className="h-8 w-8 self-end mb-1">
-                         <AvatarFallback className={avatarFallbackClass}><IconComponent className="h-5 w-5" /></AvatarFallback>
-                    </Avatar>
-                )}
-            </div>
-        </div>
-    );
-}
-
-interface MessageInputAreaProps {
-  newMessage: string;
-  setNewMessage: (value: string) => void;
-  isSendingMessage: boolean;
-  handleSendMessage: () => void;
-  quickReplies: QuickReply[];
-  onQuickReplySelect: (message: string) => void;
-  userRole?: 'owner' | 'admin' | 'agent';
-}
-
-function MessageInputArea({
-    newMessage, setNewMessage, isSendingMessage, handleSendMessage,
-    quickReplies, onQuickReplySelect, userRole
-}: MessageInputAreaProps) {
-    const inputRef = useRef<HTMLTextAreaElement>(null);
-
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSendMessage();
-        }
-    };
-    
-    const messagePlaceholder = userRole === 'agent' ? "Escribe tu mensaje como agente..." : "Escribe tu mensaje como administrador...";
-
-    return (
-        <footer className="p-4 border-t bg-background">
-            {quickReplies.length > 0 && (
-                <ScrollArea className="w-full whitespace-nowrap pb-2">
-                    <div className="flex space-x-2">
-                        {quickReplies.map(reply => (
-                            <Button key={reply.id} variant="outline" size="sm" onClick={() => onQuickReplySelect(reply.message)}>
-                                <Zap className="h-3 w-3 mr-1" />
-                                {reply.tag}
-                            </Button>
-                        ))}
-                    </div>
-                </ScrollArea>
-            )}
-            <div className="relative">
-                <Textarea
-                    ref={inputRef}
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder={messagePlaceholder}
-                    className="pr-20"
-                    rows={1}
-                />
-                <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                    <Button onClick={handleSendMessage} disabled={isSendingMessage}>
-                        {isSendingMessage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    </Button>
-                </div>
-            </div>
-        </footer>
-    );
 }
 
     

@@ -380,7 +380,7 @@ export default function ContactDetailPage() {
                                   <StickyNote className="h-4 w-4 mt-0.5 shrink-0" />
                                   <div className="max-w-sm">
                                       <p className="font-bold">{msg.author?.name || 'Agente'}</p>
-                                      <p className="whitespace-pre-wrap">{msg.mensaje}</p>
+                                      <p className="whitespace-pre-wrap break-all">{msg.mensaje}</p>
                                       <p className="text-right text-yellow-600 dark:text-yellow-500 mt-1">{formatChatMessageTimestamp(msg.timestamp)}</p>
                                   </div>
                               </div>
