@@ -229,7 +229,7 @@ export default function TeamPage() {
     
     setIsProcessing({ invite: true });
     try {
-      // 1. Check if user with this email is already in the organization
+      // 1. Check if user with this email is already in THIS organization
       const usersRef = collection(db, 'users');
       const userQuery = query(usersRef, where('email', '==', inviteEmail.trim()), where('organizationId', '==', user.organizationId));
       const userSnapshot = await getDocs(userQuery);
@@ -244,7 +244,7 @@ export default function TeamPage() {
         return;
       }
       
-      // 2. Check if there's a pending invitation for this email in this organization
+      // 2. Check if there's a PENDING invitation for this email in this organization
       const invitationsRef = collection(db, 'invitations');
       const invQuery = query(invitationsRef, where('inviteeEmail', '==', inviteEmail.trim()), where('organizationId', '==', user.organizationId), where('status', '==', 'pending'));
       const invSnapshot = await getDocs(invQuery);

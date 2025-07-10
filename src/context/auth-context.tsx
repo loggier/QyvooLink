@@ -161,22 +161,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const registerUser = async (data: RegisterFormData, invitationId?: string | null) => {
     setLoading(true);
     try {
-        if (!invitationId) {
-            const usersRef = collection(db, 'users');
-            const q = query(usersRef, where('username', '==', data.username));
-            const querySnapshot = await getDocs(q);
-            if (!querySnapshot.empty) {
-                throw new Error("Este nombre de usuario ya está en uso. Por favor, elige otro.");
-            }
-        }
-        
-        const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
-        const firebaseUser = userCredential.user;
+        let firebaseUser: FirebaseUser | null = null;
+        let isExistingUser = false;
 
-        if (!firebaseUser) {
-            throw new Error("No se pudo crear el usuario en Firebase Authentication.");
-        }
-        
+        // --- Invitation Flow ---
         if (invitationId) {
             const invDocRef = doc(db, 'invitations', invitationId);
             const invDocSnap = await getDoc(invDocRef);
@@ -187,6 +175,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             
             const invitationData = invDocSnap.data();
             
+            // Check if a user with this email already exists in Firebase Auth
+            const q = query(collection(db, 'users'), where('email', '==', data.email));
+            const existingUserSnapshot = await getDocs(q);
+            
+            if (!existingUserSnapshot.empty) {
+                // User already exists, link them to the new organization
+                isExistingUser = true;
+                const existingUserDoc = existingUserSnapshot.docs[0];
+                firebaseUser = { uid: existingUserDoc.id, email: data.email } as FirebaseUser;
+                
+                await updateDoc(existingUserDoc.ref, {
+                    organizationId: invitationData.organizationId,
+                    role: invitationData.role,
+                    company: invitationData.organizationName,
+                    isActive: true, // Reactivate if they were inactive
+                });
+            } else {
+                // New user, create them in Firebase Auth
+                const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+                firebaseUser = userCredential.user;
+            }
+            
+            if (!firebaseUser) throw new Error("No se pudo obtener la información del usuario.");
+
+            // Create or update the user's profile in Firestore
             const userProfileData = {
                 uid: firebaseUser.uid,
                 email: firebaseUser.email,
@@ -201,16 +214,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 isVip: false,
                 onboardingCompleted: true,
             };
-            await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
+            await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData, { merge: true });
 
             await updateDoc(invDocRef, {
                 status: 'accepted',
                 acceptedAt: serverTimestamp(),
                 acceptedByUid: firebaseUser.uid,
             });
+            
+            // If it was an existing user, they might not be logged in. We log them in.
+            if (isExistingUser) {
+                 await signInWithEmailAndPassword(auth, data.email, data.password);
+            }
 
             router.push('/dashboard');
+        
+        // --- Standard Registration Flow ---
         } else {
+            const usersRef = collection(db, 'users');
+            const q = query(usersRef, where('username', '==', data.username));
+            const querySnapshot = await getDocs(q);
+            if (!querySnapshot.empty) {
+                throw new Error("Este nombre de usuario ya está en uso. Por favor, elige otro.");
+            }
+            
+            const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+            firebaseUser = userCredential.user;
+            if (!firebaseUser) throw new Error("No se pudo crear el usuario en Firebase Authentication.");
+
             const orgRef = await addDoc(collection(db, 'organizations'), {
                 name: data.company,
                 ownerId: firebaseUser.uid,
@@ -245,8 +276,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             router.push('/subscribe');
         }
 
-        return userCredential;
-
     } catch (error: any) {
         console.error("Error de registro:", error);
         let errorMessage = "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.";
@@ -273,6 +302,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setLoading(false);
     }
   };
+
 
   const loginUser = async (data: LoginFormData) => {
     setLoading(true);
