@@ -296,9 +296,11 @@ export default function ContactsPage() {
                         <Button variant="outline" size="icon" onClick={() => handleEditContact(contact)}>
                           <Edit3 className="h-4 w-4" />
                         </Button>
-                        <Button variant="destructive" size="icon" onClick={() => handleDeleteContact(contact)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {user?.role !== 'agent' && (
+                          <Button variant="destructive" size="icon" onClick={() => handleDeleteContact(contact)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
