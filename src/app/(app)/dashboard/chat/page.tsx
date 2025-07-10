@@ -14,13 +14,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EvolveLinkLogo } from '@/components/icons';
-import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft, ListTodo, UserCog, Filter, StickyNote } from 'lucide-react'; 
+import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft, ListTodo, UserCog, Filter } from 'lucide-react'; 
 import type { WhatsAppInstance } from '../configuration/page'; 
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input'; 
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label'; 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input"; 
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label"; 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -48,7 +48,6 @@ interface ChatMessageDocument {
     uid: string;
     name: string;
   };
-  type?: 'message' | 'internal_note';
 }
 
 interface ChatMessage extends ChatMessageDocument {
@@ -167,9 +166,6 @@ export default function ChatPage() {
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   
   const [filter, setFilter] = useState<'all' | 'mine' | 'unassigned'>('all');
-  
-  const [isInternalNote, setIsInternalNote] = useState(false);
-  const [internalNoteMessage, setInternalNoteMessage] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const dataFetchUserId = user?.role === 'agent' ? user?.ownerId : user?.uid;
@@ -488,11 +484,8 @@ export default function ChatPage() {
   };
 
   const handleSendMessage = async () => {
-    if ((!newMessage.trim() && !isInternalNote) || (!internalNoteMessage.trim() && isInternalNote) || !selectedChatId || !whatsAppInstance || !user) return;
+    if (!newMessage.trim() || !selectedChatId || !whatsAppInstance || !user) return;
     
-    const messageContent = isInternalNote ? internalNoteMessage : newMessage;
-    const messageType = isInternalNote ? 'internal_note' : 'message';
-
     setIsSendingMessage(true);
     
     try {
@@ -502,51 +495,45 @@ export default function ChatPage() {
             to: selectedChatId,
             instance: whatsAppInstance.name,
             instanceId: whatsAppInstance.id || whatsAppInstance.name,
-            mensaje: messageContent,
+            mensaje: newMessage,
             timestamp: serverTimestamp(),
             user_name: user.role === 'agent' ? 'agente' : 'administrador',
             author: {
                 uid: user.uid,
                 name: user.fullName || user.email,
             },
-            type: messageType,
         };
 
         // Add message to Firestore 'chat' collection
         await addDoc(collection(db, 'chat'), messageData);
         
-        if (isInternalNote) {
-            setInternalNoteMessage('');
-            setIsInternalNote(false);
+        // Also send via Qyvoo API
+        const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
+        const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL;
+        const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL;
+
+        let baseWebhookUrl: string | undefined;
+        if (useTestWebhook) {
+            baseWebhookUrl = testWebhookBase;
         } else {
-             // If not an internal note, also send via Qyvoo API
-            const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
-            const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL;
-            const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL;
-
-            let baseWebhookUrl: string | undefined;
-            if (useTestWebhook) {
-                baseWebhookUrl = testWebhookBase;
-            } else {
-                baseWebhookUrl = prodWebhookBase;
-            }
-            if (!baseWebhookUrl) {
-                throw new Error("La URL del webhook no está configurada.");
-            }
-            const webhookUrl = `${baseWebhookUrl}?action=send_message`;
-            
-            await fetch(webhookUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    instanceName: whatsAppInstance.name,
-                    number: selectedChatId,
-                    message: newMessage,
-                }),
-            });
-            setNewMessage('');
+            baseWebhookUrl = prodWebhookBase;
         }
+        if (!baseWebhookUrl) {
+            throw new Error("La URL del webhook no está configurada.");
+        }
+        const webhookUrl = `${baseWebhookUrl}?action=send_message`;
+        
+        await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                instanceName: whatsAppInstance.name,
+                number: selectedChatId,
+                message: newMessage,
+            }),
+        });
 
+        setNewMessage('');
     } catch (error) {
         console.error("Error sending message:", error);
         toast({ variant: 'destructive', title: 'Error de Envío', description: 'No se pudo enviar el mensaje.' });
@@ -598,10 +585,6 @@ export default function ChatPage() {
                 handleSendMessage={handleSendMessage}
                 quickReplies={quickReplies}
                 onQuickReplySelect={handleQuickReplySelect}
-                isInternalNote={isInternalNote}
-                setIsInternalNote={setIsInternalNote}
-                internalNoteMessage={internalNoteMessage}
-                setInternalNoteMessage={setInternalNoteMessage}
                 userRole={user?.role}
              />
           </div>
@@ -687,10 +670,6 @@ export default function ChatPage() {
                 handleSendMessage={handleSendMessage}
                 quickReplies={quickReplies}
                 onQuickReplySelect={handleQuickReplySelect}
-                isInternalNote={isInternalNote}
-                setIsInternalNote={setIsInternalNote}
-                internalNoteMessage={internalNoteMessage}
-                setInternalNoteMessage={setInternalNoteMessage}
                 userRole={user?.role}
             />
           </>
@@ -785,28 +764,12 @@ function ConversationList({ conversations, selectedChatId, onSelectChat, isLoadi
 
 
 function ChatMessageComponent({ msg }: { msg: ChatMessage }) {
-    if (msg.type === 'internal_note') {
-        return (
-            <div key={msg.id} className="relative my-4 flex items-center justify-center">
-                <div className="absolute inset-x-0 h-px bg-yellow-300 dark:bg-yellow-700"></div>
-                <div className="relative flex items-start gap-3 rounded-full bg-yellow-100 dark:bg-yellow-900/50 px-4 py-2 text-xs text-yellow-800 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800 shadow-sm">
-                    <StickyNote className="h-4 w-4 mt-0.5 shrink-0" />
-                    <div className="max-w-sm">
-                        <p className="font-bold">{msg.author?.name || 'Agente'}</p>
-                        <p className="whitespace-pre-wrap">{msg.mensaje}</p>
-                        <p className="text-right text-yellow-600 dark:text-yellow-500 mt-1">{formatTimestamp(msg.timestamp)}</p>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-    
-    const userNameLower = msg.user_name?.toLowerCase();
-    const isExternalUser = userNameLower === 'user';
-    const alignmentClass = isExternalUser ? 'justify-start' : 'justify-end';
-    const bubbleClass = isExternalUser ? 'bg-background' : 'bg-primary text-primary-foreground';
-    const IconComponent = isExternalUser ? UserRound : (userNameLower === 'bot' ? Bot : User);
-    const avatarFallbackClass = isExternalUser ? "bg-gray-400 text-white" : (userNameLower === 'bot' ? "bg-blue-500 text-white" : "bg-green-500 text-white");
+  const userNameLower = msg.user_name?.toLowerCase();
+  const isExternalUser = userNameLower === 'user';
+  const alignmentClass = isExternalUser ? 'justify-start' : 'justify-end';
+  const bubbleClass = isExternalUser ? 'bg-background' : 'bg-primary text-primary-foreground';
+  const IconComponent = isExternalUser ? UserRound : (userNameLower === 'bot' ? Bot : User);
+  const avatarFallbackClass = isExternalUser ? "bg-gray-400 text-white" : (userNameLower === 'bot' ? "bg-blue-500 text-white" : "bg-green-500 text-white");
 
     return (
         <div className={`flex w-full ${alignmentClass}`}>
@@ -857,17 +820,12 @@ interface MessageInputAreaProps {
   handleSendMessage: () => void;
   quickReplies: QuickReply[];
   onQuickReplySelect: (message: string) => void;
-  isInternalNote: boolean;
-  setIsInternalNote: (value: boolean) => void;
-  internalNoteMessage: string;
-  setInternalNoteMessage: (value: string) => void;
   userRole?: 'owner' | 'admin' | 'agent';
 }
 
 function MessageInputArea({
     newMessage, setNewMessage, isSendingMessage, handleSendMessage,
-    quickReplies, onQuickReplySelect, isInternalNote, setIsInternalNote,
-    internalNoteMessage, setInternalNoteMessage, userRole
+    quickReplies, onQuickReplySelect, userRole
 }: MessageInputAreaProps) {
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -881,8 +839,8 @@ function MessageInputArea({
     const messagePlaceholder = userRole === 'agent' ? "Escribe tu mensaje como agente..." : "Escribe tu mensaje como administrador...";
 
     return (
-        <footer className={`p-4 border-t bg-background transition-colors duration-300 ${isInternalNote ? 'bg-yellow-50 dark:bg-yellow-900/20' : ''}`}>
-            {quickReplies.length > 0 && !isInternalNote && (
+        <footer className="p-4 border-t bg-background">
+            {quickReplies.length > 0 && (
                 <ScrollArea className="w-full whitespace-nowrap pb-2">
                     <div className="flex space-x-2">
                         {quickReplies.map(reply => (
@@ -897,27 +855,14 @@ function MessageInputArea({
             <div className="relative">
                 <Textarea
                     ref={inputRef}
-                    value={isInternalNote ? internalNoteMessage : newMessage}
-                    onChange={(e) => isInternalNote ? setInternalNoteMessage(e.target.value) : setNewMessage(e.target.value)}
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder={isInternalNote ? 'Escribe una nota interna (solo visible para tu equipo)...' : messagePlaceholder}
-                    className={`pr-24 transition-colors duration-300 ${isInternalNote ? 'border-yellow-400 focus-visible:ring-yellow-500' : ''}`}
+                    placeholder={messagePlaceholder}
+                    className="pr-20"
                     rows={1}
                 />
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                     <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={() => setIsInternalNote(!isInternalNote)}>
-                                <StickyNote className={`h-5 w-5 ${isInternalNote ? 'text-yellow-600' : 'text-muted-foreground'}`} />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>{isInternalNote ? 'Cambiar a mensaje normal' : 'Añadir nota interna'}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-
+                <div className="absolute right-2 top-1/2 -translate-y-1/2">
                     <Button onClick={handleSendMessage} disabled={isSendingMessage}>
                         {isSendingMessage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                     </Button>
@@ -926,7 +871,5 @@ function MessageInputArea({
         </footer>
     );
 }
-
-    
 
     
