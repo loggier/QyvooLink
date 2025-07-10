@@ -251,7 +251,15 @@ export default function ChatPage() {
         const messagesByChatId = new Map<string, ChatMessageDocument>();
         querySnapshot.forEach(doc => {
           const msg = doc.data() as ChatMessageDocument;
-          const chatId = msg.chat_id.endsWith('@g.us') ? msg.chat_id : (msg.from === instanceIdentifier ? msg.to : msg.from);
+          // Robustly get the external chat ID
+          let chatId = msg.chat_id;
+          if (!chatId.endsWith('@g.us')) { // Not a group chat
+             if (msg.user_name?.toLowerCase() === 'user' || msg.from.includes('@c.us')) {
+                chatId = msg.from;
+             } else if (msg.to.includes('@c.us')) {
+                chatId = msg.to;
+             }
+          }
           if (!messagesByChatId.has(chatId)) {
             messagesByChatId.set(chatId, msg);
           }
@@ -267,8 +275,7 @@ export default function ChatPage() {
         const contactDetailsResults = await Promise.all(contactDetailsPromises);
         const contactsMap = new Map(contactDetailsResults.map(r => [r.chatId, r.data]));
         
-        const conversationSummaries = Array.from(messagesByChatId.values()).map(msg => {
-            const chatId = msg.chat_id.endsWith('@g.us') ? msg.chat_id : (msg.from === instanceIdentifier ? msg.to : msg.from);
+        const conversationSummaries = Array.from(messagesByChatId.entries()).map(([chatId, msg]) => {
             const contactData = contactsMap.get(chatId);
 
             const name = (contactData?.nombre && contactData?.apellido) ? `${contactData.nombre} ${contactData.apellido}` : contactData?.nombre || formatPhoneNumber(chatId);
