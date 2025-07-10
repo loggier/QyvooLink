@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -151,9 +152,13 @@ export default function ProfilePage() {
       phone: formData.phone,
       country: formData.country,
       city: formData.city,
-      sector: formData.sector,
-      employeeCount: formData.employeeCount,
     };
+    
+    // Only include owner/admin fields if the user is not an agent
+    if (user.role !== 'agent') {
+      dataToSave.sector = formData.sector;
+      dataToSave.employeeCount = formData.employeeCount;
+    }
 
     try {
       await setDoc(doc(db, 'users', user.uid), dataToSave, { merge: true });
@@ -228,6 +233,7 @@ export default function ProfilePage() {
                 placeholder="Tu nombre completo"
               />
             </div>
+            
             <div className="space-y-2">
               <Label htmlFor="company" className="flex items-center"><Building className="mr-2 h-4 w-4 text-muted-foreground"/>Empresa</Label>
               <Input 
@@ -236,8 +242,12 @@ export default function ProfilePage() {
                 value={formData.company || ''} 
                 onChange={handleInputChange} 
                 placeholder="Nombre de tu empresa"
+                readOnly={user.role === 'agent'}
+                disabled={user.role === 'agent'}
+                className={user.role === 'agent' ? 'bg-muted/50' : ''}
               />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="phone" className="flex items-center"><Phone className="mr-2 h-4 w-4 text-muted-foreground"/>Teléfono</Label>
               <Input 
@@ -268,32 +278,38 @@ export default function ProfilePage() {
                 placeholder="Ciudad de residencia"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="sector" className="flex items-center"><Briefcase className="mr-2 h-4 w-4 text-muted-foreground"/>Sector</Label>
-              <Select name="sector" value={formData.sector || ""} onValueChange={(value) => handleSelectChange('sector', value)}>
-                <SelectTrigger id="sector">
-                  <SelectValue placeholder="Selecciona tu sector" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sectorOptions.map(option => (
-                    <SelectItem key={option} value={option}>{option}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="employeeCount" className="flex items-center"><Users className="mr-2 h-4 w-4 text-muted-foreground"/>Número de Empleados</Label>
-              <Select name="employeeCount" value={formData.employeeCount || ""} onValueChange={(value) => handleSelectChange('employeeCount', value)}>
-                <SelectTrigger id="employeeCount">
-                  <SelectValue placeholder="Selecciona rango de empleados" />
-                </SelectTrigger>
-                <SelectContent>
-                  {employeeCountOptions.map(option => (
-                    <SelectItem key={option} value={option}>{option}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+
+            {user.role !== 'agent' && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="sector" className="flex items-center"><Briefcase className="mr-2 h-4 w-4 text-muted-foreground"/>Sector</Label>
+                  <Select name="sector" value={formData.sector || ""} onValueChange={(value) => handleSelectChange('sector', value)}>
+                    <SelectTrigger id="sector">
+                      <SelectValue placeholder="Selecciona tu sector" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sectorOptions.map(option => (
+                        <SelectItem key={option} value={option}>{option}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="employeeCount" className="flex items-center"><Users className="mr-2 h-4 w-4 text-muted-foreground"/>Número de Empleados</Label>
+                  <Select name="employeeCount" value={formData.employeeCount || ""} onValueChange={(value) => handleSelectChange('employeeCount', value)}>
+                    <SelectTrigger id="employeeCount">
+                      <SelectValue placeholder="Selecciona rango de empleados" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {employeeCountOptions.map(option => (
+                        <SelectItem key={option} value={option}>{option}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+
              <div className="space-y-2">
               <Label htmlFor="email" className="flex items-center"><Mail className="mr-2 h-4 w-4 text-muted-foreground"/>Correo Electrónico (No editable)</Label>
               <Input 
@@ -326,20 +342,22 @@ export default function ProfilePage() {
         </CardContent>
       </Card>
       
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center text-2xl">
-            <CreditCard className="mr-3 h-7 w-7 text-primary" />
-            Suscripción y Pagos
-          </CardTitle>
-           <CardDescription>
-            Visualiza tu plan actual, elige uno nuevo o gestiona tu suscripción.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-            <SubscriptionManager />
-        </CardContent>
-      </Card>
+      {user.role !== 'agent' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center text-2xl">
+              <CreditCard className="mr-3 h-7 w-7 text-primary" />
+              Suscripción y Pagos
+            </CardTitle>
+            <CardDescription>
+              Visualiza tu plan actual, elige uno nuevo o gestiona tu suscripción.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+              <SubscriptionManager />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
