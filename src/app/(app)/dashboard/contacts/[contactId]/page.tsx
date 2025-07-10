@@ -412,16 +412,11 @@ export default function ContactDetailPage() {
                          timestampAlignmentClass += ' text-primary-foreground/80';
                          IconComponent = Bot;
                          avatarFallbackClass = "bg-blue-500 text-white";
-                       } else if (userNameLower === 'agente') {
-                         bubbleClass = 'bg-secondary text-secondary-foreground dark:bg-slate-600 dark:text-slate-100';
-                         timestampAlignmentClass += ' text-secondary-foreground/80';
+                       } else { // Generic for agent/admin/etc.
+                         bubbleClass = 'bg-accent text-accent-foreground dark:bg-slate-600 dark:text-slate-100';
+                         timestampAlignmentClass += ' text-accent-foreground/80';
                          IconComponent = User; 
                          avatarFallbackClass = "bg-green-500 text-white";
-                       } else { 
-                         bubbleClass = 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200';
-                         timestampAlignmentClass += ' text-gray-500 dark:text-gray-400';
-                         IconComponent = MessageCircle; 
-                         avatarFallbackClass = "bg-gray-300 dark:bg-gray-600 text-black dark:text-white";
                        }
                      }
                      return (
@@ -435,6 +430,7 @@ export default function ContactDetailPage() {
                             </Avatar>
                           )}
                           <div className={`py-2 px-3 rounded-lg shadow-md ${bubbleClass}`}>
+                             {msg.author?.name && userNameLower !== 'bot' && !isExternalUser && <p className="text-xs font-bold mb-1">{msg.author.name}</p>}
                             <div className="text-sm break-all whitespace-pre-wrap">
                               {formatWhatsAppMessage(msg.mensaje)}
                             </div>
@@ -473,3 +469,6 @@ export default function ContactDetailPage() {
     </div>
   );
 }
+
+
+    
