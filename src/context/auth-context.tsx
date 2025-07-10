@@ -249,14 +249,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     } catch (error: any) {
         console.error("Error de registro:", error);
-        let errorMessage = error.message || "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.";
-        if (error.code === 'auth/email-already-in-use') {
-            errorMessage = "Este correo electrónico ya está en uso. Por favor, intenta con otro.";
-        } else if (error.code === 'auth/weak-password') {
-            errorMessage = "La contraseña es demasiado débil. Por favor, elige una más segura.";
-        } else if (error.code === 'auth/invalid-email') {
-            errorMessage = "El formato del correo electrónico no es válido.";
+        let errorMessage = "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.";
+        
+        switch (error.code) {
+            case 'auth/email-already-in-use':
+                errorMessage = "Este correo electrónico ya está en uso. Por favor, inicia sesión o utiliza otro correo electrónico.";
+                break;
+            case 'auth/weak-password':
+                errorMessage = "La contraseña es demasiado débil. Por favor, elige una más segura con al menos 6 caracteres.";
+                break;
+            case 'auth/invalid-email':
+                errorMessage = "El formato del correo electrónico no es válido.";
+                break;
+            default:
+                if (error.message) {
+                    errorMessage = error.message;
+                }
+                break;
         }
+        
         throw new Error(errorMessage);
     } finally {
         setLoading(false);
