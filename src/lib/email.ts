@@ -50,13 +50,14 @@ interface InvitationEmailProps {
     inviteeEmail: string;
     organizationName: string;
     inviterName: string;
+    invitationId: string; // The unique ID of the invitation document
 }
 
-export const sendInvitationEmail = async ({ inviteeEmail, organizationName, inviterName }: InvitationEmailProps) => {
+export const sendInvitationEmail = async ({ inviteeEmail, organizationName, inviterName, invitationId }: InvitationEmailProps) => {
     const subject = `Has sido invitado a unirte a ${organizationName} en Qyvoo`;
     
-    // Construct the registration URL using the base URL from environment variables
-    const registrationUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/register`;
+    // Construct the unique registration URL with the invitation token
+    const registrationUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/register?invitationId=${invitationId}`;
     
     const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f9f9f9; padding: 20px;">
@@ -72,7 +73,7 @@ export const sendInvitationEmail = async ({ inviteeEmail, organizationName, invi
             Aceptar Invitación
           </a>
         </div>
-        <p style="font-size: 16px;">Para unirte, haz clic en el botón de arriba y completa el registro usando este correo electrónico: <strong>${inviteeEmail}</strong>. Tu cuenta se vinculará automáticamente a la organización.</p>
+        <p style="font-size: 16px;">Para unirte, haz clic en el botón de arriba. Tu correo electrónico (${inviteeEmail}) ya estará listo para que completes tu registro. Tu cuenta se vinculará automáticamente a la organización.</p>
         <p style="font-size: 14px; color: #666;">Si no esperabas esta invitación, puedes ignorar este correo electrónico de forma segura.</p>
         <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
         <p style="font-size: 12px; color: #888; text-align: center;">

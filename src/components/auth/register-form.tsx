@@ -18,8 +18,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
-import { Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { Loader2, Building, Mail } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 const phoneRegex = new RegExp(
   /^([+]?[\s0-9]+)?(\d{3}|[(]?[0-9]+[)])?([-]?[\s]?[0-9])+$/
@@ -43,6 +46,12 @@ export type RegisterFormData = z.infer<typeof registerSchema>;
 
 export function RegisterForm() {
   const [isLoading, setIsLoading] = useState(false);
+  const [isInvitation, setIsInvitation] = useState(false);
+  const [invitationOrgName, setInvitationOrgName] = useState('');
+  
+  const searchParams = useSearchParams();
+  const invitationId = searchParams.get('invitationId');
+
   const form = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
@@ -60,13 +69,42 @@ export function RegisterForm() {
   const { registerUser } = useAuth();
   const { toast } = useToast();
 
+  useEffect(() => {
+    const fetchInvitationDetails = async () => {
+      if (invitationId) {
+        setIsLoading(true);
+        try {
+          const invDocRef = doc(db, 'invitations', invitationId);
+          const invDocSnap = await getDoc(invDocRef);
+          if (invDocSnap.exists() && invDocSnap.data().status === 'pending') {
+            const invData = invDocSnap.data();
+            form.setValue('email', invData.inviteeEmail);
+            form.setValue('company', invData.organizationName); // Set company name from invitation
+            setIsInvitation(true);
+            setInvitationOrgName(invData.organizationName);
+          } else {
+            toast({ variant: 'destructive', title: 'Error', description: 'Invitación no válida o ya utilizada.' });
+          }
+        } catch (error) {
+          toast({ variant: 'destructive', title: 'Error', description: 'No se pudo verificar la invitación.' });
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+    fetchInvitationDetails();
+  }, [invitationId, form, toast]);
+
+
   async function onSubmit(values: RegisterFormData) {
     setIsLoading(true);
     try {
-      await registerUser(values);
+      await registerUser(values, invitationId);
       toast({
         title: "Registro Exitoso",
-        description: "¡Bienvenido a Qyvoo! Ahora elige un plan para comenzar.",
+        description: isInvitation 
+          ? `¡Bienvenido a ${invitationOrgName}! Ya puedes colaborar con tu equipo.`
+          : "¡Bienvenido a Qyvoo! Ahora elige un plan para comenzar.",
       });
       // Redirect is handled by AuthContext and the registerUser function
     } catch (error: any) {
@@ -82,6 +120,12 @@ export function RegisterForm() {
 
   return (
     <Form {...form}>
+      {isInvitation && (
+        <div className="mb-4 p-3 rounded-md bg-primary/10 border border-primary/20 text-sm text-primary">
+          <p>Estás aceptando una invitación para unirte a la organización:</p>
+          <p className="font-semibold">{invitationOrgName}</p>
+        </div>
+      )}
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <FormField
           control={form.control}
@@ -96,32 +140,65 @@ export function RegisterForm() {
             </FormItem>
           )}
         />
-        <FormField
-          control={form.control}
-          name="company"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Empresa</FormLabel>
-              <FormControl>
-                <Input placeholder="Acme Inc." {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Correo Electrónico</FormLabel>
-              <FormControl>
-                <Input type="email" placeholder="tu@ejemplo.com" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {isInvitation ? (
+          <>
+            <FormField
+              control={form.control}
+              name="company"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center"><Building className="h-4 w-4 mr-2 text-muted-foreground"/>Empresa (de la invitación)</FormLabel>
+                  <FormControl>
+                    <Input {...field} readOnly disabled className="bg-muted/50" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+             <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center"><Mail className="h-4 w-4 mr-2 text-muted-foreground"/>Correo Electrónico (de la invitación)</FormLabel>
+                  <FormControl>
+                    <Input type="email" {...field} readOnly disabled className="bg-muted/50" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </>
+        ) : (
+          <>
+            <FormField
+              control={form.control}
+              name="company"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Empresa</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Acme Inc." {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Correo Electrónico</FormLabel>
+                  <FormControl>
+                    <Input type="email" placeholder="tu@ejemplo.com" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </>
+        )}
         <FormField
           control={form.control}
           name="phone"
@@ -187,7 +264,7 @@ export function RegisterForm() {
               </FormControl>
               <div className="space-y-1 leading-none">
                 <FormLabel>
-                  Acepto los <Link href="/terms" className="text-primary hover:underline">Términos y Condiciones</Link>
+                  Acepto los <Link href="/terms" className="text-primary hover:underline" target="_blank">Términos y Condiciones</Link> y la <Link href="/privacy" className="text-primary hover:underline" target="_blank">Política de Privacidad</Link>.
                 </FormLabel>
                 <FormMessage />
               </div>
@@ -196,7 +273,7 @@ export function RegisterForm() {
         />
         <Button type="submit" className="w-full" disabled={isLoading}>
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Crear Cuenta
+          {isInvitation ? 'Unirme a la Organización' : 'Crear Cuenta'}
         </Button>
         <p className="text-center text-sm text-muted-foreground">
           ¿Ya tienes una cuenta?{' '}

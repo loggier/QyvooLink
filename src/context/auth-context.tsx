@@ -47,7 +47,7 @@ interface UserProfile {
 interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
-  registerUser: (data: RegisterFormData) => Promise<UserCredential | void>;
+  registerUser: (data: RegisterFormData, invitationId?: string | null) => Promise<UserCredential | void>;
   loginUser: (data: LoginFormData) => Promise<UserCredential | void>;
   logoutUser: () => Promise<void>;
   updateUserPassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -158,117 +158,108 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => unsubscribe();
   }, [router]);
 
-  const registerUser = async (data: RegisterFormData) => {
+  const registerUser = async (data: RegisterFormData, invitationId?: string | null) => {
     setLoading(true);
     try {
-      const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('username', '==', data.username));
-      const querySnapshot = await getDocs(q);
-      if (!querySnapshot.empty) {
-        throw new Error("Este nombre de usuario ya está en uso. Por favor, elige otro.");
-      }
-      
-      const invitationsRef = collection(db, 'invitations');
-      const invQuery = query(invitationsRef, where('inviteeEmail', '==', data.email.trim()), where('status', '==', 'pending'));
-      const invSnapshot = await getDocs(invQuery);
-
-      const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
-      const firebaseUser = userCredential.user;
-
-      if (!firebaseUser) {
-        throw new Error("No se pudo crear el usuario en Firebase Authentication.");
-      }
-
-      if (!invSnapshot.empty) {
-        // --- Invited User Flow ---
-        const invitationDoc = invSnapshot.docs[0];
-        const invitationData = invitationDoc.data();
+        if (!invitationId) {
+            const usersRef = collection(db, 'users');
+            const q = query(usersRef, where('username', '==', data.username));
+            const querySnapshot = await getDocs(q);
+            if (!querySnapshot.empty) {
+                throw new Error("Este nombre de usuario ya está en uso. Por favor, elige otro.");
+            }
+        }
         
-        const userProfileData = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          fullName: data.fullName,
-          company: invitationData.organizationName, // Use company name from invitation
-          phone: data.phone,
-          username: data.username,
-          country: '', 
-          city: '',
-          sector: '',
-          employeeCount: '',
-          role: invitationData.role,
-          organizationId: invitationData.organizationId,
-          createdAt: serverTimestamp(),
-          isActive: true,
-          isVip: false,
-          onboardingCompleted: true, // Invited users skip the tour
-        };
-        await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
+        const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+        const firebaseUser = userCredential.user;
 
-        // Mark the invitation as accepted
-        await updateDoc(doc(db, 'invitations', invitationDoc.id), {
-            status: 'accepted',
-            acceptedAt: serverTimestamp(),
-            acceptedByUid: firebaseUser.uid,
-        });
+        if (!firebaseUser) {
+            throw new Error("No se pudo crear el usuario en Firebase Authentication.");
+        }
+        
+        if (invitationId) {
+            const invDocRef = doc(db, 'invitations', invitationId);
+            const invDocSnap = await getDoc(invDocRef);
 
-        // Redirect directly to the dashboard, skipping subscription
-        router.push('/dashboard');
-      } else {
-        // --- New Organization Owner Flow ---
-        const orgRef = await addDoc(collection(db, 'organizations'), {
-            name: data.company,
-            ownerId: firebaseUser.uid,
-            createdAt: serverTimestamp()
-        });
-        
-        const userProfileData = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          fullName: data.fullName,
-          company: data.company,
-          phone: data.phone,
-          username: data.username,
-          country: '', 
-          city: '',
-          sector: '',
-          employeeCount: '',
-          role: 'owner',
-          organizationId: orgRef.id,
-          createdAt: serverTimestamp(),
-          isActive: true,
-          isVip: false,
-          onboardingCompleted: false,
-        };
-        await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
-        
-        try {
-          await sendWelcomeEmail({
-            userEmail: data.email,
-            userName: data.fullName,
-          });
-        } catch (emailError) {
-          console.error("Failed to send welcome email:", emailError);
+            if (!invDocSnap.exists() || invDocSnap.data().status !== 'pending' || invDocSnap.data().inviteeEmail !== data.email) {
+                throw new Error("La invitación es inválida, ha expirado o no coincide con tu correo electrónico.");
+            }
+            
+            const invitationData = invDocSnap.data();
+            
+            const userProfileData = {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                fullName: data.fullName,
+                company: invitationData.organizationName,
+                phone: data.phone,
+                username: data.username,
+                role: invitationData.role,
+                organizationId: invitationData.organizationId,
+                createdAt: serverTimestamp(),
+                isActive: true,
+                isVip: false,
+                onboardingCompleted: true,
+            };
+            await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
+
+            await updateDoc(invDocRef, {
+                status: 'accepted',
+                acceptedAt: serverTimestamp(),
+                acceptedByUid: firebaseUser.uid,
+            });
+
+            router.push('/dashboard');
+        } else {
+            const orgRef = await addDoc(collection(db, 'organizations'), {
+                name: data.company,
+                ownerId: firebaseUser.uid,
+                createdAt: serverTimestamp()
+            });
+            
+            const userProfileData = {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                fullName: data.fullName,
+                company: data.company,
+                phone: data.phone,
+                username: data.username,
+                role: 'owner',
+                organizationId: orgRef.id,
+                createdAt: serverTimestamp(),
+                isActive: true,
+                isVip: false,
+                onboardingCompleted: false,
+            };
+            await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
+            
+            try {
+                await sendWelcomeEmail({
+                    userEmail: data.email,
+                    userName: data.fullName,
+                });
+            } catch (emailError) {
+                console.error("Failed to send welcome email:", emailError);
+            }
+
+            router.push('/subscribe');
         }
 
-        // Redirect to subscription page for new owners
-        router.push('/subscribe');
-      }
-
-      return userCredential;
+        return userCredential;
 
     } catch (error: any) {
-      console.error("Error de registro:", error);
-      let errorMessage = error.message || "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.";
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = "Este correo electrónico ya está en uso. Por favor, intenta con otro.";
-      } else if (error.code === 'auth/weak-password') {
-        errorMessage = "La contraseña es demasiado débil. Por favor, elige una más segura.";
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = "El formato del correo electrónico no es válido.";
-      }
-      throw new Error(errorMessage);
+        console.error("Error de registro:", error);
+        let errorMessage = error.message || "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.";
+        if (error.code === 'auth/email-already-in-use') {
+            errorMessage = "Este correo electrónico ya está en uso. Por favor, intenta con otro.";
+        } else if (error.code === 'auth/weak-password') {
+            errorMessage = "La contraseña es demasiado débil. Por favor, elige una más segura.";
+        } else if (error.code === 'auth/invalid-email') {
+            errorMessage = "El formato del correo electrónico no es válido.";
+        }
+        throw new Error(errorMessage);
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
   };
 

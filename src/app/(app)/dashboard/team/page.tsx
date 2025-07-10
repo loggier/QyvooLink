@@ -261,7 +261,7 @@ export default function TeamPage() {
       
       // 3. Create a new invitation document
       const organizationName = user.company || `${user.fullName}'s Team`;
-      await addDoc(invitationsRef, {
+      const newInvitationRef = await addDoc(invitationsRef, {
         organizationId: user.organizationId,
         organizationName: organizationName,
         inviterId: user.uid,
@@ -272,11 +272,12 @@ export default function TeamPage() {
         createdAt: serverTimestamp(),
       });
       
-      // 4. Send the invitation email
+      // 4. Send the invitation email with the unique tokenized link
       await sendInvitationEmail({
         inviteeEmail: inviteEmail.trim(),
         organizationName: organizationName,
         inviterName: user.fullName || user.email || 'Un miembro del equipo',
+        invitationId: newInvitationRef.id, // Pass the unique ID
       });
 
       toast({
