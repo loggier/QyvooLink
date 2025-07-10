@@ -151,6 +151,7 @@ export default function ChatPage() {
   const searchParams = useSearchParams();
   const router = useRouter(); 
   const isMobile = useIsMobile();
+  const dataFetchUserId = user?.role === 'agent' ? user?.ownerId : user?.uid;
 
   const [whatsAppInstance, setWhatsAppInstance] = useState<WhatsAppInstance | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -199,12 +200,12 @@ export default function ChatPage() {
   }, [activeMessages]);
 
   useEffect(() => {
-    if (user) {
+    if (dataFetchUserId) {
       const fetchInstance = async () => {
         setIsLoadingInstance(true);
         setError(null);
         try {
-          const instanceDocRef = doc(db, 'instances', user.uid);
+          const instanceDocRef = doc(db, 'instances', dataFetchUserId);
           const instanceDocSnap = await getDoc(instanceDocRef);
           if (instanceDocSnap.exists()) {
             const instanceData = instanceDocSnap.data() as WhatsAppInstance;
@@ -227,7 +228,7 @@ export default function ChatPage() {
     } else {
       setIsLoadingInstance(false);
     }
-  }, [user]);
+  }, [dataFetchUserId]);
   
   useEffect(() => {
     if (!user?.organizationId) return;
@@ -252,21 +253,18 @@ export default function ChatPage() {
   }, [user?.organizationId]);
 
   useEffect(() => {
-    if (whatsAppInstance && whatsAppInstance.status === 'Conectado' && (whatsAppInstance.id || whatsAppInstance.name) && user) {
+    if (whatsAppInstance && whatsAppInstance.status === 'Conectado' && (whatsAppInstance.id || whatsAppInstance.name) && dataFetchUserId) {
       const fetchConversations = async () => {
         setIsLoadingChats(true);
         setError(null);
         try {
           const instanceIdentifier = whatsAppInstance.id || whatsAppInstance.name;
           
-          // OPTIMIZATION: Instead of reading the entire chat collection, we now read only the last 200 messages.
-          // This dramatically reduces read costs for users with large chat histories.
-          // For a fully scalable solution, an aggregated 'conversations' collection updated by a backend function is recommended.
           const q = query(
             collection(db, 'chat'),
             where('instanceId', '==', instanceIdentifier),
             orderBy('timestamp', 'desc'),
-            limit(200) // Limiting the query to the most recent 200 messages
+            limit(200)
           );
           
           const querySnapshot = await getDocs(q);
@@ -304,8 +302,8 @@ export default function ChatPage() {
           });
           
           const contactPromises = Array.from(chatMap.keys()).map(async (chat_id) => {
-            if (!user) return { chatId: chat_id, data: null }; 
-            const contactDocId = getContactDocId(user.uid, chat_id);
+            if (!dataFetchUserId) return { chatId: chat_id, data: null }; 
+            const contactDocId = getContactDocId(dataFetchUserId, chat_id);
             try {
                 const contactDocRef = doc(db, 'contacts', contactDocId);
                 const contactDocSnap = await getDoc(contactDocRef);
@@ -384,7 +382,7 @@ export default function ChatPage() {
       };
       fetchConversations();
     }
-  }, [whatsAppInstance, user]); 
+  }, [whatsAppInstance, dataFetchUserId]); 
 
   useEffect(() => {
     const chatIdFromUrl = searchParams.get('chatId');
@@ -430,10 +428,10 @@ export default function ChatPage() {
   }, [selectedChatId, whatsAppInstance]);
 
   useEffect(() => {
-    if (selectedChatId && user && whatsAppInstance) {
+    if (selectedChatId && dataFetchUserId && whatsAppInstance) {
       setIsLoadingContact(true);
       const fetchDetails = async () => {
-        const compositeContactId = getContactDocId(user.uid, selectedChatId);
+        const compositeContactId = getContactDocId(dataFetchUserId, selectedChatId);
         try {
           const contactDocRef = doc(db, 'contacts', compositeContactId);
           const contactDocSnap = await getDoc(contactDocRef);
@@ -456,7 +454,7 @@ export default function ChatPage() {
               tipoCliente: undefined,
               estadoConversacion: 'Abierto',
               instanceId: whatsAppInstance.id,
-              userId: user.uid, 
+              userId: dataFetchUserId, 
               _chatIdOriginal: selectedChatId,
               chatbotEnabledForContact: true, 
               assignedTo: '',
@@ -479,13 +477,13 @@ export default function ChatPage() {
       setInitialContactDetails(null);
       setIsEditingContact(false);
     }
-  }, [selectedChatId, user, whatsAppInstance, toast]);
+  }, [selectedChatId, dataFetchUserId, whatsAppInstance, toast]);
 
   const fetchQuickReplies = useCallback(async () => {
-    if (!user) return;
+    if (!dataFetchUserId) return;
     setIsLoadingQuickReplies(true);
     try {
-      const q = query(collection(db, 'quickReplies'), where('userId', '==', user.uid));
+      const q = query(collection(db, 'quickReplies'), where('userId', '==', dataFetchUserId));
       const querySnapshot = await getDocs(q);
       const fetchedReplies: QuickReply[] = [];
       querySnapshot.forEach((docSnap) => {
@@ -498,7 +496,7 @@ export default function ChatPage() {
     } finally {
       setIsLoadingQuickReplies(false);
     }
-  }, [user, toast]);
+  }, [dataFetchUserId, toast]);
 
   useEffect(() => {
     fetchQuickReplies();
@@ -574,15 +572,14 @@ export default function ChatPage() {
   };
   
   const handleSaveContactDetails = async () => {
-    if (!selectedChatId || !user || !whatsAppInstance || !contactDetails) return;
+    if (!selectedChatId || !dataFetchUserId || !whatsAppInstance || !contactDetails) return;
     setIsSavingContact(true);
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id: _docIdFromState, ...dataToPersist } = contactDetails; 
     
     const finalDataToPersist: ContactDetails = {
       ...dataToPersist,
-      userId: user.uid, 
+      userId: dataFetchUserId, 
       instanceId: dataToPersist.instanceId || whatsAppInstance.id, 
       telefono: dataToPersist.telefono || formatPhoneNumber(selectedChatId), 
       _chatIdOriginal: selectedChatId,
@@ -595,7 +592,6 @@ export default function ChatPage() {
       
       const updatedContactState = { ...finalDataToPersist, id: finalDataToPersist.id! };
       
-      // Check if assignee has changed and send notification
       const oldAssigneeId = initialContactDetails?.assignedTo;
       const newAssigneeId = finalDataToPersist.assignedTo;
       if (newAssigneeId && newAssigneeId !== oldAssigneeId) {
@@ -608,7 +604,7 @@ export default function ChatPage() {
             await sendAssignmentNotificationEmail({
               assigneeEmail: newAssignee.email,
               assigneeName: newAssignee.fullName,
-              assignerName: user.fullName || user.email || 'un administrador',
+              assignerName: user?.fullName || user?.email || 'un administrador',
               contactName: contactName,
               chatLink: chatLink,
             });
@@ -705,9 +701,9 @@ export default function ChatPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p>Tu instancia de Qyvoo WhatsApp no está conectada o no se encontró.</p>
+          <p>La instancia de Qyvoo WhatsApp de tu organización no está conectada.</p>
           <p className="mt-4 text-sm text-muted-foreground">
-            Por favor, ve a la página de <Link href="/dashboard/configuration" className="text-primary underline hover:text-primary/80">Configuración</Link> para conectar o verificar tu instancia.
+            Contacta al administrador de tu organización para que la conecte.
           </p>
         </CardContent>
       </Card>
@@ -734,7 +730,6 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-[calc(100vh-theme(spacing.16)-theme(spacing.12))] border bg-card text-card-foreground shadow-sm rounded-lg overflow-hidden">
-      {/* Conversation List - Always visible on desktop, conditionally on mobile */}
       {showConversationList && (
         <div className={`
           w-full ${isMobile ? '' : 'md:w-1/3 lg:w-1/4 md:min-w-[300px] md:max-w-[380px]'}

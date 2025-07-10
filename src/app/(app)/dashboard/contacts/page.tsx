@@ -64,12 +64,13 @@ export default function ContactsPage() {
   const { toast } = useToast();
   const router = useRouter();
 
+  const dataFetchUserId = user?.role === 'agent' ? user?.ownerId : user?.uid;
+
   const [contacts, setContacts] = useState<ContactDetails[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [stats, setStats] = useState<ContactStats>({ total: 0, prospectos: 0, clientes: 0, proveedores: 0, otros: 0 });
   
   const [isFormOpen, setIsFormOpen] = useState(false);
-  // editingContact state is removed as this dialog is only for adding.
   const [currentContactData, setCurrentContactData] = useState<Omit<ContactDetails, 'id' | 'userId'>>(initialContactFormState);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -78,10 +79,10 @@ export default function ContactsPage() {
 
 
   const fetchContacts = useCallback(async () => {
-    if (!user) return;
+    if (!dataFetchUserId) return;
     setIsLoading(true);
     try {
-      const q = query(collection(db, 'contacts'), where('userId', '==', user.uid), orderBy('nombre', 'asc'));
+      const q = query(collection(db, 'contacts'), where('userId', '==', dataFetchUserId), orderBy('nombre', 'asc'));
       const querySnapshot = await getDocs(q);
       const fetchedContacts: ContactDetails[] = [];
       let prospectos = 0;
@@ -107,7 +108,7 @@ export default function ContactsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, toast]);
+  }, [dataFetchUserId, toast]);
 
   useEffect(() => {
     fetchContacts();
@@ -127,12 +128,11 @@ export default function ContactsPage() {
   };
 
   const handleAddNewContact = () => {
-    setCurrentContactData({ ...initialContactFormState }); // Reset form for new contact
+    setCurrentContactData({ ...initialContactFormState });
     setIsFormOpen(true);
   };
   
   const handleEditContact = (contact: ContactDetails) => {
-    // Navigate to the dedicated contact detail page for editing
     router.push(`/dashboard/contacts/${contact.id}`);
   };
 
@@ -147,7 +147,7 @@ export default function ContactsPage() {
     try {
       await deleteDoc(doc(db, 'contacts', contactToDelete.id));
       toast({ title: "Contacto Eliminado", description: "El contacto ha sido eliminado." });
-      fetchContacts(); // Refresh list
+      fetchContacts();
       setIsDeleteDialogOpen(false);
       setContactToDelete(null);
     } catch (error) {
@@ -160,26 +160,25 @@ export default function ContactsPage() {
 
   const handleSubmitForm = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!user) {
-      toast({ variant: "destructive", title: "Error", description: "Debes estar autenticado." });
+    if (!dataFetchUserId) {
+      toast({ variant: "destructive", title: "Error", description: "No se pudo identificar al propietario de la cuenta." });
       return;
     }
     setIsSaving(true);
     
     const contactDataToSave: Omit<ContactDetails, 'id'> & { userId: string } = {
       ...currentContactData,
-      userId: user.uid,
+      userId: dataFetchUserId,
       chatbotEnabledForContact: currentContactData.chatbotEnabledForContact ?? true,
       estadoConversacion: currentContactData.estadoConversacion ?? 'Abierto'
     };
 
     try {
-      // This form is only for adding new contacts
       await addDoc(collection(db, 'contacts'), contactDataToSave);
       toast({ title: "Contacto Creado", description: "El nuevo contacto ha sido guardado." });
       
       setIsFormOpen(false);
-      fetchContacts(); // Refresh list
+      fetchContacts();
     } catch (error) {
       console.error("Error saving contact:", error);
       toast({ variant: "destructive", title: "Error", description: "No se pudo guardar el contacto." });
@@ -196,7 +195,7 @@ export default function ContactsPage() {
     return <Badge variant={variant} className={cn(className)}>{statusText}</Badge>
   };
 
-  if (isLoading && !user) {
+  if (isLoading && !dataFetchUserId) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -209,14 +208,13 @@ export default function ContactsPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
         <div>
           <h2 className="text-3xl font-bold tracking-tight text-foreground">Gestión de Contactos</h2>
-          <p className="text-muted-foreground">Administra tu lista de contactos y su información.</p>
+          <p className="text-muted-foreground">Administra la lista de contactos de la organización.</p>
         </div>
         <Button onClick={handleAddNewContact} className="mt-4 sm:mt-0">
           <UserPlus className="mr-2 h-4 w-4" /> Añadir Nuevo Contacto
         </Button>
       </div>
 
-      {/* Stats Section */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -256,7 +254,6 @@ export default function ContactsPage() {
         </Card>
       </div>
 
-      {/* Contacts Table */}
       <Card>
         <CardHeader>
           <CardTitle>Lista de Contactos</CardTitle>
@@ -312,11 +309,10 @@ export default function ContactsPage() {
         </CardContent>
       </Card>
 
-      {/* Contact Form Dialog - ONLY FOR ADDING NEW CONTACTS */}
       <Dialog open={isFormOpen} onOpenChange={(isOpen) => {
           setIsFormOpen(isOpen);
           if (!isOpen) {
-            setCurrentContactData(initialContactFormState); // Reset form when dialog closes
+            setCurrentContactData(initialContactFormState);
           }
         }}>
         <DialogContent className="sm:max-w-lg">
@@ -350,7 +346,7 @@ export default function ContactsPage() {
               <Input id="empresa" name="empresa" value={currentContactData.empresa || ""} onChange={handleInputChange} placeholder="Tecnologías S.A."/>
             </div>
             <div>
-              <Label htmlFor="ubicacion" className="flex items-center text-sm text-muted-foreground"><UserCheck className="h-3 w-3 mr-1.5"/>Ubicación</Label> {/* Consider changing icon if UserCheck is for Tipo Cliente */}
+              <Label htmlFor="ubicacion" className="flex items-center text-sm text-muted-foreground"><UserCheck className="h-3 w-3 mr-1.5"/>Ubicación</Label>
               <Input id="ubicacion" name="ubicacion" value={currentContactData.ubicacion || ""} onChange={handleInputChange} placeholder="Ciudad, País"/>
             </div>
             <div>
@@ -418,7 +414,6 @@ export default function ContactsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

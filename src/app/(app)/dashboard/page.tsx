@@ -2,7 +2,7 @@
 "use client";
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -85,8 +85,11 @@ export default function DashboardPage() {
   const [recentConversations, setRecentConversations] = useState<DashboardConversationSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Determine which user's data to fetch. For agents, use the owner's ID.
+  const dataFetchUserId = user?.role === 'agent' ? user?.ownerId : user?.uid;
+
   useEffect(() => {
-    if (user && !authLoading) {
+    if (dataFetchUserId && !authLoading) {
       const fetchData = async () => {
         setIsLoading(true);
         try {
@@ -95,7 +98,7 @@ export default function DashboardPage() {
           let conversationsVal: number | string = 0;
           let instanceIdForChats: string | null = null;
 
-          const instanceDocRef = doc(db, 'instances', user.uid);
+          const instanceDocRef = doc(db, 'instances', dataFetchUserId);
           const instanceDocSnap = await getDoc(instanceDocRef);
 
           let instanceData: WhatsAppInstance | null = null;
@@ -106,19 +109,17 @@ export default function DashboardPage() {
           }
 
           let botPromptConfiguredVal = false;
-          const botConfigDocRef = doc(db, 'qybot', user.uid);
+          const botConfigDocRef = doc(db, 'qybot', dataFetchUserId);
           const botConfigDocSnap = await getDoc(botConfigDocRef);
           if (botConfigDocSnap.exists()) {
              const botConfig = botConfigDocSnap.data() as BotConfigData;
-             // Correct check: A bot is configured if there's a valid promptXML.
              if (botConfig.promptXml && botConfig.promptXml.trim() !== "") {
                 botPromptConfiguredVal = true;
              }
           }
 
           try {
-            // OPTIMIZATION: Use getCountFromServer for efficient counting without fetching all documents.
-            const contactsQuery = query(collection(db, 'contacts'), where('userId', '==', user.uid));
+            const contactsQuery = query(collection(db, 'contacts'), where('userId', '==', dataFetchUserId));
             const contactsSnapshot = await getCountFromServer(contactsQuery);
             contactsVal = contactsSnapshot.data().count;
           } catch (e) {
@@ -129,7 +130,6 @@ export default function DashboardPage() {
           let fetchedRecentConversations: DashboardConversationSummary[] = [];
           if (instanceIdForChats) {
             try {
-               // OPTIMIZATION: Query only the last 200 messages to build the recent conversations list.
               const chatQuery = query(
                 collection(db, 'chat'),
                 where('instanceId', '==', instanceIdForChats),
@@ -177,7 +177,7 @@ export default function DashboardPage() {
                  }
                  if (msg.chat_id.endsWith('@g.us')) currentChatId = msg.chat_id;
 
-                const contactDocId = getContactDocId(user.uid, currentChatId);
+                const contactDocId = getContactDocId(dataFetchUserId!, currentChatId);
                 let contactData: ContactDetails | null = null;
                 try {
                     const contactDocRef = doc(db, 'contacts', contactDocId);
@@ -250,7 +250,7 @@ export default function DashboardPage() {
             isBotPromptConfigured: botPromptConfiguredVal,
           });
         } catch (error) {
-          console.error("Error fetching dashboard data:", error);
+          console.error("Dashboard data fetch error:", error);
           setStats({
             instanceStatus: 'Error',
             contactCount: 'Error',
@@ -269,7 +269,7 @@ export default function DashboardPage() {
         setIsLoading(false);
         setRecentConversations([]);
     }
-  }, [user, authLoading]);
+  }, [dataFetchUserId, authLoading, user]);
 
   if (isLoading || authLoading) { 
     return (
@@ -302,6 +302,7 @@ export default function DashboardPage() {
     }
   };
 
+  const isAgent = user?.role === 'agent';
 
   return (
     <div className="space-y-8">
@@ -310,73 +311,77 @@ export default function DashboardPage() {
       </div>
       
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Estado de la Instancia</CardTitle>
-            {getInstanceStatusIcon(stats.instanceStatus)}
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${getStatusColor(stats.instanceStatus)}`}>
-              {stats.instanceStatus}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {stats.instanceStatus === 'Conectado' ? 'Lista para operar.' : 
-               stats.instanceStatus === 'No Configurada' ? 'Ve a Configuración para empezar.' :
-               stats.instanceStatus === 'Pendiente' ? 'Esperando conexión o QR.' :
-               stats.instanceStatus === 'Desconectado' ? 'Requiere acción para reconectar.' :
-               stats.instanceStatus === 'Cargando' ? 'Verificando estado...' : 
-               stats.instanceStatus === 'Error' ? 'Error al cargar estado.' :
-               'Revisa la configuración.'
-              }
-            </p>
-          </CardContent>
-        </Card>
+        {!isAgent && (
+          <>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Estado de la Instancia</CardTitle>
+                {getInstanceStatusIcon(stats.instanceStatus)}
+              </CardHeader>
+              <CardContent>
+                <div className={`text-2xl font-bold ${getStatusColor(stats.instanceStatus)}`}>
+                  {stats.instanceStatus}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {stats.instanceStatus === 'Conectado' ? 'Lista para operar.' : 
+                  stats.instanceStatus === 'No Configurada' ? 'Ve a Configuración para empezar.' :
+                  stats.instanceStatus === 'Pendiente' ? 'Esperando conexión o QR.' :
+                  stats.instanceStatus === 'Desconectado' ? 'Requiere acción para reconectar.' :
+                  stats.instanceStatus === 'Cargando' ? 'Verificando estado...' : 
+                  stats.instanceStatus === 'Error' ? 'Error al cargar estado.' :
+                  'Revisa la configuración.'
+                  }
+                </p>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Chatbot Global</CardTitle>
-            {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' || stats.isChatbotGloballyEnabled === undefined 
-             ? <HelpCircle className="h-5 w-5 text-slate-500" /> 
-             : stats.isChatbotGloballyEnabled 
-               ? <BotMessageSquare className="h-5 w-5 text-green-500" /> 
-               : <MessageCircleOff className="h-5 w-5 text-red-500" />}
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' || stats.isChatbotGloballyEnabled === undefined ? 'text-slate-500' : stats.isChatbotGloballyEnabled ? 'text-green-500' : 'text-red-500'}`}>
-              {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' ? "N/A" :
-               stats.isChatbotGloballyEnabled === undefined ? "No Definido" : 
-               stats.isChatbotGloballyEnabled ? "Activado" : "Desactivado"}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' ? "Requiere instancia configurada." :
-               stats.isChatbotGloballyEnabled === undefined ? "Define en Configuración." : 
-               stats.isChatbotGloballyEnabled ? "Respondiendo mensajes automáticamente." : "Solo respuestas manuales."}
-            </p>
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Chatbot Global</CardTitle>
+                {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' || stats.isChatbotGloballyEnabled === undefined 
+                ? <HelpCircle className="h-5 w-5 text-slate-500" /> 
+                : stats.isChatbotGloballyEnabled 
+                  ? <BotMessageSquare className="h-5 w-5 text-green-500" /> 
+                  : <MessageCircleOff className="h-5 w-5 text-red-500" />}
+              </CardHeader>
+              <CardContent>
+                <div className={`text-2xl font-bold ${stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' || stats.isChatbotGloballyEnabled === undefined ? 'text-slate-500' : stats.isChatbotGloballyEnabled ? 'text-green-500' : 'text-red-500'}`}>
+                  {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' ? "N/A" :
+                  stats.isChatbotGloballyEnabled === undefined ? "No Definido" : 
+                  stats.isChatbotGloballyEnabled ? "Activado" : "Desactivado"}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' ? "Requiere instancia configurada." :
+                  stats.isChatbotGloballyEnabled === undefined ? "Define en Configuración." : 
+                  stats.isChatbotGloballyEnabled ? "Respondiendo mensajes automáticamente." : "Solo respuestas manuales."}
+                </p>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Modo Demo</CardTitle>
-             {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' || stats.isDemoMode === undefined 
-              ? <HelpCircle className="h-5 w-5 text-slate-500" /> 
-              : stats.isDemoMode 
-                ? <FlaskConical className="h-5 w-5 text-blue-500" /> 
-                : <FlaskConical className="h-5 w-5 text-slate-500 opacity-50" />}
-          </CardHeader>
-          <CardContent>
-             <div className={`text-2xl font-bold ${stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' || stats.isDemoMode === undefined ? 'text-slate-500' : stats.isDemoMode ? 'text-blue-500' : 'text-slate-700 dark:text-slate-300'}`}>
-                {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' ? "N/A" :
-                 stats.isDemoMode === undefined ? "No Definido" : 
-                 stats.isDemoMode ? "Activado" : "Desactivado"}
-            </div>
-            <p className="text-xs text-muted-foreground">
-                {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' ? "Requiere instancia configurada." :
-                 stats.isDemoMode === undefined ? "Define en Configuración." : 
-                 stats.isDemoMode ? "Simulando interacciones." : "Operando en modo real."}
-            </p>
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Modo Demo</CardTitle>
+                {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' || stats.isDemoMode === undefined 
+                  ? <HelpCircle className="h-5 w-5 text-slate-500" /> 
+                  : stats.isDemoMode 
+                    ? <FlaskConical className="h-5 w-5 text-blue-500" /> 
+                    : <FlaskConical className="h-5 w-5 text-slate-500 opacity-50" />}
+              </CardHeader>
+              <CardContent>
+                <div className={`text-2xl font-bold ${stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' || stats.isDemoMode === undefined ? 'text-slate-500' : stats.isDemoMode ? 'text-blue-500' : 'text-slate-700 dark:text-slate-300'}`}>
+                    {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' ? "N/A" :
+                    stats.isDemoMode === undefined ? "No Definido" : 
+                    stats.isDemoMode ? "Activado" : "Desactivado"}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                    {stats.instanceStatus === 'No Configurada' || stats.instanceStatus === 'Cargando' ? "Requiere instancia configurada." :
+                    stats.isDemoMode === undefined ? "Define en Configuración." : 
+                    stats.isDemoMode ? "Simulando interacciones." : "Operando en modo real."}
+                </p>
+              </CardContent>
+            </Card>
+          </>
+        )}
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -385,7 +390,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.contactCount}</div>
-            <p className="text-xs text-muted-foreground">Contactos en tu agenda personal.</p>
+            <p className="text-xs text-muted-foreground">Contactos en la agenda de la organización.</p>
           </CardContent>
         </Card>
 
@@ -400,21 +405,23 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Prompt del Bot</CardTitle>
-             {stats.isBotPromptConfigured === undefined ? <HelpCircle className="h-5 w-5 text-slate-500" /> : 
-              stats.isBotPromptConfigured ? <FileText className="h-5 w-5 text-green-500" /> : <FileText className="h-5 w-5 text-red-500" />}
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${stats.isBotPromptConfigured === undefined ? 'text-slate-500' : stats.isBotPromptConfigured ? 'text-green-500' : 'text-red-500'}`}>
-                {stats.isBotPromptConfigured === undefined ? "No Verificado" : stats.isBotPromptConfigured ? "Configurado" : "Pendiente"}
-            </div>
-            <p className="text-xs text-muted-foreground">
-                {stats.isBotPromptConfigured === undefined ? "Ve a Configurar Bot." : stats.isBotPromptConfigured ? "Instrucciones y reglas definidas." : "Configura el prompt del bot."}
-            </p>
-          </CardContent>
-        </Card>
+        {!isAgent && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Prompt del Bot</CardTitle>
+              {stats.isBotPromptConfigured === undefined ? <HelpCircle className="h-5 w-5 text-slate-500" /> : 
+                stats.isBotPromptConfigured ? <FileText className="h-5 w-5 text-green-500" /> : <FileText className="h-5 w-5 text-red-500" />}
+            </CardHeader>
+            <CardContent>
+              <div className={`text-2xl font-bold ${stats.isBotPromptConfigured === undefined ? 'text-slate-500' : stats.isBotPromptConfigured ? 'text-green-500' : 'text-red-500'}`}>
+                  {stats.isBotPromptConfigured === undefined ? "No Verificado" : stats.isBotPromptConfigured ? "Configurado" : "Pendiente"}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                  {stats.isBotPromptConfigured === undefined ? "Ve a Configurar Bot." : stats.isBotPromptConfigured ? "Instrucciones y reglas definidas." : "Configura el prompt del bot."}
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Card>

@@ -34,6 +34,7 @@ interface UserProfile {
   employeeCount?: string;
   role?: 'owner' | 'admin' | 'agent'; // User role within the organization
   organizationId?: string; // ID of the organization the user belongs to
+  ownerId?: string; // UID of the organization's owner
   createdAt?: Timestamp; // Registration date
   isActive?: boolean; // Account status
   isVip?: boolean; // VIP access flag
@@ -77,7 +78,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
              return;
           }
 
-          // --- On-the-fly migration for existing users ---
           if (!dbData.organizationId) {
             console.log(`Migrating user ${firebaseUser.uid} to an organization...`);
             const orgRef = await addDoc(collection(db, 'organizations'), {
@@ -93,13 +93,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             dbData.role = 'owner';
             console.log(`User ${firebaseUser.uid} migrated to new organization ${orgRef.id}`);
           }
-          // --- End of migration ---
-
         }
 
-        // Parallel fetch for other data
-        const instanceDocRef = doc(db, 'instances', firebaseUser.uid);
-        const subscriptionsRef = collection(db, 'users', firebaseUser.uid, 'subscriptions');
+        // Fetch organization owner ID if the user is not the owner
+        let ownerId = dbData.role === 'owner' ? firebaseUser.uid : undefined;
+        if (dbData.organizationId && dbData.role !== 'owner') {
+          const orgDocRef = doc(db, 'organizations', dbData.organizationId);
+          const orgDocSnap = await getDoc(orgDocRef);
+          if (orgDocSnap.exists()) {
+            ownerId = orgDocSnap.data().ownerId;
+          }
+        }
+        
+        const dataFetchUserId = ownerId || firebaseUser.uid;
+
+        const instanceDocRef = doc(db, 'instances', dataFetchUserId);
+        const subscriptionsRef = collection(db, 'users', dataFetchUserId, 'subscriptions');
         const q = query(subscriptionsRef, where('status', 'in', ['trialing', 'active']));
         
         const [instanceDocSnap, subscriptionSnap] = await Promise.all([
@@ -128,8 +137,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           city: dbData.city,
           sector: dbData.sector,
           employeeCount: dbData.employeeCount,
-          role: dbData.role || 'agent', // Default to agent if something is wrong
+          role: dbData.role || 'agent',
           organizationId: dbData.organizationId,
+          ownerId: ownerId,
           createdAt: dbData.createdAt,
           isActive: dbData.isActive ?? true,
           isVip: dbData.isVip ?? false,
@@ -158,7 +168,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         throw new Error("Este nombre de usuario ya está en uso. Por favor, elige otro.");
       }
       
-      // Check for pending invitations
       const invitationsRef = collection(db, 'invitations');
       const invQuery = query(invitationsRef, where('inviteeEmail', '==', data.email.trim()), where('status', '==', 'pending'));
       const invSnapshot = await getDocs(invQuery);
@@ -171,48 +180,43 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       if (!invSnapshot.empty) {
-        // --- User has a pending invitation ---
-        const invitationDoc = invSnapshot.docs[0]; // Assume one pending invitation per email
+        const invitationDoc = invSnapshot.docs[0];
         const invitationData = invitationDoc.data();
         
         const userProfileData = {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
           fullName: data.fullName,
-          company: invitationData.organizationName, // Use the organization's name from invitation
+          company: invitationData.organizationName,
           phone: data.phone,
           username: data.username,
           country: '', 
           city: '',
           sector: '',
           employeeCount: '',
-          role: invitationData.role, // Set role from invitation
-          organizationId: invitationData.organizationId, // Set organization from invitation
+          role: invitationData.role,
+          organizationId: invitationData.organizationId,
           createdAt: serverTimestamp(),
           isActive: true,
           isVip: false,
-          onboardingCompleted: true, // They are joining an existing team, skip onboarding
+          onboardingCompleted: true,
         };
         await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
 
-        // Update invitation status to 'accepted'
         await updateDoc(doc(db, 'invitations', invitationDoc.id), {
             status: 'accepted',
             acceptedAt: serverTimestamp(),
             acceptedByUid: firebaseUser.uid,
         });
 
-        router.push('/dashboard'); // Go straight to dashboard
+        router.push('/dashboard');
       } else {
-        // --- No invitation found, standard registration ---
-        // Create a new organization
         const orgRef = await addDoc(collection(db, 'organizations'), {
             name: data.company,
             ownerId: firebaseUser.uid,
             createdAt: serverTimestamp()
         });
         
-        // Create the user with the new organizationId
         const userProfileData = {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
@@ -224,7 +228,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           city: '',
           sector: '',
           employeeCount: '',
-          role: 'owner', // The creator is the owner
+          role: 'owner',
           organizationId: orgRef.id,
           createdAt: serverTimestamp(),
           isActive: true,
@@ -233,7 +237,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         };
         await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
         
-        // Send welcome email for standard registration
         try {
           await sendWelcomeEmail({
             userEmail: data.email,
@@ -241,10 +244,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           });
         } catch (emailError) {
           console.error("Failed to send welcome email:", emailError);
-          // Don't block registration if email fails, just log it.
         }
 
-        router.push('/subscribe'); // New user needs to subscribe
+        router.push('/subscribe');
       }
 
       return userCredential;
