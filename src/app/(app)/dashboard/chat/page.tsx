@@ -33,6 +33,7 @@ import { es } from 'date-fns/locale';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { TeamMember } from '../team/page';
 import { sendAssignmentNotificationEmail } from '@/lib/email';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface ChatMessageDocument {
   chat_id: string;
@@ -42,12 +43,12 @@ interface ChatMessageDocument {
   mensaje: string;
   timestamp: FirestoreTimestamp; 
   to: string;
-  user_name: 'User' | 'bot' | 'agente' | string; 
-  type?: 'message' | 'internal_note';
+  user_name: 'User' | 'bot' | string; // 'agente' is now a generic string
   author?: {
     uid: string;
     name: string;
   };
+  type?: 'message' | 'internal_note';
 }
 
 interface ChatMessage extends ChatMessageDocument {
@@ -59,6 +60,7 @@ interface ConversationSummary {
   lastMessage: string;
   lastMessageTimestamp: Date;
   lastMessageSender: string;
+  lastMessageAuthorName?: string;
   nameLine1: string;
   nameLine2: string | null;
   avatarFallback?: string; 
@@ -244,6 +246,7 @@ export default function ChatPage() {
                 fullName: data.fullName,
                 email: data.email,
                 role: data.role,
+                isActive: data.isActive,
             });
         });
         setTeamMembers(members);
@@ -278,6 +281,7 @@ export default function ChatPage() {
               lastMessage: string;
               lastMessageTimestamp: Date;
               lastMessageSender: string;
+              lastMessageAuthorName?: string;
           }>();
 
           messages.forEach(msg => {
@@ -297,6 +301,7 @@ export default function ChatPage() {
                 lastMessage: msg.mensaje,
                 lastMessageTimestamp: msg.timestamp.toDate(),
                 lastMessageSender: msg.user_name,
+                lastMessageAuthorName: msg.author?.name
               });
             }
           });
@@ -359,6 +364,7 @@ export default function ChatPage() {
                   lastMessage: summaryValue.lastMessage,
                   lastMessageTimestamp: summaryValue.lastMessageTimestamp,
                   lastMessageSender: summaryValue.lastMessageSender,
+                  lastMessageAuthorName: summaryValue.lastMessageAuthorName,
                   nameLine1: nameL1,
                   nameLine2: nameL2,
                   avatarFallback: avatarFb,
@@ -514,17 +520,14 @@ export default function ChatPage() {
       instance: whatsAppInstance.name,
       instanceId: whatsAppInstance.id,
       mensaje: trimmedMessage,
-      user_name: 'agente', 
+      user_name: 'agente',
       timestamp: serverTimestamp(), 
       type: chatMode,
-    };
-    
-    if (chatMode === 'note') {
-      newMessageData.author = {
+      author: {
         uid: user.uid,
         name: user.fullName || user.username || 'Agente',
-      };
-    }
+      },
+    };
 
     try {
       await addDoc(collection(db, 'chat'), newMessageData);
@@ -536,7 +539,7 @@ export default function ChatPage() {
           instanceId: whatsAppInstance.id,
           mensaje: trimmedMessage,
           instance: whatsAppInstance.name,
-          user_name: "agent", 
+          user_name: "agente", // Keep 'agente' for backend compatibility, UI will use author.name
           timestamp: new Date().toISOString(),
         }];
 
@@ -728,6 +731,10 @@ export default function ChatPage() {
     return statusMatch && assignmentMatch;
   });
 
+  const messagePlaceholder = user?.role === 'agent'
+    ? "Escribe tu mensaje como agente..."
+    : "Escribe tu mensaje como administrador...";
+
   return (
     <div className="flex h-[calc(100vh-theme(spacing.16)-theme(spacing.12))] border bg-card text-card-foreground shadow-sm rounded-lg overflow-hidden">
       {showConversationList && (
@@ -801,9 +808,9 @@ export default function ChatPage() {
                         )}
                         <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
                           <span className="font-medium">
-                            {convo.lastMessageSender?.toLowerCase() === 'bot' ? 'Bot' : 
-                             convo.lastMessageSender?.toLowerCase() === 'agente' ? 'Agente' : 
-                             convo.lastMessageSender?.toLowerCase() === 'user' ? 'Usuario' : 'Usuario'}: 
+                           {convo.lastMessageSender === 'bot' ? 'Bot' :
+                             convo.lastMessageSender === 'User' ? 'Usuario' :
+                             convo.lastMessageAuthorName || 'Agente'}:
                           </span>
                           {convo.lastMessage}
                         </p>
@@ -901,75 +908,84 @@ export default function ChatPage() {
                   <p className="text-sm">Envía un mensaje para comenzar.</p>
                 </div>
               ) : (
-                activeMessages.map((msg) => {
-                  if (msg.type === 'internal_note') {
+                <TooltipProvider>
+                  {activeMessages.map((msg) => {
+                    if (msg.type === 'internal_note') {
+                      return (
+                        <div key={msg.id} className="relative my-4 flex items-center justify-center">
+                            <div className="absolute inset-x-0 h-px bg-yellow-300 dark:bg-yellow-700"></div>
+                            <div className="relative flex items-start gap-3 rounded-full bg-yellow-100 dark:bg-yellow-900/50 px-4 py-2 text-xs text-yellow-800 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800 shadow-sm">
+                                <StickyNote className="h-4 w-4 mt-0.5 shrink-0" />
+                                <div className="max-w-sm">
+                                    <p className="font-bold">{msg.author?.name || 'Agente'}</p>
+                                    <p className="whitespace-pre-wrap">{msg.mensaje}</p>
+                                    <p className="text-right text-yellow-600 dark:text-yellow-500 mt-1">{formatChatMessageTimestamp(msg.timestamp)}</p>
+                                </div>
+                            </div>
+                        </div>
+                      );
+                    }
+
+                    const isExternalUser = msg.user_name?.toLowerCase() === 'user'; 
+
+                    let alignmentClass: string;
+                    let bubbleClass: string;
+                    let timestampAlignmentClass: string;
+                    let IconComponent: React.ElementType | null = null;
+                    let avatarTooltipContent: string | null = null;
+                    
+                    if (isExternalUser) {
+                      alignmentClass = 'justify-start'; 
+                      bubbleClass = 'bg-card border'; 
+                      timestampAlignmentClass = 'text-muted-foreground text-left';
+                      IconComponent = UserRound; 
+                    } else { 
+                      alignmentClass = 'justify-end'; 
+                      timestampAlignmentClass = 'text-right';
+
+                      if (msg.user_name === 'bot') {
+                        bubbleClass = 'bg-primary text-primary-foreground';
+                        timestampAlignmentClass += ' text-primary-foreground/80';
+                        IconComponent = Bot;
+                        avatarTooltipContent = "Bot";
+                      } else { // Agent or Admin
+                        bubbleClass = 'bg-accent text-accent-foreground';
+                        timestampAlignmentClass += ' text-accent-foreground/80';
+                        IconComponent = User; 
+                        avatarTooltipContent = msg.author?.name || "Agente";
+                      }
+                    }
+
                     return (
-                      <div key={msg.id} className="relative my-4 flex items-center justify-center">
-                          <div className="absolute inset-x-0 h-px bg-yellow-300 dark:bg-yellow-700"></div>
-                          <div className="relative flex items-start gap-3 rounded-full bg-yellow-100 dark:bg-yellow-900/50 px-4 py-2 text-xs text-yellow-800 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800 shadow-sm">
-                              <StickyNote className="h-4 w-4 mt-0.5 shrink-0" />
-                              <div className="max-w-sm">
-                                  <p className="font-bold">{msg.author?.name || 'Agente'}</p>
-                                  <p className="whitespace-pre-wrap">{msg.mensaje}</p>
-                                  <p className="text-right text-yellow-600 dark:text-yellow-500 mt-1">{formatChatMessageTimestamp(msg.timestamp)}</p>
-                              </div>
+                      <div
+                        key={msg.id}
+                        className={`flex w-full items-end gap-2 ${alignmentClass}`}
+                      >
+                        {isExternalUser && IconComponent && <IconComponent className="h-6 w-6 text-muted-foreground shrink-0 mb-1" />}
+                        
+                        <div className={`py-2 px-3 rounded-2xl shadow-sm max-w-[75%] ${bubbleClass}`}>
+                          <div className="text-sm break-words whitespace-pre-wrap leading-relaxed">
+                            {formatWhatsAppMessage(msg.mensaje)}
                           </div>
+                          <p className={`text-xs mt-1.5 ${timestampAlignmentClass}`}>
+                            {formatChatMessageTimestamp(msg.timestamp)}
+                          </p>
+                        </div>
+
+                        {!isExternalUser && IconComponent && (
+                           <Tooltip>
+                              <TooltipTrigger asChild>
+                                  <IconComponent className="h-6 w-6 text-muted-foreground shrink-0 mb-1" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                  <p>{avatarTooltipContent}</p>
+                              </TooltipContent>
+                           </Tooltip>
+                        )}
                       </div>
                     );
-                  }
-
-                  const userNameLower = msg.user_name?.toLowerCase();
-                  const isExternalUser = userNameLower === 'user'; 
-
-                  let alignmentClass: string;
-                  let bubbleClass: string;
-                  let timestampAlignmentClass: string;
-                  let IconComponent: React.ElementType | null = null;
-                  
-                  if (isExternalUser) {
-                    alignmentClass = 'justify-start'; 
-                    bubbleClass = 'bg-card border'; 
-                    timestampAlignmentClass = 'text-muted-foreground text-left';
-                    IconComponent = UserRound; 
-                  } else { 
-                    alignmentClass = 'justify-end'; 
-                    timestampAlignmentClass = 'text-right';
-
-                    if (userNameLower === 'bot') {
-                      bubbleClass = 'bg-primary text-primary-foreground';
-                      timestampAlignmentClass += ' text-primary-foreground/80';
-                      IconComponent = Bot;
-                    } else if (userNameLower === 'agente') {
-                      bubbleClass = 'bg-accent text-accent-foreground';
-                      timestampAlignmentClass += ' text-accent-foreground/80';
-                      IconComponent = User; 
-                    } else { 
-                      bubbleClass = 'bg-secondary text-secondary-foreground';
-                      timestampAlignmentClass += ' text-muted-foreground';
-                      IconComponent = MessageCircle; 
-                    }
-                  }
-
-                  return (
-                    <div
-                      key={msg.id}
-                      className={`flex w-full items-end gap-2 ${alignmentClass}`}
-                    >
-                      {isExternalUser && IconComponent && <IconComponent className="h-6 w-6 text-muted-foreground shrink-0 mb-1" />}
-                      
-                      <div className={`py-2 px-3 rounded-2xl shadow-sm max-w-[75%] ${bubbleClass}`}>
-                        <div className="text-sm break-words whitespace-pre-wrap leading-relaxed">
-                          {formatWhatsAppMessage(msg.mensaje)}
-                        </div>
-                        <p className={`text-xs mt-1.5 ${timestampAlignmentClass}`}>
-                          {formatChatMessageTimestamp(msg.timestamp)}
-                        </p>
-                      </div>
-
-                      {!isExternalUser && IconComponent && <IconComponent className="h-6 w-6 text-muted-foreground shrink-0 mb-1" />}
-                    </div>
-                  );
-                })
+                  })}
+                </TooltipProvider>
               )}
               <div ref={messagesEndRef} />
             </ScrollArea>
@@ -1010,7 +1026,7 @@ export default function ChatPage() {
                   )}
                   <div className="flex w-full items-center space-x-2">
                     <Textarea
-                      placeholder={chatMode === 'message' ? "Escribe tu mensaje como administrador..." : "Añade una nota para tu equipo (no se enviará al cliente)..."}
+                      placeholder={chatMode === 'message' ? messagePlaceholder : "Añade una nota para tu equipo (no se enviará al cliente)..."}
                       value={replyMessage}
                       onChange={(e) => setReplyMessage(e.target.value)}
                       className="flex-grow resize-none"
@@ -1081,3 +1097,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    
