@@ -87,8 +87,8 @@ export function AppointmentForm({
       date: selectedDate || new Date(),
       startTime: '09:00',
       endTime: '10:00',
-      contactId: undefined,
-      assignedTo: undefined,
+      contactId: 'unassigned',
+      assignedTo: 'unassigned',
     }
   });
 
@@ -100,8 +100,8 @@ export function AppointmentForm({
         date: appointment.start,
         startTime: format(appointment.start, 'HH:mm'),
         endTime: format(appointment.end, 'HH:mm'),
-        contactId: appointment.contactId,
-        assignedTo: appointment.assignedTo,
+        contactId: appointment.contactId || 'unassigned',
+        assignedTo: appointment.assignedTo || 'unassigned',
       });
     } else {
       form.reset({
@@ -110,8 +110,8 @@ export function AppointmentForm({
         date: selectedDate || new Date(),
         startTime: '09:00',
         endTime: '10:00',
-        contactId: undefined,
-        assignedTo: undefined,
+        contactId: 'unassigned',
+        assignedTo: 'unassigned',
       });
     }
   }, [appointment, form, selectedDate]);
@@ -133,8 +133,11 @@ export function AppointmentForm({
       return;
     }
 
-    const selectedContact = contacts.find(c => c.id === data.contactId);
-    const selectedAssignee = teamMembers.find(m => m.uid === data.assignedTo);
+    const finalContactId = data.contactId === 'unassigned' ? '' : data.contactId;
+    const finalAssignedTo = data.assignedTo === 'unassigned' ? '' : data.assignedTo;
+
+    const selectedContact = contacts.find(c => c.id === finalContactId);
+    const selectedAssignee = teamMembers.find(m => m.uid === finalAssignedTo);
 
     const appointmentData = {
         organizationId: user.organizationId,
@@ -143,9 +146,9 @@ export function AppointmentForm({
         description: data.description || '',
         start: Timestamp.fromDate(startDate),
         end: Timestamp.fromDate(endDate),
-        contactId: data.contactId || '',
+        contactId: finalContactId,
         contactName: selectedContact ? `${selectedContact.nombre || ''} ${selectedContact.apellido || ''}`.trim() : '',
-        assignedTo: data.assignedTo || '',
+        assignedTo: finalAssignedTo,
         assignedToName: selectedAssignee ? selectedAssignee.fullName || selectedAssignee.email : '',
     };
     
@@ -264,8 +267,8 @@ export function AppointmentForm({
                     <FormItem>
                       <FormLabel>Asignado a</FormLabel>
                       <Select 
-                        onValueChange={(value) => field.onChange(value === 'unassigned' ? undefined : value)} 
-                        defaultValue={field.value || 'unassigned'}
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -291,8 +294,8 @@ export function AppointmentForm({
                     <FormItem>
                       <FormLabel>Vincular Contacto (Opcional)</FormLabel>
                       <Select 
-                        onValueChange={(value) => field.onChange(value === 'unassigned' ? undefined : value)} 
-                        defaultValue={field.value || 'unassigned'}
+                        onValueChange={field.onChange} 
+                        defaultValue={field.value}
                       >
                         <FormControl>
                           <SelectTrigger>
