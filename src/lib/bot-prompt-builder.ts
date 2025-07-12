@@ -2,7 +2,8 @@
 import type { BotData, DriveLink } from '@/app/(app)/dashboard/bots/page';
 import { db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { createAppointment, CreateAppointmentSchema } from '@/ai/tools/schedule';
+// Import only the schema, not the entire tool object
+import { CreateAppointmentSchema } from '@/ai/tools/schedule'; 
 
 function escapeXml(unsafe: string): string {
   if (typeof unsafe !== 'string' || !unsafe) return '';
@@ -36,11 +37,12 @@ function buildDriveLinksXml(links?: DriveLink[]): string {
 }
 
 // Helper to get the tool configuration for the prompt
-function buildToolsConfigXml(tools: { tool: any; schema: any }[]): string {
+function buildToolsConfigXml(tools: { name: string, description: string; schema: any }[]): string {
     if (tools.length === 0) return '';
-    const toolDetails = tools.map(({ tool, schema }) => {
+    const toolDetails = tools.map(({ name, description, schema }) => {
+        // Use the schema directly
         const schemaString = JSON.stringify(schema.describe(), null, 2);
-        return `<tool>\n      <name>${escapeXml(tool.name)}</name>\n      <description>${escapeXml(tool.description)}</description>\n      <parameters>${escapeXml(schemaString)}</parameters>\n    </tool>`;
+        return `<tool>\n      <name>${escapeXml(name)}</name>\n      <description>${escapeXml(description)}</description>\n      <parameters>${escapeXml(schemaString)}</parameters>\n    </tool>`;
     }).join('\n    ');
     return `<available_tools>\n    ${toolDetails}\n  </available_tools>`;
 }
@@ -78,7 +80,13 @@ function buildVentasPrompt(botData: BotData): string {
     const driveLinksConfig = buildDriveLinksXml(botData.driveLinks);
     
     // Add the createAppointment tool to the sales bot's capabilities
-    const toolsConfig = buildToolsConfigXml([{ tool: createAppointment, schema: CreateAppointmentSchema }]);
+    const toolsConfig = buildToolsConfigXml([
+        { 
+            name: 'createAppointment', 
+            description: "Creates a new appointment, meeting, or event in the user's calendar. Use this when a user confirms they want to schedule something. You must provide the date and times.",
+            schema: CreateAppointmentSchema 
+        }
+    ]);
 
     return [
         rulesConfig,
@@ -95,7 +103,7 @@ function buildVentasPrompt(botData: BotData): string {
 
 function buildSoporteTecnicoPrompt(botData: BotData): string {
     const {
-        agentRole = "Eres un agente de soporte técnico de Nivel 1.",
+        agentRole = "Eres un agente de soporte técnico de Nivel 1 para [Nombre de la Empresa]. Tu objetivo es diagnosticar y resolver problemas comunes de los usuarios basados en la base de conocimiento. Si no puedes resolverlo, debes escalar el caso.",
         rules = [],
         supportedProducts = '',
         commonSolutions = '',
