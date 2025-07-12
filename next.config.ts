@@ -38,6 +38,7 @@ const nextConfig: NextConfig = {
         crypto: require.resolve('crypto-browserify'),
         buffer: require.resolve('buffer/'),
         child_process: false,
+        async_hooks: false,
       };
     }
     return config;
