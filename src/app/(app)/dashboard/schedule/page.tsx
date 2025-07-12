@@ -9,9 +9,7 @@ import {
   query, 
   where, 
   getDocs, 
-  addDoc, 
   doc, 
-  updateDoc, 
   deleteDoc, 
   Timestamp,
   orderBy
@@ -20,8 +18,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, PlusCircle, Calendar as CalendarIcon, Edit, Trash2, User, Clock, Contact, UserCog } from 'lucide-react';
-import { format, startOfDay, endOfDay, parseISO } from 'date-fns';
+import { Loader2, PlusCircle, Calendar as CalendarIcon, Edit, Trash2, Clock, Contact, UserCog } from 'lucide-react';
+import { format, startOfDay, endOfDay, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { AppointmentForm, type Appointment } from '@/components/dashboard/schedule/appointment-form';
 import type { ContactDetails } from '../contacts/page';
@@ -32,7 +30,11 @@ export default function SchedulePage() {
   const { toast } = useToast();
 
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  
+  const [appointmentsOnSelectedDay, setAppointmentsOnSelectedDay] = useState<Appointment[]>([]);
+  const [appointmentDates, setAppointmentDates] = useState<Date[]>([]);
+
   const [contacts, setContacts] = useState<ContactDetails[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   
@@ -42,7 +44,7 @@ export default function SchedulePage() {
 
   const dataFetchUserId = user?.role === 'agent' ? user?.ownerId : user?.uid;
 
-  const fetchAppointments = useCallback(async (date: Date) => {
+  const fetchAppointmentsForDay = useCallback(async (date: Date) => {
     if (!user?.organizationId) return;
     setIsLoading(true);
     try {
@@ -68,14 +70,40 @@ export default function SchedulePage() {
           end: data.end.toDate(),
         } as Appointment);
       });
-      setAppointments(fetchedAppointments);
+      setAppointmentsOnSelectedDay(fetchedAppointments);
     } catch (error) {
-      console.error("Error fetching appointments:", error);
-      toast({ variant: "destructive", title: "Error", description: "No se pudieron cargar las citas." });
+      console.error("Error fetching appointments for day:", error);
+      toast({ variant: "destructive", title: "Error", description: "No se pudieron cargar las citas del día." });
     } finally {
       setIsLoading(false);
     }
   }, [user?.organizationId, toast]);
+
+  const fetchAppointmentsForMonth = useCallback(async (month: Date) => {
+    if (!user?.organizationId) return;
+     try {
+      const start = startOfMonth(month);
+      const end = endOfMonth(month);
+
+      const q = query(
+        collection(db, 'appointments'),
+        where('organizationId', '==', user.organizationId),
+        where('start', '>=', Timestamp.fromDate(start)),
+        where('start', '<=', Timestamp.fromDate(end))
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const datesWithAppointments: Date[] = [];
+      querySnapshot.forEach((docSnap) => {
+        datesWithAppointments.push(docSnap.data().start.toDate());
+      });
+      setAppointmentDates(datesWithAppointments);
+    } catch (error) {
+      console.error("Error fetching appointments for month:", error);
+      toast({ variant: "destructive", title: "Error", description: "No se pudieron cargar los indicadores de citas." });
+    }
+  }, [user?.organizationId, toast]);
+
 
   const fetchRelatedData = useCallback(async () => {
     if (!dataFetchUserId || !user?.organizationId) return;
@@ -97,8 +125,12 @@ export default function SchedulePage() {
   }, [dataFetchUserId, user?.organizationId]);
 
   useEffect(() => {
-    fetchAppointments(selectedDate);
-  }, [selectedDate, fetchAppointments]);
+    fetchAppointmentsForDay(selectedDate);
+  }, [selectedDate, fetchAppointmentsForDay]);
+
+  useEffect(() => {
+    fetchAppointmentsForMonth(currentMonth);
+  }, [currentMonth, fetchAppointmentsForMonth]);
 
   useEffect(() => {
     fetchRelatedData();
@@ -111,6 +143,10 @@ export default function SchedulePage() {
     }
   };
 
+  const handleMonthChange = (month: Date) => {
+    setCurrentMonth(month);
+  };
+
   const handleOpenForm = (appointment: Appointment | null = null) => {
     setEditingAppointment(appointment);
     setIsFormOpen(true);
@@ -120,7 +156,8 @@ export default function SchedulePage() {
     try {
         await deleteDoc(doc(db, 'appointments', appointmentId));
         toast({ title: 'Cita Eliminada', description: 'La cita ha sido eliminada exitosamente.' });
-        fetchAppointments(selectedDate); // Refresh list
+        fetchAppointmentsForDay(selectedDate); // Refresh day's list
+        fetchAppointmentsForMonth(currentMonth); // Refresh month indicators
     } catch (error) {
         console.error("Error deleting appointment:", error);
         toast({ variant: "destructive", title: "Error", description: "No se pudo eliminar la cita." });
@@ -151,6 +188,11 @@ export default function SchedulePage() {
                 mode="single"
                 selected={selectedDate}
                 onSelect={handleDateSelect}
+                onMonthChange={handleMonthChange}
+                modifiers={{ hasAppointment: appointmentDates }}
+                modifiersClassNames={{
+                  hasAppointment: 'has-appointment',
+                }}
                 className="rounded-md"
                 locale={es}
               />
@@ -168,14 +210,14 @@ export default function SchedulePage() {
                          <div className="flex items-center justify-center p-6 min-h-[200px]">
                             <Loader2 className="h-8 w-8 animate-spin text-primary" />
                         </div>
-                    ) : appointments.length === 0 ? (
+                    ) : appointmentsOnSelectedDay.length === 0 ? (
                         <div className="text-center py-10 text-muted-foreground min-h-[200px] flex flex-col justify-center items-center">
                             <CalendarIcon className="h-12 w-12 mb-2" />
                             <p>No hay citas para este día.</p>
                         </div>
                     ) : (
                         <ul className="space-y-4">
-                            {appointments.map(app => (
+                            {appointmentsOnSelectedDay.map(app => (
                                 <li key={app.id} className="p-4 border rounded-lg bg-card hover:bg-muted/50 transition-colors">
                                     <div className="flex justify-between items-start">
                                         <div>
@@ -208,7 +250,10 @@ export default function SchedulePage() {
             appointment={editingAppointment}
             contacts={contacts}
             teamMembers={teamMembers}
-            onSave={() => fetchAppointments(selectedDate)}
+            onSave={() => {
+              fetchAppointmentsForDay(selectedDate);
+              fetchAppointmentsForMonth(currentMonth);
+            }}
             selectedDate={selectedDate}
           />
       )}

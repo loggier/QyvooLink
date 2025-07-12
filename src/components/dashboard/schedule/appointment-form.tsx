@@ -265,7 +265,7 @@ export function AppointmentForm({
                       <FormLabel>Asignado a</FormLabel>
                       <Select 
                         onValueChange={(value) => field.onChange(value === 'unassigned' ? undefined : value)} 
-                        defaultValue={field.value}
+                        defaultValue={field.value || 'unassigned'}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -292,7 +292,7 @@ export function AppointmentForm({
                       <FormLabel>Vincular Contacto (Opcional)</FormLabel>
                       <Select 
                         onValueChange={(value) => field.onChange(value === 'unassigned' ? undefined : value)} 
-                        defaultValue={field.value}
+                        defaultValue={field.value || 'unassigned'}
                       >
                         <FormControl>
                           <SelectTrigger>

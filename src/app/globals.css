@@ -113,3 +113,19 @@ body {
     scroll-behavior: smooth;
   }
 }
+
+/* Custom styles for appointment indicators on the calendar */
+.has-appointment {
+    position: relative;
+}
+.has-appointment::after {
+    content: '';
+    position: absolute;
+    bottom: 4px; /* Adjust vertical position */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 6px; /* Dot size */
+    height: 6px; /* Dot size */
+    border-radius: 50%;
+    background-color: hsl(var(--primary)); /* Use primary theme color */
+}
