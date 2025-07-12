@@ -510,55 +510,68 @@ export default function ChatPage() {
 
   const handleSendMessage = async () => {
     if (!replyMessage.trim() || !selectedChatId || !whatsAppInstance || !user) return;
-
+  
     const trimmedMessage = replyMessage.trim();
-    
-    // Optimistically add message to Firestore first for a snappy UI
+  
+    // Save to Firestore first for a snappy UI
     const newMessageDataForDb: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
-      chat_id: selectedChatId, 
-      from: whatsAppInstance.phoneNumber || `instance_${whatsAppInstance.id}`, 
-      to: selectedChatId, 
+      chat_id: selectedChatId,
+      from: whatsAppInstance.phoneNumber || `instance_${whatsAppInstance.id}`,
+      to: selectedChatId,
       instance: whatsAppInstance.name,
       instanceId: whatsAppInstance.id,
       mensaje: trimmedMessage,
       user_name: 'agente',
-      timestamp: serverTimestamp(), 
+      timestamp: serverTimestamp(),
       type: chatMode,
       author: {
         uid: user.uid,
         name: user.fullName || user.username || 'Agente',
       },
     };
-    
+  
     try {
       await addDoc(collection(db, 'chat'), newMessageDataForDb);
       setReplyMessage(""); // Clear input immediately
-      
-      // If it's a message to the client, call our API endpoint
+  
       if (chatMode === 'message') {
-         const apiResponse = await fetch('/api/chat/send-message', {
-           method: 'POST',
-           headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({
-             userId: user.uid,
-             chatId: selectedChatId,
-             message: trimmedMessage,
-             instanceId: whatsAppInstance.id,
-             instanceName: whatsAppInstance.name,
-           }),
-         });
+        const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
+        const prodWebhookUrl = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL;
+        const testWebhookUrl = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL;
+        
+        const webhookUrl = useTestWebhook ? testWebhookUrl : prodWebhookUrl;
 
-         if (!apiResponse.ok) {
-           const errorData = await apiResponse.text();
-           console.error("Error sending message via API:", apiResponse.status, errorData);
-           toast({ variant: "destructive", title: "Error de envío", description: `No se pudo procesar el mensaje: ${apiResponse.statusText}` });
-         } else {
-           console.log("Message sent via API successfully.");
-         }
+        if (!webhookUrl) {
+            toast({ variant: "destructive", title: "Error de Configuración", description: "La URL del webhook de N8N no está configurada en el entorno." });
+            return;
+        }
+
+        const webhookPayload = [{
+          chat_id: selectedChatId,
+          instanceId: whatsAppInstance.id,
+          mensaje: trimmedMessage,
+          instance: whatsAppInstance.name,
+          user_name: "agente",
+          timestamp: new Date().toISOString(),
+        }];
+
+        const webhookResponse = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(webhookPayload),
+        });
+
+        if (!webhookResponse.ok) {
+          const errorData = await webhookResponse.text();
+          console.error("Error forwarding message to N8N webhook:", webhookResponse.status, errorData);
+          toast({ variant: "destructive", title: "Error de envío", description: `No se pudo procesar el mensaje a través de N8N: ${webhookResponse.statusText}` });
+        } else {
+           console.log("Message forwarded to N8N successfully.");
+        }
       }
     } catch (error) {
-       console.error("Error sending message:", error);
-       toast({ variant: "destructive", title: "Error", description: "No se pudo enviar el mensaje o nota." });
+      console.error("Error sending message:", error);
+      toast({ variant: "destructive", title: "Error", description: "No se pudo enviar el mensaje o nota." });
     }
   };
   

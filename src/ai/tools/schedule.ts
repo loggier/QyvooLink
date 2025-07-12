@@ -1,7 +1,8 @@
 /**
  * @fileOverview A tool for scheduling appointments.
  *
- * - createAppointment - A Genkit tool that allows the AI to create an appointment.
+ * This file defines the Genkit tool and its associated Zod schema for creating appointments.
+ * It is not an API endpoint itself but provides the logic to be called by one.
  */
 
 import { ai } from '@/ai/genkit';
@@ -20,10 +21,50 @@ export const CreateAppointmentSchema = z.object({
   contactId: z.string().optional().describe("The unique ID of the contact, if available."),
   assignedTo: z.string().optional().describe("The user ID of the team member assigned to the appointment."),
   assignedToName: z.string().optional().describe("The name of the team member assigned to the appointment."),
+  // Metadata required for saving to the correct Firestore document
+  organizationId: z.string().describe("The organization ID of the user creating the appointment."),
+  userId: z.string().describe("The user ID of the user creating the appointment."),
 });
 
-// This tool will be available to the AI model to call.
-export const createAppointment = ai.defineTool(
+// This is the core logic for creating an appointment.
+// It can be called from any server-side context (e.g., an API route).
+export async function createAppointment(input: z.infer<typeof CreateAppointmentSchema>): Promise<{ success: boolean; appointmentId?: string }> {
+  try {
+    const baseDate = parse(input.date, 'yyyy-MM-dd', new Date());
+    const [startHour, startMinute] = input.startTime.split(':').map(Number);
+    const [endHour, endMinute] = input.endTime.split(':').map(Number);
+    
+    const startDate = set(baseDate, { hours: startHour, minutes: startMinute, seconds: 0, milliseconds: 0 });
+    const endDate = set(baseDate, { hours: endHour, minutes: endMinute, seconds: 0, milliseconds: 0 });
+
+    if (endDate <= startDate) {
+      console.error("End time must be after start time.");
+      return { success: false };
+    }
+
+    const docRef = await addDoc(collection(db, 'appointments'), {
+      organizationId: input.organizationId,
+      userId: input.userId,
+      title: input.title,
+      description: input.description || '',
+      start: Timestamp.fromDate(startDate),
+      end: Timestamp.fromDate(endDate),
+      contactId: input.contactId || '',
+      contactName: input.contactName || '',
+      assignedTo: input.assignedTo || '',
+      assignedToName: input.assignedToName || '',
+    });
+
+    return { success: true, appointmentId: docRef.id };
+  } catch (error) {
+    console.error('Error creating appointment:', error);
+    return { success: false };
+  }
+}
+
+// We define the tool for Genkit to use, but we don't export it as it's not needed directly by other modules.
+// The prompt builder will reference the schema, and the API endpoint will call the createAppointment function.
+ai.defineTool(
   {
     name: 'createAppointment',
     description: "Creates a new appointment, meeting, or event in the user's calendar. Use this when a user confirms they want to schedule something. You must provide the date and times.",
@@ -33,45 +74,9 @@ export const createAppointment = ai.defineTool(
       appointmentId: z.string().optional(),
     }),
   },
-  async (input, context) => {
-    const organizationId = context?.auth?.organizationId;
-    const userId = context?.auth?.uid;
-
-    if (!organizationId || !userId) {
-      console.error("Error: Organization ID or User ID not found in tool context.");
-      return { success: false };
-    }
-    
-    try {
-      const baseDate = parse(input.date, 'yyyy-MM-dd', new Date());
-      const [startHour, startMinute] = input.startTime.split(':').map(Number);
-      const [endHour, endMinute] = input.endTime.split(':').map(Number);
-      
-      const startDate = set(baseDate, { hours: startHour, minutes: startMinute, seconds: 0, milliseconds: 0 });
-      const endDate = set(baseDate, { hours: endHour, minutes: endMinute, seconds: 0, milliseconds: 0 });
-
-      if (endDate <= startDate) {
-        console.error("End time must be after start time.");
-        return { success: false };
-      }
-
-      const docRef = await addDoc(collection(db, 'appointments'), {
-        organizationId: organizationId,
-        userId: userId,
-        title: input.title,
-        description: input.description || '',
-        start: Timestamp.fromDate(startDate),
-        end: Timestamp.fromDate(endDate),
-        contactId: input.contactId || '',
-        contactName: input.contactName || '',
-        assignedTo: input.assignedTo || '',
-        assignedToName: input.assignedToName || '',
-      });
-
-      return { success: true, appointmentId: docRef.id };
-    } catch (error) {
-      console.error('Error creating appointment from tool:', error);
-      return { success: false };
-    }
+  async (input) => {
+    // The tool's implementation now calls our exported function.
+    // This keeps the core logic separate and reusable.
+    return createAppointment(input);
   }
 );
