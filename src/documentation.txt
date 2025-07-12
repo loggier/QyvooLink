@@ -1,0 +1,112 @@
+# Base de Conocimiento para la Documentación de Qyvoo
+
+## 1. Visión General y Propósito
+
+Qyvoo es una plataforma de software como servicio (SaaS) diseñada para centralizar y automatizar la comunicación a través de WhatsApp. Permite a las empresas gestionar conversaciones, configurar asistentes virtuales (bots), administrar contactos y colaborar en equipo, todo desde un panel de control unificado.
+
+## 2. Módulos y Secciones Principales
+
+El panel de control se divide en las siguientes secciones clave, accesibles a través de la barra de navegación:
+
+### 2.1. Panel de Resumen (`/dashboard`)
+- **Propósito:** Ofrece una vista rápida del estado general de la cuenta y la actividad reciente.
+- **Componentes Clave:**
+  - **Tarjetas de Estadísticas:** Muestran datos vitales como el estado de la instancia de WhatsApp, el estado del chatbot, el modo de demostración, el número total de contactos y conversaciones, y si el bot ha sido configurado.
+  - **Actividad Reciente:** Una lista de las últimas 5 conversaciones actualizadas, con enlaces directos para acceder a ellas.
+
+### 2.2. Chat (`/dashboard/chat`)
+- **Propósito:** Es el centro de operaciones para la comunicación en tiempo real.
+- **Funcionalidades:**
+  - **Lista de Conversaciones:** Panel izquierdo que muestra todos los chats, ordenados por actividad más reciente. Incluye filtros por estado (Abierto, Pendiente, Cerrado) y asignación (Todos, Asignados a mí).
+  - **Área de Mensajería:** Vista central donde se muestra el historial de una conversación seleccionada. Diferencia visualmente los mensajes del cliente, del bot y del agente.
+  - **Panel de Detalles del Contacto:** Panel derecho que muestra y permite editar la información del contacto con el que se está chateando.
+  - **Envío de Mensajes:** Los agentes y administradores pueden enviar mensajes directamente al cliente.
+  - **Notas Internas:** Permite a los miembros del equipo dejar comentarios en un chat que no son visibles para el cliente. Estas notas tienen un estilo visual distintivo (fondo amarillo).
+  - **Asignación de Chats:** Se puede asignar una conversación a un miembro específico del equipo.
+  - **Respuestas Rápidas:** Permite usar plantillas de mensajes predefinidas para agilizar la comunicación.
+
+### 2.3. Gestión de Bots (`/dashboard/bots`)
+- **Propósito:** Crear, configurar y administrar múltiples asistentes virtuales.
+- **Funcionalidades:**
+  - **Listado de Bots:** Muestra todos los bots creados por el usuario, su categoría y si están activos o inactivos.
+  - **Activación:** Solo un bot puede estar activo a la vez. Al activar un bot, su configuración de prompt se convierte en la configuración principal que responde a los clientes.
+  - **Categorías de Bots:** Los bots se crean basados en plantillas predefinidas que facilitan la configuración:
+    - **Ventas:** Enfocado en catálogos de productos, precios y cierre de ventas.
+    - **Atención al Cliente:** Orientado a resolver FAQs y políticas de la empresa.
+    - **Soporte Técnico:** Basado en bases de conocimiento para solucionar problemas técnicos.
+    - **Agente Inmobiliario:** Especializado en captar clientes, mostrar propiedades y agendar visitas.
+    - **Asistente Personal:** Para gestionar agendas, recordatorios y filtrar comunicaciones.
+  - **Configuración Detallada:** Cada bot tiene un formulario de edición específico para su categoría, donde se define su rol (personalidad), reglas, contexto de negocio y documentos de conocimiento (Google Drive).
+
+### 2.4. Gestión de Contactos (`/dashboard/contacts`)
+- **Propósito:** Administrar la base de datos de contactos de la organización.
+- **Funcionalidades:**
+  - **Listado y Búsqueda:** Muestra una tabla con todos los contactos, permitiendo ver su información principal.
+  - **Creación y Edición:** Permite crear nuevos contactos manualmente o editar los existentes. La edición se realiza en una página de detalle (`/dashboard/contacts/[contactId]`).
+  - **Vista de Detalle:** Ofrece una vista de 360 grados del contacto, incluyendo toda su información personal y el historial completo de sus conversaciones.
+  - **Estadísticas Rápidas:** Muestra un resumen del número total de contactos y su clasificación (Prospectos, Clientes, etc.).
+
+### 2.5. Respuestas Rápidas (`/dashboard/quick-replies`)
+- **Propósito:** Crear y gestionar plantillas de mensajes para uso frecuente.
+- **Funcionalidades:**
+  - **Crear/Editar/Eliminar:** Permite definir un "tag" (atajo, ej: `!saludo`) y un mensaje completo asociado.
+  - **Uso en el Chat:** Estas respuestas están disponibles en un menú desplegable en la interfaz de chat para una inserción rápida.
+
+### 2.6. Configuración de la Instancia (`/dashboard/configuration`)
+- **Propósito:** Conectar y gestionar la instancia de WhatsApp de la organización.
+- **Funcionalidades:**
+  - **Creación de Instancia:** Permite solicitar una nueva instancia a través del servicio Qyvoo.
+  - **Conexión por QR:** Muestra el código QR necesario para vincular un número de teléfono a la plataforma.
+  - **Gestión de Estado:** Permite refrescar el estado de la conexión.
+  - **Configuración Avanzada:**
+    - **Activar/Desactivar Chatbot Global:** Un interruptor maestro para habilitar o deshabilitar las respuestas automáticas del bot.
+    - **Modo Demo:** Permite probar la funcionalidad del bot sin una conexión real a WhatsApp.
+
+### 2.7. Equipo (`/dashboard/team`)
+- **Propósito:** Administrar los miembros de la organización y sus permisos.
+- **Funcionalidades:**
+  - **Listado de Miembros:** Muestra todos los usuarios de la organización, su rol y su estado (activo/inactivo).
+  - **Gestión de Roles:** Permite a los propietarios y administradores cambiar el rol de otros miembros.
+  - **Gestión de Estado:** Permite activar o desactivar cuentas de miembros.
+  - **Sistema de Invitaciones:** Permite enviar invitaciones por correo electrónico a nuevos miembros. Las invitaciones pendientes se muestran en una tabla separada.
+
+### 2.8. Reportes (`/dashboard/reports`)
+- **Propósito:** Visualizar analíticas sobre la actividad de la plataforma.
+- **Funcionalidades:**
+  - **Gráficos:**
+    - **Distribución de Mensajes:** Un gráfico de pastel que muestra la proporción de mensajes enviados por el usuario, el bot y los agentes.
+    - **Tendencia de Mensajes:** Un gráfico de barras que muestra el volumen de mensajes en los últimos 7 días.
+  - **Top 5 Contactos:** Una tabla que muestra los contactos más activos según el número de mensajes intercambiados.
+
+## 3. Administración de la Plataforma (Rol: Admin Global)
+
+### 3.1. Panel de Administración (`/admin/dashboard`)
+- **Propósito:** Una vista de alto nivel para los administradores de Qyvoo para supervisar todas las cuentas de usuario.
+- **Funcionalidades:**
+  - **Estadísticas Globales:** Muestra el total de usuarios, instancias activas, bots configurados y métricas de suscripción (MRR estimado).
+  - **Gestión de Cuentas:** Permite a los administradores ver una lista de todos los usuarios, su estado, suscripción y activar/desactivar sus cuentas o asignarles estatus VIP.
+
+### 3.2. Gestión de Planes (`/admin/subscriptions`)
+- **Propósito:** Crear y administrar los planes de suscripción que se ofrecerán a los clientes.
+- **Funcionalidades:**
+  - **Crear/Editar/Eliminar Planes:** Definir nombre, precios (mensual/anual), características, y si es un plan de prueba.
+  - **Integración con Stripe:** Permite vincular los planes de la base de datos con los "Prices" de Stripe para automatizar la facturación.
+
+## 4. Flujos y Conceptos Clave
+
+### 4.1. Flujo de Registro y Onboarding
+- **Registro Estándar:** Un nuevo usuario crea una cuenta y se convierte en `owner` de una nueva organización. Se le guía a través de un proceso de onboarding para conectar su WhatsApp y configurar su primer bot, y luego se le dirige a la página de suscripción.
+- **Registro por Invitación:** Un usuario recibe un enlace por correo electrónico. Al registrarse, se une a una organización existente con el rol de `agent` o `admin` y no necesita gestionar suscripciones.
+
+### 4.2. Flujo de Suscripción y Pagos (Stripe)
+1. **Selección de Plan:** El usuario (propietario) elige un plan desde la interfaz.
+2. **Checkout de Stripe:** Se le redirige a una página de pago segura de Stripe para introducir sus datos de tarjeta.
+3. **Webhook:** Stripe notifica al sistema de Qyvoo (a través de `/api/stripe-webhook`) sobre el resultado del pago (éxito, fallo).
+4. **Actualización de Estado:** El sistema actualiza el estado de la suscripción del usuario en la base de datos (Firestore), otorgándole acceso a las funcionalidades de la plataforma.
+5. **Portal de Cliente:** El usuario puede gestionar su suscripción (cambiar de plan, cancelar, actualizar método de pago) a través de un portal de cliente de Stripe.
+
+### 4.3. Conceptos
+- **Organización:** La entidad principal que agrupa a usuarios (equipo), bots, contactos y configuraciones. Cada organización tiene un `owner`.
+- **Instancia:** La conexión técnica entre la plataforma Qyvoo y un número de WhatsApp específico. Solo una por organización.
+- **Prompt del Bot:** El conjunto de instrucciones y datos (en formato XML) que define la personalidad, reglas y conocimiento de un asistente virtual. Se genera dinámicamente a partir de la configuración del bot activo.
+- **Rol:** Define los permisos de un usuario dentro de una organización (`owner`, `admin`, `agent`).
