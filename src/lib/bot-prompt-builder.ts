@@ -42,7 +42,9 @@ function buildToolsConfigXml(tools: any[]): string {
         // Here we can stringify the Zod schema to include in the prompt if needed,
         // but for now, we just list the tool name and description.
         // Genkit handles the schema details automatically when the tool is provided.
-        return `<tool>\n      <name>${escapeXml(tool.name)}</name>\n      <description>${escapeXml(tool.description)}</description>\n    </tool>`;
+        // Update: Let's describe the parameters to guide the LLM better.
+        const schemaString = JSON.stringify(tool.inputSchema.describe(), null, 2);
+        return `<tool>\n      <name>${escapeXml(tool.name)}</name>\n      <description>${escapeXml(tool.description)}</description>\n      <parameters>${escapeXml(schemaString)}</parameters>\n    </tool>`;
     }).join('\n    ');
     return `<available_tools>\n    ${toolDetails}\n  </available_tools>`;
 }

@@ -10,12 +10,13 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { addDoc, collection, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { parseISO } from 'date-fns';
+import { set, parse } from 'date-fns';
 
 const CreateAppointmentSchema = z.object({
   title: z.string().describe("The main title or purpose of the appointment."),
-  start: z.string().describe("The start date and time of the appointment in ISO 8601 format (e.g., '2024-08-10T10:00:00.000Z')."),
-  end: z.string().describe("The end date and time of the appointment in ISO 8601 format (e.g., '2024-08-10T11:00:00.000Z')."),
+  date: z.string().describe("The date of the appointment in YYYY-MM-DD format (e.g., '2024-08-10')."),
+  startTime: z.string().describe("The start time of the appointment in 24-hour HH:mm format (e.g., '10:00')."),
+  endTime: z.string().describe("The end time of the appointment in 24-hour HH:mm format (e.g., '11:00')."),
   description: z.string().optional().describe("A brief description or notes for the appointment."),
   contactName: z.string().optional().describe("The name of the contact person for the appointment."),
   contactId: z.string().optional().describe("The unique ID of the contact, if available."),
@@ -27,7 +28,7 @@ const CreateAppointmentSchema = z.object({
 export const createAppointment = ai.defineTool(
   {
     name: 'createAppointment',
-    description: 'Creates a new appointment, meeting, or event in the user\'s calendar. Use this when a user confirms they want to schedule something.',
+    description: "Creates a new appointment, meeting, or event in the user's calendar. Use this when a user confirms they want to schedule something. You must provide the date and times.",
     inputSchema: CreateAppointmentSchema,
     outputSchema: z.object({
       success: z.boolean(),
@@ -35,8 +36,6 @@ export const createAppointment = ai.defineTool(
     }),
   },
   async (input, context) => {
-    // The AI provides the input based on the conversation.
-    // We need to extract the organizationId from the tool context to save the appointment correctly.
     const organizationId = context?.auth?.organizationId;
     const userId = context?.auth?.uid;
 
@@ -46,13 +45,25 @@ export const createAppointment = ai.defineTool(
     }
     
     try {
+      const baseDate = parse(input.date, 'yyyy-MM-dd', new Date());
+      const [startHour, startMinute] = input.startTime.split(':').map(Number);
+      const [endHour, endMinute] = input.endTime.split(':').map(Number);
+      
+      const startDate = set(baseDate, { hours: startHour, minutes: startMinute, seconds: 0, milliseconds: 0 });
+      const endDate = set(baseDate, { hours: endHour, minutes: endMinute, seconds: 0, milliseconds: 0 });
+
+      if (endDate <= startDate) {
+        console.error("End time must be after start time.");
+        return { success: false };
+      }
+
       const docRef = await addDoc(collection(db, 'appointments'), {
         organizationId: organizationId,
         userId: userId,
         title: input.title,
         description: input.description || '',
-        start: Timestamp.fromDate(parseISO(input.start)),
-        end: Timestamp.fromDate(parseISO(input.end)),
+        start: Timestamp.fromDate(startDate),
+        end: Timestamp.fromDate(endDate),
         contactId: input.contactId || '',
         contactName: input.contactName || '',
         assignedTo: input.assignedTo || '',
