@@ -2,6 +2,7 @@
 import type { BotData, DriveLink } from '@/app/(app)/dashboard/bots/page';
 import { db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import { createAppointment } from '@/ai/tools/schedule';
 
 function escapeXml(unsafe: string): string {
   if (typeof unsafe !== 'string' || !unsafe) return '';
@@ -34,6 +35,19 @@ function buildDriveLinksXml(links?: DriveLink[]): string {
     return `<driveDocuments>\n    ${documents}\n  </driveDocuments>`;
 }
 
+// Helper to get the tool configuration for the prompt
+function buildToolsConfigXml(tools: any[]): string {
+    if (tools.length === 0) return '';
+    const toolDetails = tools.map(tool => {
+        // Here we can stringify the Zod schema to include in the prompt if needed,
+        // but for now, we just list the tool name and description.
+        // Genkit handles the schema details automatically when the tool is provided.
+        return `<tool>\n      <name>${escapeXml(tool.name)}</name>\n      <description>${escapeXml(tool.description)}</description>\n    </tool>`;
+    }).join('\n    ');
+    return `<available_tools>\n    ${toolDetails}\n  </available_tools>`;
+}
+
+
 function buildVentasPrompt(botData: BotData): string {
     const {
         agentRole = "Eres un asistente de ventas virtual.",
@@ -64,6 +78,9 @@ function buildVentasPrompt(botData: BotData): string {
     
     const notificationConfig = notificationPhoneNumber ? `<notification>${escapeXml(notificationPhoneNumber)}</notification>` : '';
     const driveLinksConfig = buildDriveLinksXml(botData.driveLinks);
+    
+    // Add the createAppointment tool to the sales bot's capabilities
+    const toolsConfig = buildToolsConfigXml([createAppointment]);
 
     return [
         rulesConfig,
@@ -74,6 +91,7 @@ function buildVentasPrompt(botData: BotData): string {
         contactConfig,
         `<closingMessage>${escapeXml(closingMessage)}</closingMessage>`,
         notificationConfig,
+        toolsConfig, // Inform the bot about the available tool
     ].filter(Boolean).join('\n').trim();
 }
 
