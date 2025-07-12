@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, addDoc, doc, writeBatch, Timestamp, orderBy, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
-import { buildPromptForBot } from '@/lib/bot-prompt-builder';
+import { activateBot, migrateAndActivateLegacyBot } from './actions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -74,40 +74,10 @@ export default function BotsPage() {
         // Check for a legacy field ('agentRole') and ensure a modern field ('activeBotId') is NOT present to prevent re-migration
         if (qybotDocSnap.exists() && qybotDocSnap.data().agentRole && !qybotDocSnap.data().activeBotId) {
           toast({ title: "Actualizando tu bot...", description: "Hemos encontrado tu configuración anterior y la estamos actualizando al nuevo formato multi-bot." });
-
-          const legacyData = qybotDocSnap.data();
-          const newBotData: Omit<BotData, 'id'> = {
-              userId: user.uid,
-              name: 'Bot de Ventas (Importado)',
-              category: 'Ventas',
-              isActive: true, // The old bot was always the active one
-              createdAt: legacyData.createdAt instanceof Timestamp ? legacyData.createdAt : Timestamp.now(),
-              // Copy all relevant fields from the old 'ventas' bot structure
-              agentRole: legacyData.agentRole,
-              selectedRules: legacyData.selectedRules || [],
-              businessContext: legacyData.businessContext,
-              serviceCatalog: legacyData.serviceCatalog || [],
-              contact: legacyData.contact,
-              closingMessage: legacyData.closingMessage,
-              notificationPhoneNumber: legacyData.notificationPhoneNumber,
-              notificationRule: legacyData.notificationRule,
-          };
-
-          // 1. Create the new bot in the 'bots' collection
-          const newBotDocRef = await addDoc(collection(db, 'bots'), newBotData);
           
-          // 2. Build the prompt for this new bot
-          const botForPrompt = { id: newBotDocRef.id, ...newBotData };
-          const { promptXml, instanceIdAssociated } = await buildPromptForBot(botForPrompt as BotData);
+          await migrateAndActivateLegacyBot(user.uid, qybotDocSnap.data());
 
-          // 3. Update the 'qybot' document to the new format (pointing to the active bot)
-          await setDoc(qybotDocRef, {
-              activeBotId: newBotDocRef.id,
-              promptXml: promptXml,
-              instanceIdAssociated,
-          }, { merge: true });
-
-          // 4. Re-run the fetch to display the newly migrated bot
+          // Re-run the fetch to display the newly migrated bot
           const updatedQuerySnapshot = await getDocs(q);
           const fetchedBots = updatedQuerySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BotData));
           setBots(fetchedBots);
@@ -138,31 +108,7 @@ export default function BotsPage() {
     if (shouldBeActive) {
       // Activation Logic
       try {
-        const batch = writeBatch(db);
-        
-        // Deactivate all other bots for this user
-        bots.forEach(bot => {
-          if (bot.id !== botToToggle.id) {
-            const botRef = doc(db, 'bots', bot.id);
-            batch.update(botRef, { isActive: false });
-          }
-        });
-  
-        // Activate the selected bot
-        const activeBotRef = doc(db, 'bots', botToToggle.id);
-        batch.update(activeBotRef, { isActive: true });
-        
-        // Generate and save the active prompt config to the main 'qybot' document
-        const { promptXml, instanceIdAssociated } = await buildPromptForBot(botToToggle);
-        const qybotConfigRef = doc(db, 'qybot', user.uid);
-        batch.set(qybotConfigRef, {
-          activeBotId: botToToggle.id,
-          promptXml: promptXml,
-          instanceIdAssociated: instanceIdAssociated,
-        }, { merge: true });
-
-        await batch.commit();
-        
+        await activateBot(botToToggle);
         toast({ title: "Bot Activado", description: `El bot "${botToToggle.name}" ahora está activo.` });
         await fetchBots(); // Refresh the list to show the new state
       } catch (error) {

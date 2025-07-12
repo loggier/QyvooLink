@@ -6,8 +6,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { buildPromptForBot } from '@/lib/bot-prompt-builder';
-import type { BotData, BotCategory } from '../page';
+import { updateBotAndPrompt } from '../../actions';
+import type { BotData, BotCategory } from '../../page';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -71,18 +71,9 @@ export default function EditBotPage() {
     setIsSaving(true);
     
     try {
-      const botRef = doc(db, 'bots', bot.id);
-      await setDoc(botRef, bot, { merge: true });
+      await updateBotAndPrompt(bot);
 
-      // If the bot being saved is the active one, update the main qybot config
       if (bot.isActive) {
-        const { promptXml, instanceIdAssociated } = await buildPromptForBot(bot);
-        const qybotConfigRef = doc(db, 'qybot', user.uid);
-        await setDoc(qybotConfigRef, {
-            activeBotId: bot.id,
-            promptXml: promptXml,
-            instanceIdAssociated,
-        }, { merge: true });
         toast({ title: "Bot Guardado y Activado", description: "La configuración del bot activo ha sido actualizada." });
       } else {
         toast({ title: "Bot Guardado", description: "Los cambios han sido guardados." });

@@ -39,10 +39,9 @@ function buildDriveLinksXml(links?: DriveLink[]): string {
 // Helper to get the tool configuration for the prompt
 function buildToolsConfigXml(tools: { name: string, description: string; schema: any }[]): string {
     if (tools.length === 0) return '';
-    const toolDetails = tools.map(({ name, description, schema }) => {
-        // Use the schema directly
-        const schemaString = JSON.stringify(schema.describe(), null, 2);
-        return `<tool>\n      <name>${escapeXml(name)}</name>\n      <description>${escapeXml(description)}</description>\n      <parameters>${escapeXml(schemaString)}</parameters>\n    </tool>`;
+    const toolDetails = tools.map((tool) => {
+        const schemaString = JSON.stringify(tool.schema.describe(), null, 2);
+        return `<tool>\n      <name>${escapeXml(tool.name)}</name>\n      <description>${escapeXml(tool.description)}</description>\n      <parameters>${escapeXml(schemaString)}</parameters>\n    </tool>`;
     }).join('\n    ');
     return `<available_tools>\n    ${toolDetails}\n  </available_tools>`;
 }
