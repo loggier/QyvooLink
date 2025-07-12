@@ -2,7 +2,7 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, setDoc, writeBatch, collection, addDoc, getDoc, Timestamp } from 'firebase/firestore';
+import { doc, setDoc, writeBatch, collection, addDoc, getDoc, Timestamp, query, where, getDocs } from 'firebase/firestore';
 import type { BotData, DriveLink } from './page';
 // Import the schema directly, as the tool itself is not needed here.
 import { CreateAppointmentSchema } from '@/ai/tools/schedule';
@@ -231,19 +231,34 @@ async function buildPromptForBot(botData: BotData): Promise<{ promptXml: string;
 
 // --- Original Server Actions ---
 
-export async function updateBotAndPrompt(botData: BotData) {
+export async function updateBotAndPrompt(botData: Partial<BotData>) {
   if (!botData || !botData.id) {
     throw new Error("Invalid bot data provided.");
   }
 
+  // Fetch the original document to merge with, ensuring createdAt is preserved
   const botRef = doc(db, 'bots', botData.id);
-  await setDoc(botRef, botData, { merge: true });
+  const botSnap = await getDoc(botRef);
+  if (!botSnap.exists()) {
+    throw new Error("Bot document not found.");
+  }
+  
+  const originalData = botSnap.data();
 
-  if (botData.isActive) {
-    const { promptXml, instanceIdAssociated } = await buildPromptForBot(botData);
-    const qybotConfigRef = doc(db, 'qybot', botData.userId);
+  // Merge the new data with the original, keeping the original timestamp
+  const dataToSave = {
+      ...originalData,
+      ...botData,
+      createdAt: originalData.createdAt // Ensure timestamp is not overwritten
+  };
+
+  await setDoc(botRef, dataToSave, { merge: true });
+
+  if (dataToSave.isActive) {
+    const { promptXml, instanceIdAssociated } = await buildPromptForBot(dataToSave as BotData);
+    const qybotConfigRef = doc(db, 'qybot', dataToSave.userId);
     await setDoc(qybotConfigRef, {
-        activeBotId: botData.id,
+        activeBotId: dataToSave.id,
         promptXml: promptXml,
         instanceIdAssociated,
     }, { merge: true });
@@ -269,7 +284,7 @@ export async function activateBot(botToActivate: BotData) {
     batch.update(activeBotRef, { isActive: true });
     
     const botWithActiveState = { ...botToActivate, isActive: true };
-    const { promptXml, instanceIdAssociated } = await buildPromptForBot(botWithActiveState);
+    const { promptXml, instanceIdAssociated } = await buildPromptForBot(botWithActiveState as BotData);
     const qybotConfigRef = doc(db, 'qybot', userId);
 
     batch.set(qybotConfigRef, {

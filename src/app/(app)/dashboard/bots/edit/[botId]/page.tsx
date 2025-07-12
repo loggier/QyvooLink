@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, Timestamp } from 'firebase/firestore';
 import { updateBotAndPrompt } from '../../actions';
 import type { BotData, BotCategory } from '../../page';
 import { Button } from '@/components/ui/button';
@@ -70,8 +70,20 @@ export default function EditBotPage() {
     if (!user || !bot) return;
     setIsSaving(true);
     
+    // Create a plain object to send to the server action, removing the complex Timestamp object.
+    // The server action will handle Timestamps on its own.
+    const { createdAt, ...serializableBotData } = bot;
+
+    const dataToSend = {
+      ...serializableBotData,
+      // Convert Timestamp to a serializable format if needed by the server action,
+      // or simply omit it if the server action doesn't update it.
+      // For this action, the server handles it, so we can pass the simplified object.
+    };
+
     try {
-      await updateBotAndPrompt(bot);
+      // Pass the serializable object to the server action
+      await updateBotAndPrompt(dataToSend);
 
       if (bot.isActive) {
         toast({ title: "Bot Guardado y Activado", description: "La configuración del bot activo ha sido actualizada." });
