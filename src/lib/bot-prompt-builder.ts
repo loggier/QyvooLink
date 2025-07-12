@@ -50,7 +50,7 @@ function buildToolsConfigXml(tools: any[]): string {
 
 function buildVentasPrompt(botData: BotData): string {
     const {
-        agentRole = "Eres un asistente de ventas virtual.",
+        agentRole = "Eres un asistente de ventas virtual para [Nombre de la Empresa]. Tu objetivo principal es entender las necesidades del cliente, ofrecer soluciones basadas en nuestro catálogo de servicios, proporcionar precios y cerrar la venta o agendar una demostración. Debes ser amable, profesional y eficiente. Si un cliente muestra una clara intención de agendar una cita, una reunión o una demostración, DEBES usar la herramienta 'createAppointment' para crear el evento directamente en el calendario.",
         selectedRules = [],
         businessContext = { description: '', location: '', mission: '' },
         serviceCatalog = [],
