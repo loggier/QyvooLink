@@ -40,11 +40,12 @@ function buildDriveLinksXml(links?: DriveLink[]): string {
     return `<driveDocuments>\n    ${documents}\n  </driveDocuments>`;
 }
 
-function buildToolsConfigXml(tools: { name: string, description: string; schema: any }[]): string {
+// Simplified tool description function
+function buildToolsConfigXml(tools: { name: string, description: string }[]): string {
     if (tools.length === 0) return '';
     const toolDetails = tools.map((tool) => {
-        const schemaString = JSON.stringify(tool.schema.describe(), null, 2);
-        return `<tool>\n      <name>${escapeXml(tool.name)}</name>\n      <description>${escapeXml(tool.description)}</description>\n      <parameters>${escapeXml(schemaString)}</parameters>\n    </tool>`;
+        // The description now includes the parameters in a human-readable format for the LLM.
+        return `<tool>\n      <name>${escapeXml(tool.name)}</name>\n      <description>${escapeXml(tool.description)}</description>\n    </tool>`;
     }).join('\n    ');
     return `<available_tools>\n    ${toolDetails}\n  </available_tools>`;
 }
@@ -80,11 +81,11 @@ function buildVentasPrompt(botData: BotData): string {
     const notificationConfig = notificationPhoneNumber ? `<notification>${escapeXml(notificationPhoneNumber)}</notification>` : '';
     const driveLinksConfig = buildDriveLinksXml(botData.driveLinks);
     
+    // Updated tool description to be more explicit for the LLM.
     const toolsConfig = buildToolsConfigXml([
         { 
             name: 'createAppointment', 
-            description: "Creates a new appointment, meeting, or event in the user's calendar. Use this when a user confirms they want to schedule something. You must provide the date and times.",
-            schema: CreateAppointmentSchema 
+            description: `Creates a new appointment. Use this when a user confirms they want to schedule something. Parameters to provide: 'title' (string, the purpose of the appointment), 'date' (string, format YYYY-MM-DD), 'startTime' (string, format HH:mm), and 'endTime' (string, format HH:mm). You can also include optional details like 'contactName' or 'description'.`,
         }
     ]);
 
