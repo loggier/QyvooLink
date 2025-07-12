@@ -87,8 +87,8 @@ export function AppointmentForm({
       date: selectedDate || new Date(),
       startTime: '09:00',
       endTime: '10:00',
-      contactId: '',
-      assignedTo: '',
+      contactId: undefined,
+      assignedTo: undefined,
     }
   });
 
@@ -110,8 +110,8 @@ export function AppointmentForm({
         date: selectedDate || new Date(),
         startTime: '09:00',
         endTime: '10:00',
-        contactId: '',
-        assignedTo: '',
+        contactId: undefined,
+        assignedTo: undefined,
       });
     }
   }, [appointment, form, selectedDate]);
@@ -263,14 +263,17 @@ export function AppointmentForm({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Asignado a</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select 
+                        onValueChange={(value) => field.onChange(value === 'unassigned' ? undefined : value)} 
+                        defaultValue={field.value}
+                      >
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Seleccionar miembro del equipo" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">Ninguno</SelectItem>
+                          <SelectItem value="unassigned">Ninguno</SelectItem>
                           {teamMembers.map(member => (
                             <SelectItem key={member.uid} value={member.uid}>{member.fullName || member.email}</SelectItem>
                           ))}
@@ -287,14 +290,17 @@ export function AppointmentForm({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Vincular Contacto (Opcional)</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select 
+                        onValueChange={(value) => field.onChange(value === 'unassigned' ? undefined : value)} 
+                        defaultValue={field.value}
+                      >
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Seleccionar un contacto" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                           <SelectItem value="">Ninguno</SelectItem>
+                           <SelectItem value="unassigned">Ninguno</SelectItem>
                           {contacts.map(contact => (
                             <SelectItem key={contact.id} value={contact.id}>
                                {`${contact.nombre || ''} ${contact.apellido || ''}`.trim() || contact.telefono}
