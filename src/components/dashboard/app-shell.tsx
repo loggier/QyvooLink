@@ -29,7 +29,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { AppFooter } from '@/components/layout/footer';
 import OnboardingGuide from '@/components/dashboard/onboarding-guide';
 import {
-  Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare, Bot, Contact2, Zap, Shield, CreditCard, HelpCircle, PanelLeft, Users2, Briefcase, Folder,
+  Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare, Bot, Contact2, Zap, Shield, CreditCard, HelpCircle, PanelLeft, Users2, Briefcase, Folder, Calendar,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
@@ -51,6 +51,7 @@ interface NavGroup {
 const navStructure: (NavItem | NavGroup)[] = [
   { href: '/dashboard', label: 'Panel', icon: Home },
   { href: '/dashboard/chat', label: 'Chat', icon: MessageSquare },
+  { href: '/dashboard/schedule', label: 'Agenda', icon: Calendar },
   {
     title: 'Clientes',
     shortTitle: 'Clientes',
