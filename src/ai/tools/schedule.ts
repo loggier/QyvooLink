@@ -12,7 +12,7 @@ import { addDoc, collection, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { set, parse } from 'date-fns';
 
-const CreateAppointmentSchema = z.object({
+export const CreateAppointmentSchema = z.object({
   title: z.string().describe("The main title or purpose of the appointment."),
   date: z.string().describe("The date of the appointment in YYYY-MM-DD format (e.g., '2024-08-10')."),
   startTime: z.string().describe("The start time of the appointment in 24-hour HH:mm format (e.g., '10:00')."),

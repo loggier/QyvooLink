@@ -2,7 +2,7 @@
 import type { BotData, DriveLink } from '@/app/(app)/dashboard/bots/page';
 import { db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { createAppointment } from '@/ai/tools/schedule';
+import { createAppointment, CreateAppointmentSchema } from '@/ai/tools/schedule';
 
 function escapeXml(unsafe: string): string {
   if (typeof unsafe !== 'string' || !unsafe) return '';
@@ -36,14 +36,10 @@ function buildDriveLinksXml(links?: DriveLink[]): string {
 }
 
 // Helper to get the tool configuration for the prompt
-function buildToolsConfigXml(tools: any[]): string {
+function buildToolsConfigXml(tools: { tool: any; schema: any }[]): string {
     if (tools.length === 0) return '';
-    const toolDetails = tools.map(tool => {
-        // Here we can stringify the Zod schema to include in the prompt if needed,
-        // but for now, we just list the tool name and description.
-        // Genkit handles the schema details automatically when the tool is provided.
-        // Update: Let's describe the parameters to guide the LLM better.
-        const schemaString = JSON.stringify(tool.inputSchema.describe(), null, 2);
+    const toolDetails = tools.map(({ tool, schema }) => {
+        const schemaString = JSON.stringify(schema.describe(), null, 2);
         return `<tool>\n      <name>${escapeXml(tool.name)}</name>\n      <description>${escapeXml(tool.description)}</description>\n      <parameters>${escapeXml(schemaString)}</parameters>\n    </tool>`;
     }).join('\n    ');
     return `<available_tools>\n    ${toolDetails}\n  </available_tools>`;
@@ -82,7 +78,7 @@ function buildVentasPrompt(botData: BotData): string {
     const driveLinksConfig = buildDriveLinksXml(botData.driveLinks);
     
     // Add the createAppointment tool to the sales bot's capabilities
-    const toolsConfig = buildToolsConfigXml([createAppointment]);
+    const toolsConfig = buildToolsConfigXml([{ tool: createAppointment, schema: CreateAppointmentSchema }]);
 
     return [
         rulesConfig,
