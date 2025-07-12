@@ -512,8 +512,9 @@ export default function ChatPage() {
     if (!replyMessage.trim() || !selectedChatId || !whatsAppInstance || !user) return;
 
     const trimmedMessage = replyMessage.trim();
-
-    const newMessageData: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
+    
+    // Optimistically add message to Firestore first for a snappy UI
+    const newMessageDataForDb: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
       chat_id: selectedChatId, 
       from: whatsAppInstance.phoneNumber || `instance_${whatsAppInstance.id}`, 
       to: selectedChatId, 
@@ -528,49 +529,36 @@ export default function ChatPage() {
         name: user.fullName || user.username || 'Agente',
       },
     };
-
+    
     try {
-      await addDoc(collection(db, 'chat'), newMessageData);
-      setReplyMessage("");
-
+      await addDoc(collection(db, 'chat'), newMessageDataForDb);
+      setReplyMessage(""); // Clear input immediately
+      
+      // If it's a message to the client, call our API endpoint
       if (chatMode === 'message') {
-        const webhookPayload = [{
-          chat_id: selectedChatId,
-          instanceId: whatsAppInstance.id,
-          mensaje: trimmedMessage,
-          instance: whatsAppInstance.name,
-          user_name: "agente", // Keep 'agente' for backend compatibility, UI will use author.name
-          timestamp: new Date().toISOString(),
-        }];
+         const apiResponse = await fetch('/api/chat/send-message', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({
+             userId: user.uid,
+             chatId: selectedChatId,
+             message: trimmedMessage,
+             instanceId: whatsAppInstance.id,
+             instanceName: whatsAppInstance.name,
+           }),
+         });
 
-        const webhookUrl = "https://n8n.vemontech.com/webhook/qyvoo";
-
-        try {
-          const webhookResponse = await fetch(webhookUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(webhookPayload),
-          });
-
-          if (webhookResponse.ok) {
-            console.log("Message successfully sent to webhook:", webhookPayload);
-          } else {
-            const errorData = await webhookResponse.text();
-            console.error("Error sending message to webhook:", webhookResponse.status, errorData);
-            toast({ variant: "destructive", title: "Error de Webhook", description: `No se pudo enviar el mensaje a Qyvoo: ${webhookResponse.status}` });
-          }
-        } catch (webhookError) {
-          console.error("Error calling webhook:", webhookError);
-          toast({ variant: "destructive", title: "Error de Red Webhook", description: "No se pudo conectar con el servicio de Qyvoo." });
-        }
+         if (!apiResponse.ok) {
+           const errorData = await apiResponse.text();
+           console.error("Error sending message via API:", apiResponse.status, errorData);
+           toast({ variant: "destructive", title: "Error de envío", description: `No se pudo procesar el mensaje: ${apiResponse.statusText}` });
+         } else {
+           console.log("Message sent via API successfully.");
+         }
       }
-
     } catch (error) {
-      console.error("Error saving message/note (Firestore):", error);
-      setError("Error al guardar el mensaje o nota en Firestore.");
-      toast({ variant: "destructive", title: "Error en Firestore", description: "No se pudo guardar el mensaje/nota." });
+       console.error("Error sending message:", error);
+       toast({ variant: "destructive", title: "Error", description: "No se pudo enviar el mensaje o nota." });
     }
   };
   
