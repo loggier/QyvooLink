@@ -19,21 +19,25 @@ export const CreateAppointmentSchema = z.object({
   timezone: z.string().describe("The IANA timezone of the user (e.g., 'America/Mexico_City')."),
 });
 
+function createUtcDate(dateStr: string, timeStr: string, timezone: string): Date {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const [hour, minute] = timeStr.split(':').map(Number);
+  
+  // Directly create a date in the target timezone and convert to UTC
+  // Note: month is 0-indexed in JS, so we subtract 1
+  return zonedTimeToUtc(new Date(year, month - 1, day, hour, minute), timezone);
+}
+
+
 export async function createAppointment(input: z.infer<typeof CreateAppointmentSchema>): Promise<{ success: boolean; appointmentId?: string }> {
   try {
     const { date, startTime, endTime, timezone, contactPhone, ...rest } = input;
 
-    // Combine date and time into a standard ISO-like string.
-    const startDateTimeString = `${date}T${startTime}:00`;
-    const endDateTimeString = `${date}T${endTime}:00`;
-    
-    // Convert the local time string to a UTC Date object using the provided timezone.
-    const utcStartDate = zonedTimeToUtc(startDateTimeString, timezone);
-    const utcEndDate = zonedTimeToUtc(endDateTimeString, timezone);
+    const utcStartDate = createUtcDate(date, startTime, timezone);
+    const utcEndDate = createUtcDate(date, endTime, timezone);
 
-    // Final check to ensure dates are valid.
     if (isNaN(utcStartDate.getTime()) || isNaN(utcEndDate.getTime())) {
-      console.error("Invalid date created from input.", { start: startDateTimeString, end: endDateTimeString, timezone });
+      console.error("Invalid date created from input.", { start: utcStartDate, end: utcEndDate, timezone });
       return { success: false };
     }
 
@@ -48,6 +52,7 @@ export async function createAppointment(input: z.infer<typeof CreateAppointmentS
 
     if (contactPhone) {
       const contactsRef = collection(db, 'contacts');
+      // CRITICAL FIX: Add 'where' clause for userId to ensure data isolation
       const q = query(
         contactsRef, 
         where('userId', '==', rest.userId), 
@@ -62,12 +67,11 @@ export async function createAppointment(input: z.infer<typeof CreateAppointmentS
         const contactData = contactDoc.data();
         contactName = `${contactData.nombre || ''} ${contactData.apellido || ''}`.trim() || contactData.telefono;
       } else {
-        // If no contact is found, append the phone number to the title.
+        // If contact not found in this user's contacts, add phone to title
         finalTitle = `${rest.title} con ${contactPhone}`;
       }
     }
 
-    // 4. Add to Firestore using the correct Timestamp format.
     const docRef = await addDoc(collection(db, 'appointments'), {
       organizationId: rest.organizationId,
       userId: rest.userId,
@@ -98,7 +102,5 @@ ai.defineTool(
       appointmentId: z.string().optional(),
     }),
   },
-  async (input) => {
-    return createAppointment(input);
-  }
+  createAppointment
 );

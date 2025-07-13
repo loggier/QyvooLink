@@ -88,7 +88,7 @@ function formatWhatsAppMessage(text: string | undefined | null): React.ReactNode
     } else if (match[4]) { 
       elements.push(<em key={lastIndex}>{match[5]}</em>);
     } else if (match[6]) { 
-      elements.push(<del key={lastIndex}>{match[7]}</del>);
+      elements.push(<del key={lastIndex}>{match[7]}del>);
     }
     lastIndex = regex.lastIndex;
   }
@@ -107,6 +107,8 @@ export default function ContactDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
+  
+  const dataFetchUserId = user?.role === 'agent' ? user?.ownerId : user?.uid;
 
   const contactId = typeof params.contactId === 'string' ? params.contactId : '';
 
@@ -121,14 +123,14 @@ export default function ContactDetailPage() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const fetchContactDetails = useCallback(async () => {
-    if (!user || !contactId) return;
+    if (!dataFetchUserId || !contactId) return;
     setIsLoading(true);
     try {
       const contactDocRef = doc(db, 'contacts', contactId);
       const contactDocSnap = await getDoc(contactDocRef);
       if (contactDocSnap.exists()) {
         const data = { id: contactDocSnap.id, ...contactDocSnap.data() } as ContactDetails;
-        if (data.userId !== user.uid) {
+        if (data.userId !== dataFetchUserId) {
           toast({ variant: "destructive", title: "Acceso Denegado", description: "No tienes permiso para ver este contacto." });
           router.push('/dashboard/contacts');
           return;
@@ -156,12 +158,12 @@ export default function ContactDetailPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, contactId, toast, router]);
+  }, [dataFetchUserId, contactId, toast, router]);
 
   const fetchWhatsAppInstance = useCallback(async () => {
-    if (!user) return;
+    if (!dataFetchUserId) return;
     try {
-      const instanceDocRef = doc(db, 'instances', user.uid);
+      const instanceDocRef = doc(db, 'instances', dataFetchUserId);
       const instanceDocSnap = await getDoc(instanceDocRef);
       if (instanceDocSnap.exists()) {
         setWhatsAppInstance(instanceDocSnap.data() as WhatsAppInstance);
@@ -170,7 +172,7 @@ export default function ContactDetailPage() {
       console.error("Error fetching WhatsApp instance:", error);
       // No toast aquí para no molestar si es un error menor
     }
-  }, [user]);
+  }, [dataFetchUserId]);
 
   useEffect(() => {
     fetchContactDetails();
@@ -223,7 +225,7 @@ export default function ContactDetailPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!user || !contact) return;
+    if (!dataFetchUserId || !contact) return;
     setIsSaving(true);
 
     const updatedContactData: Partial<ContactDetails> = {
@@ -325,7 +327,7 @@ export default function ContactDetailPage() {
               </div>
                <div>
                 <Label htmlFor="_chatIdOriginal" className="flex items-center text-sm text-muted-foreground"><MessageCircle className="h-3 w-3 mr-1.5"/>Chat ID Original (WhatsApp)</Label>
-                <Input id="_chatIdOriginal" name="_chatIdOriginal" value={formData._chatIdOriginal || ""} readOnly placeholder="Ej: 1234567890@s.whatsapp.net"/>
+                <Input id="_chatIdOriginal" name="_chatIdOriginal" value={formData._chatIdOriginal || ""} onChange={handleInputChange} placeholder="Ej: 1234567890@s.whatsapp.net"/>
                  <p className="text-xs text-muted-foreground mt-1">Este ID se usa para vincular las conversaciones de WhatsApp. Edítalo con cuidado.</p>
               </div>
               <div className="flex items-center space-x-2 pt-2">

@@ -307,19 +307,26 @@ export default function ChatPage() {
           });
           
           const contactPromises = Array.from(chatMap.keys()).map(async (chat_id) => {
-            if (!dataFetchUserId) return { chatId: chat_id, data: null }; 
-            const contactDocId = getContactDocId(dataFetchUserId, chat_id);
+            if (!dataFetchUserId) return { chatId: chat_id, data: null };
+            // CRITICAL FIX: Add 'where' clause for userId to ensure data isolation.
+            const contactQuery = query(
+              collection(db, 'contacts'),
+              where('userId', '==', dataFetchUserId),
+              where('_chatIdOriginal', '==', chat_id),
+              limit(1)
+            );
+
             try {
-                const contactDocRef = doc(db, 'contacts', contactDocId);
-                const contactDocSnap = await getDoc(contactDocRef);
-                if (contactDocSnap.exists()) {
-                    return { chatId: chat_id, data: contactDocSnap.data() as ContactDetails };
+                const contactSnapshot = await getDocs(contactQuery);
+                if (!contactSnapshot.empty) {
+                    return { chatId: chat_id, data: contactSnapshot.docs[0].data() as ContactDetails };
                 }
             } catch (contactError) {
                 console.warn(`Error fetching contact for ${chat_id}:`, contactError);
             }
             return { chatId: chat_id, data: null };
           });
+
 
           const contactResults = await Promise.all(contactPromises);
           const contactsDataMap = new Map<string, ContactDetails | null>();
@@ -437,12 +444,19 @@ export default function ChatPage() {
     if (selectedChatId && dataFetchUserId && whatsAppInstance) {
       setIsLoadingContact(true);
       const fetchDetails = async () => {
-        const compositeContactId = getContactDocId(dataFetchUserId, selectedChatId);
         try {
-          const contactDocRef = doc(db, 'contacts', compositeContactId);
-          const contactDocSnap = await getDoc(contactDocRef);
-          if (contactDocSnap.exists()) {
-            const data = { id: contactDocSnap.id, ...contactDocSnap.data() } as ContactDetails;
+          // CRITICAL FIX: Add 'where' clause for userId to ensure data isolation.
+          const contactQuery = query(
+            collection(db, 'contacts'),
+            where('userId', '==', dataFetchUserId),
+            where('_chatIdOriginal', '==', selectedChatId),
+            limit(1)
+          );
+          const contactSnapshot = await getDocs(contactQuery);
+          
+          if (!contactSnapshot.empty) {
+            const contactDoc = contactSnapshot.docs[0];
+            const data = { id: contactDoc.id, ...contactDoc.data() } as ContactDetails;
             data.chatbotEnabledForContact = data.chatbotEnabledForContact ?? true;
             data.estadoConversacion = data.estadoConversacion ?? 'Abierto';
             setContactDetails(data);
@@ -450,7 +464,7 @@ export default function ChatPage() {
             setIsEditingContact(false);
           } else {
             const initialData: ContactDetails = { 
-              id: compositeContactId, 
+              id: getContactDocId(dataFetchUserId, selectedChatId), 
               telefono: formatPhoneNumber(selectedChatId),
               nombre: "",
               apellido: "",
@@ -1108,5 +1122,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
-    
