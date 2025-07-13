@@ -62,8 +62,8 @@ export async function createAppointment(input: z.infer<typeof CreateAppointmentS
   }
 }
 
-// We define the tool for Genkit to use, but we don't export it as it's not needed directly by other modules.
-// The prompt builder will reference the schema, and the API endpoint will call the createAppointment function.
+// We define the tool for Genkit to use. This provides the structure for the AI.
+// The actual execution is handled by the API endpoint calling the `createAppointment` function.
 ai.defineTool(
   {
     name: 'createAppointment',
@@ -75,8 +75,9 @@ ai.defineTool(
     }),
   },
   async (input) => {
-    // The tool's implementation now calls our exported function.
-    // This keeps the core logic separate and reusable.
+    // This function body is used when the tool is called directly within a Genkit flow.
+    // In our case, with N8N, the API endpoint is the primary executor.
+    // However, it's good practice to have the tool's implementation here as well.
     return createAppointment(input);
   }
 );

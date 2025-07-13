@@ -8,8 +8,12 @@ export async function POST(req: Request) {
     const rawJson = await req.json();
 
     // Handle cases where the data might be nested under a "JSON" key
-    const jsonToValidate = rawJson.JSON ? rawJson.JSON : rawJson;
+    let jsonToValidate = rawJson.JSON ? rawJson.JSON : rawJson;
 
+    // IMPORTANT: The AI won't know the userId or organizationId.
+    // The calling service (like N8N) MUST inject these into the payload
+    // before sending it to this endpoint.
+    
     // Validate the incoming JSON against the appointment schema
     const validationResult = CreateAppointmentSchema.safeParse(jsonToValidate);
 
