@@ -4,8 +4,8 @@
 import { db } from '@/lib/firebase';
 import { doc, setDoc, writeBatch, collection, addDoc, getDoc, Timestamp, query, where, getDocs } from 'firebase/firestore';
 import type { BotData, DriveLink } from './page';
-// Import the schema directly, as the tool itself is not needed here.
-import { CreateAppointmentSchema } from '@/ai/tools/schedule';
+// Import the schema directly from the new schemas file.
+import { CreateAppointmentSchema } from '@/ai/schemas';
 
 // --- Functions from the deleted bot-prompt-builder.ts, now living here ---
 

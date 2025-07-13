@@ -3,7 +3,8 @@
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { CreateAppointmentSchema, createAppointment } from '@/ai/tools/schedule';
+import { createAppointment } from '@/ai/tools/schedule';
+import { CreateAppointmentSchema } from '@/ai/schemas';
 
 export async function POST(req: Request) {
   try {
