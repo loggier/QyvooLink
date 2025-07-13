@@ -1,4 +1,6 @@
 
+'use server';
+
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { CreateAppointmentSchema, createAppointment } from '@/ai/tools/schedule';

@@ -94,21 +94,21 @@ export async function createAppointment(input: z.infer<typeof CreateAppointmentS
 }
 
 // Schema for querying future appointments
-const GetFutureAppointmentsSchema = z.object({
+export const GetFutureAppointmentsSchema = z.object({
   contactPhone: z.string().describe("The WhatsApp Chat ID of the contact asking for their appointments (e.g., '5218112345678@s.whatsapp.net')."),
   organizationId: z.string().describe("The organization ID of the user requesting the information."),
   userId: z.string().describe("The user ID associated with the organization."),
 });
 
 // The structure of a single appointment in the output
-const AppointmentDetailSchema = z.object({
+export const AppointmentDetailSchema = z.object({
   title: z.string(),
   date: z.string().describe("The date of the appointment, formatted as 'DD de MMMM de YYYY'."),
   startTime: z.string().describe("The start time of the appointment, formatted as 'HH:mm'."),
 });
 
 // Output schema for the getFutureAppointments tool
-const GetFutureAppointmentsOutputSchema = z.object({
+export const GetFutureAppointmentsOutputSchema = z.object({
   appointments: z.array(AppointmentDetailSchema).describe("A list of future appointments."),
   count: z.number().describe("The total number of future appointments found."),
 });

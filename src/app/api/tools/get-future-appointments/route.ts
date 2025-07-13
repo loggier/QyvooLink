@@ -1,20 +1,16 @@
 
+'use server';
+
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getFutureAppointments, GetFutureAppointmentsOutputSchema } from '@/ai/tools/schedule';
+import { getFutureAppointments, GetFutureAppointmentsSchema } from '@/ai/tools/schedule';
 
-// Define el schema para la validación de la entrada del POST
-const GetFutureAppointmentsRequestSchema = z.object({
-  contactPhone: z.string().min(1, "El contactPhone es obligatorio."),
-  organizationId: z.string().min(1, "El organizationId es obligatorio."),
-  userId: z.string().min(1, "El userId es obligatorio."),
-});
 
 export async function POST(req: Request) {
   try {
     const inputData = await req.json();
 
-    const validation = GetFutureAppointmentsRequestSchema.safeParse(inputData);
+    const validation = GetFutureAppointmentsSchema.safeParse(inputData);
     
     if (!validation.success) {
       return NextResponse.json(
