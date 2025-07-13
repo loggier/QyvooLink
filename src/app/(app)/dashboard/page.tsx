@@ -177,13 +177,17 @@ export default function DashboardPage() {
                  }
                  if (msg.chat_id.endsWith('@g.us')) currentChatId = msg.chat_id;
 
-                const contactDocId = getContactDocId(dataFetchUserId!, currentChatId);
                 let contactData: ContactDetails | null = null;
                 try {
-                    const contactDocRef = doc(db, 'contacts', contactDocId);
-                    const contactDocSnap = await getDoc(contactDocRef);
-                    if (contactDocSnap.exists()) {
-                        contactData = contactDocSnap.data() as ContactDetails;
+                    const contactQuery = query(
+                        collection(db, 'contacts'),
+                        where('userId', '==', dataFetchUserId!),
+                        where('_chatIdOriginal', '==', currentChatId),
+                        limit(1)
+                    );
+                    const contactSnapshot = await getDocs(contactQuery);
+                    if (!contactSnapshot.empty) {
+                        contactData = contactSnapshot.docs[0].data() as ContactDetails;
                     }
                 } catch (contactError) {
                     console.warn(`Error fetching contact for ${currentChatId}:`, contactError);
