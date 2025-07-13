@@ -3,13 +3,16 @@
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getFutureAppointments,  } from '@/ai/tools/schedule';
+import { getFutureAppointments } from '@/ai/tools/schedule';
 import { GetFutureAppointmentsSchema } from '@/ai/schemas';
 
 
 export async function POST(req: Request) {
   try {
-    const inputData = await req.json();
+    const rawJson = await req.json();
+    
+    // Handle cases where the JSON is nested under a "JSON" key by the AI
+    const inputData = rawJson.JSON ? rawJson.JSON : rawJson;
 
     const validation = GetFutureAppointmentsSchema.safeParse(inputData);
     
@@ -20,10 +23,10 @@ export async function POST(req: Request) {
       );
     }
     
-    // Llama a la función de lógica principal con los datos validados
+    // Call the core logic function with the validated data
     const result = await getFutureAppointments(validation.data);
     
-    // Devuelve el resultado de la función directamente
+    // Return the result of the function directly
     return NextResponse.json(result);
     
   } catch (error: any) {

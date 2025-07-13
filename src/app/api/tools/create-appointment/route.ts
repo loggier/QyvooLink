@@ -8,12 +8,11 @@ import { CreateAppointmentSchema } from '@/ai/schemas';
 
 export async function POST(req: Request) {
   try {
-    let rawJson = await req.json();
+    const rawJson = await req.json();
 
-    // Handle cases where the JSON is nested under a "JSON" key
+    // Handle cases where the JSON is nested under a "JSON" key by the AI
     const inputData = rawJson.JSON ? rawJson.JSON : rawJson;
 
-    // The timezone now comes directly from the input, as per the updated schema.
     const validation = CreateAppointmentSchema.safeParse(inputData);
     
     if (!validation.success) {
