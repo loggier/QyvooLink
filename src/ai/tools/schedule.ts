@@ -29,11 +29,13 @@ export const CreateAppointmentSchema = z.object({
 // It can be called from any server-side context (e.g., an API route).
 export async function createAppointment(input: z.infer<typeof CreateAppointmentSchema>): Promise<{ success: boolean; appointmentId?: string }> {
   try {
-    // Create ISO-like strings without timezone information.
-    // This forces the JavaScript Date object to parse it as "local" time, but local to the specified date, not the server's date.
+    // Construct ISO-like strings without timezone information.
+    // This format is crucial for ensuring the time is interpreted as "local" to the date provided, not the server's timezone.
     const startString = `${input.date}T${input.startTime}:00`;
     const endString = `${input.date}T${input.endTime}:00`;
 
+    // Create Date objects from these specific strings. JavaScript's Date constructor
+    // will correctly parse this format as local time for the given date.
     const startDate = new Date(startString);
     const endDate = new Date(endString);
     
