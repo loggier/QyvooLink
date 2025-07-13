@@ -54,6 +54,7 @@ interface AppointmentFormProps {
   teamMembers: TeamMember[];
   onSave: () => void;
   selectedDate?: Date;
+  initialContactId?: string; // New prop to pre-select a contact
 }
 
 export function AppointmentForm({
@@ -63,7 +64,8 @@ export function AppointmentForm({
   contacts,
   teamMembers,
   onSave,
-  selectedDate
+  selectedDate,
+  initialContactId,
 }: AppointmentFormProps) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -75,34 +77,36 @@ export function AppointmentForm({
       date: selectedDate || new Date(),
       startTime: '09:00',
       endTime: '10:00',
-      contactId: 'unassigned',
+      contactId: initialContactId || 'unassigned',
       assignedTo: 'unassigned',
     }
   });
 
   useEffect(() => {
-    if (appointment) {
-      form.reset({
-        title: appointment.title,
-        description: appointment.description,
-        date: appointment.start,
-        startTime: format(appointment.start, 'HH:mm'),
-        endTime: format(appointment.end, 'HH:mm'),
-        contactId: appointment.contactId || 'unassigned',
-        assignedTo: appointment.assignedTo || 'unassigned',
-      });
-    } else {
-      form.reset({
-        title: '',
-        description: '',
-        date: selectedDate || new Date(),
-        startTime: '09:00',
-        endTime: '10:00',
-        contactId: 'unassigned',
-        assignedTo: 'unassigned',
-      });
+    if (isOpen) {
+        if (appointment) {
+        form.reset({
+            title: appointment.title,
+            description: appointment.description,
+            date: appointment.start,
+            startTime: format(appointment.start, 'HH:mm'),
+            endTime: format(appointment.end, 'HH:mm'),
+            contactId: appointment.contactId || 'unassigned',
+            assignedTo: appointment.assignedTo || 'unassigned',
+        });
+        } else {
+        form.reset({
+            title: '',
+            description: '',
+            date: selectedDate || new Date(),
+            startTime: '09:00',
+            endTime: '10:00',
+            contactId: initialContactId || 'unassigned', // Use initialContactId if provided
+            assignedTo: 'unassigned',
+        });
+        }
     }
-  }, [appointment, form, selectedDate]);
+  }, [appointment, form, selectedDate, initialContactId, isOpen]);
   
   const onSubmit = async (data: AppointmentFormData) => {
     if (!user || !user.organizationId) {
@@ -293,7 +297,7 @@ export function AppointmentForm({
                         <SelectContent>
                            <SelectItem value="unassigned">Ninguno</SelectItem>
                           {contacts.map(contact => (
-                            <SelectItem key={contact.id} value={contact.id}>
+                            <SelectItem key={contact.id} value={contact.id!}>
                                {`${contact.nombre || ''} ${contact.apellido || ''}`.trim() || contact.telefono}
                             </SelectItem>
                           ))}

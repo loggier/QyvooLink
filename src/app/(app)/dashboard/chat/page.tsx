@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EvolveLinkLogo } from '@/components/icons';
-import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft, ListTodo, UserCog, Filter, StickyNote, CalendarClock } from 'lucide-react'; 
+import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft, ListTodo, UserCog, Filter, StickyNote, CalendarClock, PlusCircle } from 'lucide-react'; 
 import type { WhatsAppInstance } from '../configuration/page'; 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from '@/components/ui/button';
@@ -35,6 +35,7 @@ import type { TeamMember } from '../team/page';
 import { sendAssignmentNotificationEmail } from '@/lib/email';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Appointment } from '../schedule/page';
+import { AppointmentForm } from '@/components/dashboard/schedule/appointment-form';
 
 interface ChatMessageDocument {
   chat_id: string;
@@ -182,6 +183,9 @@ export default function ChatPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'Abierto' | 'Pendiente' | 'Cerrado'>('all');
   const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'mine'>('all');
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [allContacts, setAllContacts] = useState<ContactDetails[]>([]);
+
+  const [isAppointmentFormOpen, setIsAppointmentFormOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -253,9 +257,19 @@ export default function ChatPage() {
         });
         setTeamMembers(members);
     };
+    
+    const fetchAllContacts = async () => {
+        if (!dataFetchUserId) return;
+        const contactsQuery = query(collection(db, 'contacts'), where('userId', '==', dataFetchUserId));
+        const contactsSnapshot = await getDocs(contactsQuery);
+        const fetchedContacts: ContactDetails[] = [];
+        contactsSnapshot.forEach(doc => fetchedContacts.push({ id: doc.id, ...doc.data() } as ContactDetails));
+        setAllContacts(fetchedContacts);
+    };
 
     fetchTeamMembers();
-  }, [user?.organizationId]);
+    fetchAllContacts();
+  }, [user?.organizationId, dataFetchUserId]);
 
   useEffect(() => {
     if (whatsAppInstance && whatsAppInstance.status === 'Conectado' && (whatsAppInstance.id || whatsAppInstance.name) && dataFetchUserId) {
@@ -442,94 +456,91 @@ export default function ChatPage() {
     }
   }, [selectedChatId, whatsAppInstance]);
 
-  useEffect(() => {
-    if (selectedChatId && dataFetchUserId && whatsAppInstance) {
+  const fetchContactAndAppointmentDetails = useCallback(async () => {
+    if (!selectedChatId || !dataFetchUserId || !whatsAppInstance) return;
+     
       setIsLoadingContact(true);
       setNextAppointment(null); // Reset appointment on contact change
-      const fetchDetails = async () => {
-        try {
-          // CRITICAL FIX: Add 'where' clause for userId to ensure data isolation.
-          const contactQuery = query(
-            collection(db, 'contacts'),
-            where('userId', '==', dataFetchUserId),
-            where('_chatIdOriginal', '==', selectedChatId),
-            limit(1)
-          );
-          const contactSnapshot = await getDocs(contactQuery);
-          
-          let currentContactDetails: ContactDetails;
+      try {
+        // CRITICAL FIX: Add 'where' clause for userId to ensure data isolation.
+        const contactQuery = query(
+          collection(db, 'contacts'),
+          where('userId', '==', dataFetchUserId),
+          where('_chatIdOriginal', '==', selectedChatId),
+          limit(1)
+        );
+        const contactSnapshot = await getDocs(contactQuery);
+        
+        let currentContactDetails: ContactDetails;
 
-          if (!contactSnapshot.empty) {
-            const contactDoc = contactSnapshot.docs[0];
-            const data = { id: contactDoc.id, ...contactDoc.data() } as ContactDetails;
-            data.chatbotEnabledForContact = data.chatbotEnabledForContact ?? true;
-            data.estadoConversacion = data.estadoConversacion ?? 'Abierto';
-            currentContactDetails = data;
-            setContactDetails(data);
-            setInitialContactDetails(data);
-            setIsEditingContact(false);
-          } else {
-            const initialData: ContactDetails = { 
-              id: getContactDocId(dataFetchUserId, selectedChatId), 
-              telefono: formatPhoneNumber(selectedChatId),
-              nombre: "",
-              apellido: "",
-              email: "",
-              empresa: "",
-              ubicacion: "",
-              tipoCliente: undefined,
-              estadoConversacion: 'Abierto',
-              instanceId: whatsAppInstance.id,
-              userId: dataFetchUserId, 
-              _chatIdOriginal: selectedChatId,
-              chatbotEnabledForContact: true, 
-              assignedTo: '',
-              assignedToName: '',
-            };
-            currentContactDetails = initialData;
-            setContactDetails(initialData); 
-            setInitialContactDetails(initialData);
-            setIsEditingContact(true);
-          }
-          
-           // Fetch next appointment for this contact
-           if (currentContactDetails.id && user?.organizationId) {
-             const appointmentQuery = query(
-                collection(db, "appointments"),
-                where("organizationId", "==", user.organizationId),
-                where("contactId", "==", currentContactDetails.id),
-                where("start", ">=", FirestoreTimestamp.now()),
-                orderBy("start", "asc"),
-                limit(1)
-             );
-             const appointmentSnapshot = await getDocs(appointmentQuery);
-             if (!appointmentSnapshot.empty) {
-                 const apptDoc = appointmentSnapshot.docs[0];
-                 const apptData = apptDoc.data();
-                 setNextAppointment({
-                     id: apptDoc.id,
-                     ...apptData,
-                     start: apptData.start.toDate(),
-                     end: apptData.end.toDate(),
-                 } as Appointment);
-             }
-           }
-
-        } catch (error) {
-          console.error("Error fetching contact details:", error);
-           toast({ variant: "destructive", title: "Error", description: "Error al cargar detalles del contacto." });
-        } finally {
-          setIsLoadingContact(false);
+        if (!contactSnapshot.empty) {
+          const contactDoc = contactSnapshot.docs[0];
+          const data = { id: contactDoc.id, ...contactDoc.data() } as ContactDetails;
+          data.chatbotEnabledForContact = data.chatbotEnabledForContact ?? true;
+          data.estadoConversacion = data.estadoConversacion ?? 'Abierto';
+          currentContactDetails = data;
+          setContactDetails(data);
+          setInitialContactDetails(data);
+          setIsEditingContact(false);
+        } else {
+          const initialData: ContactDetails = { 
+            id: getContactDocId(dataFetchUserId, selectedChatId), 
+            telefono: formatPhoneNumber(selectedChatId),
+            nombre: "",
+            apellido: "",
+            email: "",
+            empresa: "",
+            ubicacion: "",
+            tipoCliente: undefined,
+            estadoConversacion: 'Abierto',
+            instanceId: whatsAppInstance.id,
+            userId: dataFetchUserId, 
+            _chatIdOriginal: selectedChatId,
+            chatbotEnabledForContact: true, 
+            assignedTo: '',
+            assignedToName: '',
+          };
+          currentContactDetails = initialData;
+          setContactDetails(initialData); 
+          setInitialContactDetails(initialData);
+          setIsEditingContact(true);
         }
-      };
-      fetchDetails();
-    } else {
-      setContactDetails(null);
-      setInitialContactDetails(null);
-      setNextAppointment(null);
-      setIsEditingContact(false);
-    }
+        
+         // Fetch next appointment for this contact
+         if (currentContactDetails.id && user?.organizationId) {
+           const appointmentQuery = query(
+              collection(db, "appointments"),
+              where("organizationId", "==", user.organizationId),
+              where("contactId", "==", currentContactDetails.id),
+              where("start", ">=", FirestoreTimestamp.now()),
+              orderBy("start", "asc"),
+              limit(1)
+           );
+           const appointmentSnapshot = await getDocs(appointmentQuery);
+           if (!appointmentSnapshot.empty) {
+               const apptDoc = appointmentSnapshot.docs[0];
+               const apptData = apptDoc.data();
+               setNextAppointment({
+                   id: apptDoc.id,
+                   ...apptData,
+                   start: apptData.start.toDate(),
+                   end: apptData.end.toDate(),
+               } as Appointment);
+           }
+         }
+
+      } catch (error) {
+        console.error("Error fetching contact details:", error);
+         toast({ variant: "destructive", title: "Error", description: "Error al cargar detalles del contacto." });
+      } finally {
+        setIsLoadingContact(false);
+      }
   }, [selectedChatId, dataFetchUserId, whatsAppInstance, toast, user?.organizationId]);
+
+  useEffect(() => {
+    fetchContactAndAppointmentDetails();
+  }, [fetchContactAndAppointmentDetails]);
+
 
   const fetchQuickReplies = useCallback(async () => {
     if (!dataFetchUserId) return;
@@ -793,6 +804,7 @@ export default function ChatPage() {
     : "Escribe tu mensaje como administrador...";
 
   return (
+    <>
     <div className="flex h-[calc(100vh-theme(spacing.16)-theme(spacing.12))] border bg-card text-card-foreground shadow-sm rounded-lg overflow-hidden">
       {showConversationList && (
         <div className={`
@@ -946,6 +958,7 @@ export default function ChatPage() {
                         onSwitchChange={handleContactSwitchChange}
                         onAssigneeChange={handleAssigneeChange}
                         formatPhoneNumber={formatPhoneNumber}
+                        onQuickCreateAppointment={() => setIsAppointmentFormOpen(true)}
                       />
                     )}
                   </SheetContent>
@@ -1149,8 +1162,27 @@ export default function ChatPage() {
             onSwitchChange={handleContactSwitchChange}
             onAssigneeChange={handleAssigneeChange}
             formatPhoneNumber={formatPhoneNumber}
+            onQuickCreateAppointment={() => setIsAppointmentFormOpen(true)}
           />
       </div>
     </div>
+    
+    {isAppointmentFormOpen && contactDetails && (
+        <AppointmentForm 
+            isOpen={isAppointmentFormOpen}
+            setIsOpen={setIsAppointmentFormOpen}
+            appointment={null}
+            contacts={allContacts} // Pass all contacts for the dropdown
+            teamMembers={teamMembers}
+            onSave={() => {
+                toast({ title: "Cita Creada", description: "La cita ha sido agendada desde el chat." });
+                fetchContactAndAppointmentDetails(); // Refresh appointment info in chat panel
+            }}
+            // Pre-select the current contact
+            selectedDate={new Date()} // Default to today, user can change
+            initialContactId={contactDetails.id}
+        />
+    )}
+    </>
   );
 }

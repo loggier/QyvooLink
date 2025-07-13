@@ -10,7 +10,7 @@ import { CardHeader, CardFooter, CardTitle, CardContent } from '@/components/ui/
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Save, XCircle, Edit3, UserRound, Building, Mail, Phone, UserCheck, MapPin, Bot, MessageSquareDashed, MessageCircle, ListTodo, UserCog, CalendarClock } from 'lucide-react';
+import { Loader2, Save, XCircle, Edit3, UserRound, Building, Mail, Phone, UserCheck, MapPin, Bot, MessageSquareDashed, MessageCircle, ListTodo, UserCog, CalendarClock, PlusCircle } from 'lucide-react';
 import type { TeamMember } from '@/app/(app)/dashboard/team/page';
 import type { Appointment } from '@/app/(app)/dashboard/schedule/page';
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -52,6 +52,7 @@ interface ContactDetailsPanelProps {
   onSwitchChange: (checked: boolean) => void;
   onAssigneeChange: (memberId: string) => void;
   formatPhoneNumber: (chat_id: string | undefined) => string;
+  onQuickCreateAppointment: () => void; // New prop for triggering form
 }
 
 export default function ContactDetailsPanel({
@@ -71,6 +72,7 @@ export default function ContactDetailsPanel({
   onSwitchChange,
   onAssigneeChange,
   formatPhoneNumber,
+  onQuickCreateAppointment,
 }: ContactDetailsPanelProps) {
 
   if (isLoadingContact) {
@@ -113,23 +115,35 @@ export default function ContactDetailsPanel({
         <div className="space-y-4">
            <div>
               <Label className="flex items-center text-sm text-muted-foreground"><CalendarClock className="h-4 w-4 mr-2" />Próxima Cita</Label>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                   <Link href="/dashboard/schedule" className="block w-full">
-                      <Input
-                        value={nextAppointment ? format(nextAppointment.start, "dd/MM/yy 'a las' HH:mm", { locale: es }) : "Ninguna"}
-                        readOnly
-                        className="cursor-pointer hover:bg-muted/50"
-                      />
-                   </Link>
-                </TooltipTrigger>
-                {nextAppointment && (
-                  <TooltipContent>
-                    <p className="font-bold">{nextAppointment.title}</p>
-                    <p>Haz clic para ver la agenda completa.</p>
-                  </TooltipContent>
-                )}
-              </Tooltip>
+              <div className="flex items-center gap-2">
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                    <Link href="/dashboard/schedule" className="block w-full">
+                        <Input
+                            value={nextAppointment ? format(nextAppointment.start, "dd/MM/yy 'a las' HH:mm", { locale: es }) : "Ninguna"}
+                            readOnly
+                            className="cursor-pointer hover:bg-muted/50 flex-grow"
+                        />
+                    </Link>
+                    </TooltipTrigger>
+                    {nextAppointment && (
+                    <TooltipContent>
+                        <p className="font-bold">{nextAppointment.title}</p>
+                        <p>Haz clic para ver la agenda completa.</p>
+                    </TooltipContent>
+                    )}
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="outline" size="icon" onClick={onQuickCreateAppointment} className="flex-shrink-0">
+                            <PlusCircle className="h-4 w-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Crear nueva cita para este contacto</p>
+                    </TooltipContent>
+                </Tooltip>
+              </div>
            </div>
            <div>
             <Label htmlFor="contactStatus" className="flex items-center text-sm text-muted-foreground"><ListTodo className="h-4 w-4 mr-2" />Estado Conversación</Label>
