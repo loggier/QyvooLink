@@ -5,7 +5,7 @@ import type { ChangeEvent } from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, doc, addDoc, deleteDoc, orderBy, setDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, addDoc, deleteDoc, orderBy, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,6 +36,7 @@ interface ContactDetails {
   chatbotEnabledForContact?: boolean;
   userId: string;
   _chatIdOriginal?: string; 
+  createdAt?: Timestamp;
 }
 
 interface ContactStats {
@@ -46,7 +47,7 @@ interface ContactStats {
   otros: number;
 }
 
-const initialContactFormState: Omit<ContactDetails, 'id' | 'userId'> = {
+const initialContactFormState: Omit<ContactDetails, 'id' | 'userId' | 'createdAt'> = {
   nombre: "",
   apellido: "",
   email: "",
@@ -71,7 +72,7 @@ export default function ContactsPage() {
   const [stats, setStats] = useState<ContactStats>({ total: 0, prospectos: 0, clientes: 0, proveedores: 0, otros: 0 });
   
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [currentContactData, setCurrentContactData] = useState<Omit<ContactDetails, 'id' | 'userId'>>(initialContactFormState);
+  const [currentContactData, setCurrentContactData] = useState<Omit<ContactDetails, 'id' | 'userId' | 'createdAt'>>(initialContactFormState);
   const [isSaving, setIsSaving] = useState(false);
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -82,7 +83,7 @@ export default function ContactsPage() {
     if (!dataFetchUserId) return;
     setIsLoading(true);
     try {
-      const q = query(collection(db, 'contacts'), where('userId', '==', dataFetchUserId), orderBy('nombre', 'asc'));
+      const q = query(collection(db, 'contacts'), where('userId', '==', dataFetchUserId), orderBy('createdAt', 'desc'));
       const querySnapshot = await getDocs(q);
       const fetchedContacts: ContactDetails[] = [];
       let prospectos = 0;
@@ -104,7 +105,7 @@ export default function ContactsPage() {
       setStats({ total: fetchedContacts.length, prospectos, clientes, proveedores, otros });
     } catch (error) {
       console.error("Error fetching contacts:", error);
-      toast({ variant: "destructive", title: "Error", description: "No se pudieron cargar los contactos." });
+      toast({ variant: "destructive", title: "Error", description: "No se pudieron cargar los contactos. Es posible que algunos contactos no tengan fecha de creación." });
     } finally {
       setIsLoading(false);
     }
@@ -170,7 +171,8 @@ export default function ContactsPage() {
       ...currentContactData,
       userId: dataFetchUserId,
       chatbotEnabledForContact: currentContactData.chatbotEnabledForContact ?? true,
-      estadoConversacion: currentContactData.estadoConversacion ?? 'Abierto'
+      estadoConversacion: currentContactData.estadoConversacion ?? 'Abierto',
+      createdAt: serverTimestamp() as Timestamp,
     };
 
     try {
