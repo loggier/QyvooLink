@@ -2,6 +2,7 @@
 "use client";
 
 import type { ChangeEvent } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,8 +10,12 @@ import { CardHeader, CardFooter, CardTitle, CardContent } from '@/components/ui/
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Save, XCircle, Edit3, UserRound, Building, Mail, Phone, UserCheck, MapPin, Bot, MessageSquareDashed, MessageCircle, ListTodo, UserCog } from 'lucide-react';
+import { Loader2, Save, XCircle, Edit3, UserRound, Building, Mail, Phone, UserCheck, MapPin, Bot, MessageSquareDashed, MessageCircle, ListTodo, UserCog, CalendarClock } from 'lucide-react';
 import type { TeamMember } from '@/app/(app)/dashboard/team/page';
+import type { Appointment } from '@/app/(app)/dashboard/schedule/page';
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 export interface ContactDetails {
   id?: string;
@@ -38,6 +43,7 @@ interface ContactDetailsPanelProps {
   isLoadingContact: boolean;
   isSavingContact: boolean;
   teamMembers: TeamMember[];
+  nextAppointment: Appointment | null;
   onSave: () => Promise<void>;
   onCancel: () => void;
   onInputChange: (field: keyof Omit<ContactDetails, 'id' | 'instanceId' | 'userId' | 'tipoCliente' | '_chatIdOriginal' | 'chatbotEnabledForContact' | 'estadoConversacion' | 'assignedTo' | 'assignedToName'>, value: string) => void;
@@ -56,6 +62,7 @@ export default function ContactDetailsPanel({
   isLoadingContact,
   isSavingContact,
   teamMembers,
+  nextAppointment,
   onSave,
   onCancel,
   onInputChange,
@@ -91,7 +98,7 @@ export default function ContactDetailsPanel({
 
 
   return (
-    <>
+    <TooltipProvider>
       <CardHeader className="p-4 border-b">
         <div className="flex justify-between items-center">
           <CardTitle className="text-lg">Información del Contacto</CardTitle>
@@ -104,6 +111,26 @@ export default function ContactDetailsPanel({
       </CardHeader>
       <ScrollArea className="flex-grow p-4">
         <div className="space-y-4">
+           <div>
+              <Label className="flex items-center text-sm text-muted-foreground"><CalendarClock className="h-4 w-4 mr-2" />Próxima Cita</Label>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                   <Link href="/dashboard/schedule" className="block w-full">
+                      <Input
+                        value={nextAppointment ? format(nextAppointment.start, "dd/MM/yy 'a las' HH:mm", { locale: es }) : "Ninguna"}
+                        readOnly
+                        className="cursor-pointer hover:bg-muted/50"
+                      />
+                   </Link>
+                </TooltipTrigger>
+                {nextAppointment && (
+                  <TooltipContent>
+                    <p className="font-bold">{nextAppointment.title}</p>
+                    <p>Haz clic para ver la agenda completa.</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+           </div>
            <div>
             <Label htmlFor="contactStatus" className="flex items-center text-sm text-muted-foreground"><ListTodo className="h-4 w-4 mr-2" />Estado Conversación</Label>
             <Select
@@ -231,6 +258,6 @@ export default function ContactDetailsPanel({
       <CardFooter className="p-2 border-t">
         <p className="text-xs text-muted-foreground text-center w-full">Información de contacto adicional.</p>
       </CardFooter>
-    </>
+    </TooltipProvider>
   );
 }

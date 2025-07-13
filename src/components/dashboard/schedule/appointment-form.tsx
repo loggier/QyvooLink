@@ -31,20 +31,8 @@ import { es } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import type { ContactDetails } from '@/app/(app)/dashboard/contacts/page';
 import type { TeamMember } from '@/app/(app)/dashboard/team/page';
+import type { Appointment } from '@/app/(app)/dashboard/schedule/page';
 
-export interface Appointment {
-  id: string;
-  organizationId: string;
-  userId: string;
-  title: string;
-  description?: string;
-  start: Date;
-  end: Date;
-  contactId?: string;
-  contactName?: string;
-  assignedTo?: string;
-  assignedToName?: string;
-}
 
 const appointmentSchema = z.object({
   title: z.string().min(1, "El título es obligatorio."),

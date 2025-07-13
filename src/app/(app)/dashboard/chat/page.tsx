@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { EvolveLinkLogo } from '@/components/icons';
-import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft, ListTodo, UserCog, Filter, StickyNote } from 'lucide-react'; 
+import { Loader2, MessageCircle, AlertTriangle, Info, User, Send, Save, Building, Mail, Phone, UserCheck, Bot, UserRound, MessageSquareDashed, Zap, ArrowLeft, ListTodo, UserCog, Filter, StickyNote, CalendarClock } from 'lucide-react'; 
 import type { WhatsAppInstance } from '../configuration/page'; 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { TeamMember } from '../team/page';
 import { sendAssignmentNotificationEmail } from '@/lib/email';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import type { Appointment } from '../schedule/page';
 
 interface ChatMessageDocument {
   chat_id: string;
@@ -173,6 +174,7 @@ export default function ChatPage() {
   const [isLoadingContact, setIsLoadingContact] = useState(false);
   const [isSavingContact, setIsSavingContact] = useState(false);
   const [isContactSheetOpen, setIsContactSheetOpen] = useState(false);
+  const [nextAppointment, setNextAppointment] = useState<Appointment | null>(null);
 
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [isLoadingQuickReplies, setIsLoadingQuickReplies] = useState(false);
@@ -443,6 +445,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (selectedChatId && dataFetchUserId && whatsAppInstance) {
       setIsLoadingContact(true);
+      setNextAppointment(null); // Reset appointment on contact change
       const fetchDetails = async () => {
         try {
           // CRITICAL FIX: Add 'where' clause for userId to ensure data isolation.
@@ -454,11 +457,14 @@ export default function ChatPage() {
           );
           const contactSnapshot = await getDocs(contactQuery);
           
+          let currentContactDetails: ContactDetails;
+
           if (!contactSnapshot.empty) {
             const contactDoc = contactSnapshot.docs[0];
             const data = { id: contactDoc.id, ...contactDoc.data() } as ContactDetails;
             data.chatbotEnabledForContact = data.chatbotEnabledForContact ?? true;
             data.estadoConversacion = data.estadoConversacion ?? 'Abierto';
+            currentContactDetails = data;
             setContactDetails(data);
             setInitialContactDetails(data);
             setIsEditingContact(false);
@@ -480,10 +486,35 @@ export default function ChatPage() {
               assignedTo: '',
               assignedToName: '',
             };
+            currentContactDetails = initialData;
             setContactDetails(initialData); 
             setInitialContactDetails(initialData);
             setIsEditingContact(true);
           }
+          
+           // Fetch next appointment for this contact
+           if (currentContactDetails.id && user?.organizationId) {
+             const appointmentQuery = query(
+                collection(db, "appointments"),
+                where("organizationId", "==", user.organizationId),
+                where("contactId", "==", currentContactDetails.id),
+                where("start", ">=", FirestoreTimestamp.now()),
+                orderBy("start", "asc"),
+                limit(1)
+             );
+             const appointmentSnapshot = await getDocs(appointmentQuery);
+             if (!appointmentSnapshot.empty) {
+                 const apptDoc = appointmentSnapshot.docs[0];
+                 const apptData = apptDoc.data();
+                 setNextAppointment({
+                     id: apptDoc.id,
+                     ...apptData,
+                     start: apptData.start.toDate(),
+                     end: apptData.end.toDate(),
+                 } as Appointment);
+             }
+           }
+
         } catch (error) {
           console.error("Error fetching contact details:", error);
            toast({ variant: "destructive", title: "Error", description: "Error al cargar detalles del contacto." });
@@ -495,9 +526,10 @@ export default function ChatPage() {
     } else {
       setContactDetails(null);
       setInitialContactDetails(null);
+      setNextAppointment(null);
       setIsEditingContact(false);
     }
-  }, [selectedChatId, dataFetchUserId, whatsAppInstance, toast]);
+  }, [selectedChatId, dataFetchUserId, whatsAppInstance, toast, user?.organizationId]);
 
   const fetchQuickReplies = useCallback(async () => {
     if (!dataFetchUserId) return;
@@ -905,12 +937,13 @@ export default function ChatPage() {
                         isLoadingContact={isLoadingContact}
                         isSavingContact={isSavingContact}
                         teamMembers={teamMembers}
+                        nextAppointment={nextAppointment}
                         onSave={handleSaveContactDetails}
                         onCancel={() => { setIsEditingContact(false); setContactDetails(initialContactDetails); }}
                         onInputChange={handleContactInputChange}
                         onSelectChange={handleContactSelectChange}
-                        onSwitchChange={handleContactSwitchChange}
                         onStatusChange={handleContactStatusChange}
+                        onSwitchChange={handleContactSwitchChange}
                         onAssigneeChange={handleAssigneeChange}
                         formatPhoneNumber={formatPhoneNumber}
                       />
@@ -1098,8 +1131,7 @@ export default function ChatPage() {
       </div>
 
       {/* Desktop Contact Panel - Only visible on desktop when chat is selected */}
-      {showContactPanelDesktop && (
-        <div className="hidden md:flex w-full md:w-1/3 lg:w-1/4 md:min-w-[300px] md:max-w-[380px] border-l flex-col bg-card">
+      <div className={`hidden md:flex w-full md:w-1/3 lg:w-1/4 md:min-w-[300px] md:max-w-[380px] border-l flex-col bg-card ${showContactPanelDesktop ? 'md:flex' : 'md:hidden'}`}>
           <ContactDetailsPanel
             contactDetails={contactDetails}
             initialContactDetails={initialContactDetails}
@@ -1108,19 +1140,17 @@ export default function ChatPage() {
             isLoadingContact={isLoadingContact}
             isSavingContact={isSavingContact}
             teamMembers={teamMembers}
+            nextAppointment={nextAppointment}
             onSave={handleSaveContactDetails}
             onCancel={() => { setIsEditingContact(false); setContactDetails(initialContactDetails); }}
             onInputChange={handleContactInputChange}
             onSelectChange={handleContactSelectChange}
-            onSwitchChange={handleContactSwitchChange}
             onStatusChange={handleContactStatusChange}
+            onSwitchChange={handleContactSwitchChange}
             onAssigneeChange={handleAssigneeChange}
             formatPhoneNumber={formatPhoneNumber}
           />
-        </div>
-      )}
+      </div>
     </div>
   );
 }
-
-    

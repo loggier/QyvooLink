@@ -21,9 +21,23 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, PlusCircle, Calendar as CalendarIcon, Edit, Trash2, Clock, Contact, UserCog } from 'lucide-react';
 import { format, startOfDay, endOfDay, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { AppointmentForm, type Appointment } from '@/components/dashboard/schedule/appointment-form';
+import { AppointmentForm } from '@/components/dashboard/schedule/appointment-form';
 import type { ContactDetails } from '../contacts/page';
 import type { TeamMember } from '../team/page';
+
+export interface Appointment {
+  id: string;
+  organizationId: string;
+  userId: string;
+  title: string;
+  description?: string;
+  start: Date;
+  end: Date;
+  contactId?: string;
+  contactName?: string;
+  assignedTo?: string;
+  assignedToName?: string;
+}
 
 export default function SchedulePage() {
   const { user } = useAuth();
