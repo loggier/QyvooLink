@@ -88,7 +88,7 @@ function formatWhatsAppMessage(text: string | undefined | null): React.ReactNode
     } else if (match[4]) { 
       elements.push(<em key={lastIndex}>{match[5]}</em>);
     } else if (match[6]) { 
-      elements.push(<del key={lastIndex}>{match[7]}del>);
+      elements.push(<del key={lastIndex}>{match[7]}</del>);
     }
     lastIndex = regex.lastIndex;
   }
