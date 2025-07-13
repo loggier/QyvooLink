@@ -52,7 +52,7 @@ function buildToolsConfigXml(tools: { name: string, description: string }[]): st
 
 function buildVentasPrompt(botData: BotData): string {
     const {
-        agentRole = "Eres un asistente de ventas virtual para [Nombre de la Empresa]. Tu objetivo principal es entender las necesidades del cliente, ofrecer soluciones basadas en nuestro catálogo de servicios, proporcionar precios y cerrar la venta o agendar una demostración. Debes ser amable, profesional y eficiente. Si un cliente muestra una clara intención de agendar una cita, una reunión o una demostración, DEBES usar la herramienta 'createAppointment' para crear el evento directamente en el calendario. Si el cliente pregunta por sus citas agendadas, DEBES usar la herramienta 'getFutureAppointments'.",
+        agentRole = "Eres un asistente de ventas virtual para [Nombre de la Empresa]. Tu objetivo es entender las necesidades del cliente y cerrar ventas. Para citas, sigue estas reglas ESTRICTAS: si un cliente quiere AGENDAR, DEBES usar la herramienta 'createAppointment'. Si el cliente PREGUNTA por citas existentes (ej: '¿cuándo es mi cita?'), TIENES PROHIBIDO responder de memoria. DEBES usar OBLIGATORIAMENTE la herramienta 'getFutureAppointments' para obtener la información real y actualizada. NO inventes citas.",
         selectedRules = [],
         businessContext = { description: '', location: '', mission: '' },
         serviceCatalog = [],
@@ -85,11 +85,11 @@ function buildVentasPrompt(botData: BotData): string {
     const toolsConfig = buildToolsConfigXml([
         { 
             name: 'createAppointment', 
-            description: `Creates a new appointment. Use this when a user confirms they want to schedule something. Parameters to provide: 'title' (string), 'date' (string, format YYYY-MM-DD), 'startTime' (string, format HH:mm), 'endTime' (string, format HH:mm), 'userId' (string, required), 'organizationId' (string, required), 'timezone' (string, required, e.g., 'America/Mexico_City'), and 'contactPhone' (string, required, user's phone number). You can also include 'description'.`,
+            description: `Crea una nueva cita. Usa esto cuando un usuario confirma que quiere agendar algo. Parámetros requeridos: 'title' (string), 'date' (string, YYYY-MM-DD), 'startTime' (string, HH:mm), 'endTime' (string, HH:mm), 'userId' (string), 'organizationId' (string), 'timezone' (string), y 'contactPhone' (string, el número del usuario).`,
         },
         {
             name: 'getFutureAppointments',
-            description: `Retrieves a list of all upcoming appointments for a contact. Use this when a user asks about their scheduled appointments. Parameters to provide: 'contactPhone' (string, required, user's phone number), 'userId' (string, required), and 'organizationId' (string, required).`,
+            description: `OBLIGATORIO: Usa esta herramienta para consultar las próximas citas de un cliente. NO USES TU MEMORIA. Úsala cuando pregunten '¿cuándo es mi cita?', '¿qué citas tengo?', etc. Parámetros requeridos: 'contactPhone' (string, el número del usuario), 'userId' (string), y 'organizationId' (string).`,
         }
     ]);
 
@@ -176,7 +176,7 @@ function buildAgenteInmobiliarioPrompt(botData: BotData): string {
 
 function buildAsistentePersonalPrompt(botData: BotData): string {
     const {
-        agentRole = "Eres un asistente personal eficiente y proactivo.",
+        agentRole = "Eres un asistente personal altamente eficiente. Tu objetivo es gestionar mi agenda. Para citas, sigue estas reglas ESTRICTAS: si un cliente quiere AGENDAR, DEBES usar la herramienta 'createAppointment'. Si el cliente PREGUNTA por citas existentes (ej: '¿cuándo es mi cita?'), TIENES PROHIBIDO responder de memoria. DEBES usar OBLIGATORIAMENTE la herramienta 'getFutureAppointments' para obtener la información real y actualizada. NO inventes citas.",
         rules = [],
         userPreferences = '',
         taskInstructions = '',
@@ -189,11 +189,11 @@ function buildAsistentePersonalPrompt(botData: BotData): string {
      const toolsConfig = buildToolsConfigXml([
         { 
             name: 'createAppointment', 
-            description: `Creates a new appointment. Use this when a user confirms they want to schedule something. Parameters to provide: 'title' (string), 'date' (string, format YYYY-MM-DD), 'startTime' (string, format HH:mm), 'endTime' (string, format HH:mm), 'userId' (string, required), 'organizationId' (string, required), 'timezone' (string, required, e.g., 'America/Mexico_City'), and 'contactPhone' (string, required, user's phone number). You can also include 'description'.`,
+            description: `Crea una nueva cita. Usa esto cuando un usuario confirma que quiere agendar algo. Parámetros requeridos: 'title' (string), 'date' (string, YYYY-MM-DD), 'startTime' (string, HH:mm), 'endTime' (string, HH:mm), 'userId' (string), 'organizationId' (string), 'timezone' (string), y 'contactPhone' (string, el número del usuario).`,
         },
         {
             name: 'getFutureAppointments',
-            description: `Retrieves a list of all upcoming appointments for a contact. Use this when a user asks about their scheduled appointments. Parameters to provide: 'contactPhone' (string, required, user's phone number), 'userId' (string, required), and 'organizationId' (string, required).`,
+            description: `OBLIGATORIO: Usa esta herramienta para consultar las próximas citas de un cliente. NO USES TU MEMORIA. Úsala cuando pregunten '¿cuándo es mi cita?', '¿qué citas tengo?', etc. Parámetros requeridos: 'contactPhone' (string, el número del usuario), 'userId' (string), y 'organizationId' (string).`,
         }
     ]);
 
@@ -343,5 +343,7 @@ export async function migrateAndActivateLegacyBot(userId: string, legacyData: an
         instanceIdAssociated,
     }, { merge: true });
 }
+
+    
 
     
