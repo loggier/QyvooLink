@@ -5,10 +5,13 @@ import { z } from 'zod';
 
 export async function POST(req: Request) {
   try {
-    const json = await req.json();
+    const rawJson = await req.json();
+
+    // Handle cases where the data might be nested under a "JSON" key
+    const jsonToValidate = rawJson.JSON ? rawJson.JSON : rawJson;
 
     // Validate the incoming JSON against the appointment schema
-    const validationResult = CreateAppointmentSchema.safeParse(json);
+    const validationResult = CreateAppointmentSchema.safeParse(jsonToValidate);
 
     if (!validationResult.success) {
       // If validation fails, return a detailed error response
