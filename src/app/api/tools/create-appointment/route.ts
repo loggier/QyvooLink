@@ -2,8 +2,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { CreateAppointmentSchema, createAppointment } from '@/ai/tools/schedule';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 
 export async function POST(req: Request) {
   try {
@@ -11,26 +9,9 @@ export async function POST(req: Request) {
 
     // Handle cases where the JSON is nested under a "JSON" key
     const inputData = rawJson.JSON ? rawJson.JSON : rawJson;
-    
-    // Fetch the user's timezone from Firestore
-    if (!inputData.userId) {
-        return NextResponse.json({ success: false, error: 'User ID is required.' }, { status: 400 });
-    }
-    const userDocRef = doc(db, 'users', inputData.userId);
-    const userDocSnap = await getDoc(userDocRef);
 
-    let userTimezone = 'UTC'; // Default to UTC if not found
-    if (userDocSnap.exists()) {
-        const userData = userDocSnap.data();
-        userTimezone = userData.timezone || 'UTC';
-    }
-    
-    const dataWithTimezone = {
-        ...inputData,
-        timezone: userTimezone,
-    };
-
-    const validation = CreateAppointmentSchema.safeParse(dataWithTimezone);
+    // The timezone now comes directly from the input, as per the updated schema.
+    const validation = CreateAppointmentSchema.safeParse(inputData);
     
     if (!validation.success) {
       return NextResponse.json(
@@ -39,6 +20,7 @@ export async function POST(req: Request) {
       );
     }
     
+    // Call the core logic function with the validated data
     const result = await createAppointment(validation.data);
     
     if (result.success) {
