@@ -26,34 +26,45 @@ export const CreateAppointmentSchema = z.object({
   timezone: z.string().describe("The IANA timezone of the user (e.g., 'America/Mexico_City')."),
 });
 
+// Helper function to parse date and time strings into a UTC Date object
+// respecting the provided timezone. This is the robust way to handle timezones.
+function createUtcDate(dateStr: string, timeStr: string, timezone: string): Date {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  
+  // Important: The month for JavaScript's Date is 0-indexed (0=Jan, 1=Feb, etc.)
+  // We pass the components directly to zonedTimeToUtc to avoid local timezone interpretation.
+  return zonedTimeToUtc({
+    year: year,
+    month: month - 1,
+    day: day,
+    hours: hours,
+    minutes: minutes
+  }, timezone);
+}
+
 // This is the core logic for creating an appointment.
 // It can be called from any server-side context (e.g., an API route).
 export async function createAppointment(input: z.infer<typeof CreateAppointmentSchema>): Promise<{ success: boolean; appointmentId?: string }> {
   try {
     const { date, startTime, endTime, timezone } = input;
 
-    // 1. Create a local date-time string from the input.
-    // E.g., "2025-07-13 10:00"
-    const localStartString = `${date} ${startTime}`;
-    const localEndString = `${date} ${endTime}`;
+    // 1. Convert local time strings to UTC Date objects using the user's timezone.
+    const utcStartDate = createUtcDate(date, startTime, timezone);
+    const utcEndDate = createUtcDate(date, endTime, timezone);
 
-    // 2. Convert this local time string to a UTC Date object using the user's timezone.
-    // This is the crucial step. It tells the function: "Treat '10:00' as the time in 'America/Mexico_City',
-    // and give me the corresponding UTC time."
-    const utcStartDate = zonedTimeToUtc(localStartString, timezone);
-    const utcEndDate = zonedTimeToUtc(localEndString, timezone);
-
-    // Final check to ensure dates are valid
+    // 2. Final check to ensure dates are valid
     if (isNaN(utcStartDate.getTime()) || isNaN(utcEndDate.getTime())) {
-      console.error("Invalid date created from input strings and timezone.");
+      console.error("Invalid date created from input strings and timezone.", { input });
       return { success: false };
     }
 
     if (utcEndDate <= utcStartDate) {
-      console.error("End time must be after start time.");
+      console.error("End time must be after start time.", { utcStartDate, utcEndDate });
       return { success: false };
     }
 
+    // 3. Add to Firestore
     const docRef = await addDoc(collection(db, 'appointments'), {
       organizationId: input.organizationId,
       userId: input.userId,
