@@ -33,10 +33,13 @@ export async function createAppointment(input: z.infer<typeof CreateAppointmentS
     const [startHour, startMinute] = input.startTime.split(':').map(Number);
     const [endHour, endMinute] = input.endTime.split(':').map(Number);
 
-    // Construct date objects this way to avoid timezone shifts during creation.
-    // The month is 0-indexed in JavaScript's Date constructor.
-    const startDate = new Date(year, month - 1, day, startHour, startMinute);
-    const endDate = new Date(year, month - 1, day, endHour, endMinute);
+    // Use Date.UTC to create a timestamp from numbers, avoiding local timezone interpretation.
+    // The month is 0-indexed for Date.UTC, so we subtract 1.
+    const startMillis = Date.UTC(year, month - 1, day, startHour, startMinute);
+    const endMillis = Date.UTC(year, month - 1, day, endHour, endMinute);
+
+    const startDate = new Date(startMillis);
+    const endDate = new Date(endMillis);
 
     if (endDate <= startDate) {
       console.error("End time must be after start time.");
@@ -77,10 +80,8 @@ ai.defineTool(
   },
   async (input) => {
     // This function body is used when the tool is called directly within a Genkit flow.
-    // In our case, with N8N, the API endpoint is the primary executor.
+    // In our case, the API endpoint is the primary executor.
     // However, it's good practice to have the tool's implementation here as well.
     return createAppointment(input);
   }
 );
-
-    
