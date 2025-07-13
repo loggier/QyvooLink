@@ -85,6 +85,7 @@ export async function createAppointment(input: z.infer<typeof CreateAppointmentS
   }
 }
 
+
 // We define the tool for Genkit to use. This provides the structure for the AI.
 // The actual execution is handled by the API endpoint calling the `createAppointment` function.
 ai.defineTool(
@@ -101,6 +102,6 @@ ai.defineTool(
     // This function body is used when the tool is called directly within a Genkit flow.
     // In our case, the API endpoint is the primary executor.
     // However, it's good practice to have the tool's implementation here as well.
-    return createAppointment(input);
+    return await createAppointment(input);
   }
 );
