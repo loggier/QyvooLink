@@ -11,7 +11,7 @@ export const CreateAppointmentSchema = z.object({
   startTime: z.string().describe("The start time of the appointment in 24-hour HH:mm format (e.g., '10:00')."),
   endTime: z.string().describe("The end time of the appointment in 24-hour HH:mm format (e.g., '11:00')."),
   description: z.string().optional().describe("A brief description or notes for the appointment."),
-  contactPhone: z.string().optional().describe("The phone number of the contact for the appointment, without symbols (e.g., '5218112345678')."),
+  contactPhone: z.string().describe("The phone number of the contact for the appointment, without symbols (e.g., '5218112345678'). This field is required."),
   assignedTo: z.string().optional().describe("The user ID of the team member assigned to the appointment."),
   assignedToName: z.string().optional().describe("The name of the team member assigned to the appointment."),
   organizationId: z.string().describe("The organization ID of the user creating the appointment."),
@@ -95,7 +95,7 @@ export async function createAppointment(input: z.infer<typeof CreateAppointmentS
 ai.defineTool(
   {
     name: 'createAppointment',
-    description: "Creates a new appointment, meeting, or event in the user's calendar. Use this when a user confirms they want to schedule something. You must provide the date and times.",
+    description: "Creates a new appointment, meeting, or event in the user's calendar. Use this when a user confirms they want to schedule something. You must provide the date, times and the contact's phone number.",
     inputSchema: CreateAppointmentSchema,
     outputSchema: z.object({
       success: z.boolean(),
