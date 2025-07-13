@@ -3,7 +3,6 @@ import { Poppins } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/context/auth-context';
 import { Toaster } from '@/components/ui/toaster';
-import '@/polyfills';
 
 const fontSans = Poppins({
   variable: '--font-sans',

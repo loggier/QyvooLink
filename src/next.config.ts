@@ -1,5 +1,5 @@
 
-
+import './src/polyfills.js';
 import type { NextConfig } from 'next';
 
 /** @type {import('next').NextConfig} */
