@@ -14,8 +14,6 @@ const fontSans = Poppins({
 export const metadata: Metadata = {
   title: 'Qyvoo - Gestión de WhatsApp',
   description: 'Sistema de gestión para WhatsApp Business',
-  themeColor: '#1E88E5',
-  viewport: 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no',
   icons: {
     icon: '/icons/icon-192x192.png',
     apple: '/icons/icon-192x192.png'
@@ -29,6 +27,11 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: '#1E88E5',
+  initialScale: 1,
+  minimumScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  width: 'device-width',
 };
 
 export default function RootLayout({
