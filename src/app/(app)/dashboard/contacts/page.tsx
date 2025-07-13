@@ -83,7 +83,8 @@ export default function ContactsPage() {
     if (!dataFetchUserId) return;
     setIsLoading(true);
     try {
-      const q = query(collection(db, 'contacts'), where('userId', '==', dataFetchUserId), orderBy('createdAt', 'desc'));
+      // Remove orderBy to fetch all documents regardless of whether they have a specific field.
+      const q = query(collection(db, 'contacts'), where('userId', '==', dataFetchUserId));
       const querySnapshot = await getDocs(q);
       const fetchedContacts: ContactDetails[] = [];
       let prospectos = 0;
@@ -101,11 +102,19 @@ export default function ContactsPage() {
           case 'Otro': otros++; break;
         }
       });
+      
+      // Sort the contacts on the client-side to ensure consistent ordering.
+      fetchedContacts.sort((a, b) => {
+        const nameA = `${a.nombre || ''} ${a.apellido || ''}`.trim().toLowerCase();
+        const nameB = `${b.nombre || ''} ${b.apellido || ''}`.trim().toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
+
       setContacts(fetchedContacts);
       setStats({ total: fetchedContacts.length, prospectos, clientes, proveedores, otros });
     } catch (error) {
       console.error("Error fetching contacts:", error);
-      toast({ variant: "destructive", title: "Error", description: "No se pudieron cargar los contactos. Es posible que algunos contactos no tengan fecha de creación." });
+      toast({ variant: "destructive", title: "Error", description: "No se pudieron cargar los contactos." });
     } finally {
       setIsLoading(false);
     }
@@ -172,7 +181,7 @@ export default function ContactsPage() {
       userId: dataFetchUserId,
       chatbotEnabledForContact: currentContactData.chatbotEnabledForContact ?? true,
       estadoConversacion: currentContactData.estadoConversacion ?? 'Abierto',
-      createdAt: serverTimestamp() as Timestamp,
+      createdAt: serverTimestamp() as Timestamp, // Ensure new contacts have a timestamp
     };
 
     try {
