@@ -1,0 +1,27 @@
+
+export const timezones = [
+    { value: "America/Mexico_City", label: "Ciudad de México (GMT-6)" },
+    { value: "America/Bogota", label: "Bogotá, Lima, Quito (GMT-5)" },
+    { value: "America/Caracas", label: "Caracas (GMT-4)" },
+    { value: "America/La_Paz", label: "La Paz (GMT-4)" },
+    { value: "America/Santiago", label: "Santiago (GMT-4/-3)" },
+    { value: "America/Buenos_Aires", label: "Buenos Aires (GMT-3)" },
+    { value: "America/Sao_Paulo", label: "São Paulo (GMT-3)" },
+    { value: "America/Montevideo", label: "Montevideo (GMT-3)" },
+    { value: "Europe/Madrid", label: "Madrid (GMT+1/2)" },
+    { value: "America/Guatemala", label: "Guatemala (GMT-6)" },
+    { value: "America/Tegucigalpa", label: "Tegucigalpa (GMT-6)" },
+    { value: "America/El_Salvador", label: "El Salvador (GMT-6)" },
+    { value: "America/Managua", label: "Managua (GMT-6)" },
+    { value: "America/Costa_Rica", label: "Costa Rica (GMT-6)" },
+    { value: "America/Panama", label: "Panamá (GMT-5)" },
+    { value: "America/Havana", label: "La Habana (GMT-5/-4)" },
+    { value: "America/Santo_Domingo", label: "Santo Domingo (GMT-4)" },
+    { value: "America/Puerto_Rico", label: "Puerto Rico (GMT-4)" },
+    { value: "America/Asuncion", label: "Asunción (GMT-4/-3)" },
+    { value: "America/New_York", label: "Nueva York (GMT-5/-4)" },
+    { value: "America/Chicago", label: "Chicago (GMT-6/-5)" },
+    { value: "America/Denver", label: "Denver (GMT-7/-6)" },
+    { value: "America/Los_Angeles", label: "Los Ángeles (GMT-8/-7)" },
+    { value: "UTC", label: "UTC" }
+];

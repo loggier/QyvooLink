@@ -1,3 +1,4 @@
+
 /**
  * @fileOverview A tool for scheduling appointments.
  *
@@ -9,6 +10,8 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { addDoc, collection, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { parse } from 'date-fns';
+import { utcToZonedTime } from 'date-fns-tz';
 
 export const CreateAppointmentSchema = z.object({
   title: z.string().describe("The main title or purpose of the appointment."),
@@ -23,29 +26,37 @@ export const CreateAppointmentSchema = z.object({
   // Metadata required for saving to the correct Firestore document
   organizationId: z.string().describe("The organization ID of the user creating the appointment."),
   userId: z.string().describe("The user ID of the user creating the appointment."),
+  timezone: z.string().describe("The IANA timezone of the user (e.g., 'America/Mexico_City')."),
 });
 
 // This is the core logic for creating an appointment.
 // It can be called from any server-side context (e.g., an API route).
 export async function createAppointment(input: z.infer<typeof CreateAppointmentSchema>): Promise<{ success: boolean; appointmentId?: string }> {
   try {
-    // Construct ISO-like strings without timezone information.
-    // This format is crucial for ensuring the time is interpreted as "local" to the date provided, not the server's timezone.
-    const startString = `${input.date}T${input.startTime}:00`;
-    const endString = `${input.date}T${input.endTime}:00`;
+    const { date, startTime, endTime, timezone } = input;
 
-    // Create Date objects from these specific strings. JavaScript's Date constructor
-    // will correctly parse this format as local time for the given date.
-    const startDate = new Date(startString);
-    const endDate = new Date(endString);
-    
+    // 1. Combine date and time strings
+    const startString = `${date}T${startTime}:00`;
+    const endString = `${date}T${endTime}:00`;
+
+    // 2. Create Date objects from these strings. JavaScript's Date constructor will parse this
+    // as local time according to the server's timezone.
+    const serverStartDate = new Date(startString);
+    const serverEndDate = new Date(endString);
+
+    // 3. Convert these server-local dates to the user's specified timezone.
+    // This is the key step. `utcToZonedTime` correctly interprets the server time
+    // as if it were in the target timezone, giving us the correct UTC offset.
+    const zonedStartDate = utcToZonedTime(serverStartDate, timezone);
+    const zonedEndDate = utcToZonedTime(serverEndDate, timezone);
+
     // Final check to ensure dates are valid
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+    if (isNaN(zonedStartDate.getTime()) || isNaN(zonedEndDate.getTime())) {
       console.error("Invalid date created from input strings.");
       return { success: false };
     }
 
-    if (endDate <= startDate) {
+    if (zonedEndDate <= zonedStartDate) {
       console.error("End time must be after start time.");
       return { success: false };
     }
@@ -55,8 +66,8 @@ export async function createAppointment(input: z.infer<typeof CreateAppointmentS
       userId: input.userId,
       title: input.title,
       description: input.description || '',
-      start: Timestamp.fromDate(startDate),
-      end: Timestamp.fromDate(endDate),
+      start: Timestamp.fromDate(zonedStartDate),
+      end: Timestamp.fromDate(zonedEndDate),
       contactId: input.contactId || '',
       contactName: input.contactName || '',
       assignedTo: input.assignedTo || '',

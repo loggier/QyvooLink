@@ -12,12 +12,13 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, UserCircle, Building, Phone, Mail, User, MapPin, Globe, Briefcase, Users, Lock, CreditCard } from 'lucide-react';
+import { Loader2, Save, UserCircle, Building, Phone, Mail, User, MapPin, Globe, Briefcase, Users, Lock, CreditCard, Clock } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import SubscriptionManager from '@/components/dashboard/subscriptions-display';
+import { timezones } from '@/lib/timezones';
 
 interface UserProfileData {
   fullName?: string;
@@ -29,6 +30,7 @@ interface UserProfileData {
   city?: string;
   sector?: string;
   employeeCount?: string;
+  timezone?: string;
 }
 
 const sectorOptions = [
@@ -66,6 +68,7 @@ export default function ProfilePage() {
     city: '',
     sector: '',
     employeeCount: '',
+    timezone: '',
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -98,6 +101,7 @@ export default function ProfilePage() {
             city: dbData.city || user.city || '',
             sector: dbData.sector || user.sector || '',
             employeeCount: dbData.employeeCount || user.employeeCount || '',
+            timezone: dbData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
           });
         } else {
           setFormData(prev => ({
@@ -111,6 +115,7 @@ export default function ProfilePage() {
             city: user.city || '',
             sector: user.sector || '',
             employeeCount: user.employeeCount || '',
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           }));
           toast({ variant: "default", title: "Perfil Parcial", description: "Completa tu información de perfil." });
         }
@@ -152,6 +157,7 @@ export default function ProfilePage() {
       phone: formData.phone,
       country: formData.country,
       city: formData.city,
+      timezone: formData.timezone,
     };
     
     // Only include owner/admin fields if the user is not an agent
@@ -258,25 +264,44 @@ export default function ProfilePage() {
                 placeholder="Tu número de teléfono"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="country" className="flex items-center"><Globe className="mr-2 h-4 w-4 text-muted-foreground"/>País</Label>
-              <Input 
-                id="country" 
-                name="country" 
-                value={formData.country || ''} 
-                onChange={handleInputChange} 
-                placeholder="País de residencia"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="country" className="flex items-center"><Globe className="mr-2 h-4 w-4 text-muted-foreground"/>País</Label>
+                <Input 
+                  id="country" 
+                  name="country" 
+                  value={formData.country || ''} 
+                  onChange={handleInputChange} 
+                  placeholder="País de residencia"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="city" className="flex items-center"><MapPin className="mr-2 h-4 w-4 text-muted-foreground"/>Ciudad</Label>
+                <Input 
+                  id="city" 
+                  name="city" 
+                  value={formData.city || ''} 
+                  onChange={handleInputChange} 
+                  placeholder="Ciudad de residencia"
+                />
+              </div>
             </div>
+            
             <div className="space-y-2">
-              <Label htmlFor="city" className="flex items-center"><MapPin className="mr-2 h-4 w-4 text-muted-foreground"/>Ciudad</Label>
-              <Input 
-                id="city" 
-                name="city" 
-                value={formData.city || ''} 
-                onChange={handleInputChange} 
-                placeholder="Ciudad de residencia"
-              />
+                <Label htmlFor="timezone" className="flex items-center"><Clock className="mr-2 h-4 w-4 text-muted-foreground"/>Zona Horaria</Label>
+                <Select name="timezone" value={formData.timezone || ""} onValueChange={(value) => handleSelectChange('timezone', value)}>
+                    <SelectTrigger id="timezone">
+                        <SelectValue placeholder="Selecciona tu zona horaria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {timezones.map(tz => (
+                            <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                 <p className="text-xs text-muted-foreground">
+                    Esto asegurará que las citas se guarden en tu hora local correcta.
+                 </p>
             </div>
 
             {user.role !== 'agent' && (
