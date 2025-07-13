@@ -509,60 +509,75 @@ export default function ChatPage() {
   }, [fetchQuickReplies]);
 
   const handleSendMessage = async () => {
-    if (!replyMessage.trim() || !selectedChatId || !whatsAppInstance || !user || !user.organizationId) return;
-  
-    const trimmedMessage = replyMessage.trim();
-  
+    if (!replyMessage.trim() || !selectedChatId || !whatsAppInstance || !user) return;
+
     // Save to Firestore first for a snappy UI
-    const newMessageDataForDb: Omit<ChatMessage, 'id' | 'timestamp'> & { timestamp: any } = {
-      chat_id: selectedChatId,
-      from: whatsAppInstance.phoneNumber || `instance_${whatsAppInstance.id}`,
-      to: selectedChatId,
-      instance: whatsAppInstance.name,
-      instanceId: whatsAppInstance.id,
-      mensaje: trimmedMessage,
-      user_name: 'agente',
-      timestamp: serverTimestamp(),
-      type: chatMode,
-      author: {
-        uid: user.uid,
-        name: user.fullName || user.username || 'Agente',
-      },
-    };
-  
-    try {
-      await addDoc(collection(db, 'chat'), newMessageDataForDb);
-      setReplyMessage(""); // Clear input immediately
-  
-      if (chatMode === 'message') {
-        const webhookUrl = '/api/chat/send-message'; // Use the internal Qyvoo endpoint
-        
-        const webhookPayload = {
-          chatId: selectedChatId,
-          instanceId: whatsAppInstance.id,
-          message: trimmedMessage,
-          userId: user.uid, // The agent's UID
-          organizationId: user.organizationId,
-        };
-
-        // Call the internal API to process the message with Genkit
-        const webhookResponse = await fetch(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(webhookPayload),
-        });
-
-        if (!webhookResponse.ok) {
-          const errorData = await webhookResponse.json();
-          console.error("Error forwarding message to Qyvoo API:", webhookResponse.status, errorData);
-          toast({ variant: "destructive", title: "Error de envío", description: errorData.error || `No se pudo procesar el mensaje a través de la API: ${webhookResponse.statusText}` });
-        } else {
-           console.log("Message forwarded to Qyvoo API successfully.");
+    const newMessageDataForDb: Omit<ChatMessage, 'id'|'timestamp'> & { timestamp: any } = {
+        chat_id: selectedChatId,
+        from: whatsAppInstance.phoneNumber || `instance_${whatsAppInstance.id}`,
+        to: selectedChatId,
+        instance: whatsAppInstance.name,
+        instanceId: whatsAppInstance.id,
+        mensaje: replyMessage,
+        user_name: 'agente',
+        timestamp: serverTimestamp(),
+        type: chatMode,
+        author: {
+          uid: user.uid,
+          name: user.fullName || user.username || "Agente",
         }
+    };
+    await addDoc(collection(db, 'chat'), newMessageDataForDb);
+    
+    // Clear input immediately
+    setReplyMessage("");
+
+    if (chatMode === 'message') {
+      // Logic for sending message through webhook
+      const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
+      const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL;
+      const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL;
+  
+      let baseWebhookUrl: string | undefined;
+  
+      if (useTestWebhook) {
+          baseWebhookUrl = testWebhookBase;
+          if (!baseWebhookUrl) {
+              toast({ variant: "destructive", title: "Configuración Incompleta", description: "URL de webhook de prueba no configurada." });
+              return;
+          }
+      } else {
+          baseWebhookUrl = prodWebhookBase;
+          if (!baseWebhookUrl) {
+              toast({ variant: "destructive", title: "Configuración Incompleta", description: "URL de webhook de producción no configurada." });
+              return;
+          }
       }
-    } catch (error) {
-      console.error("Error sending message:", error);
-      toast({ variant: "destructive", title: "Error", description: "No se pudo enviar el mensaje o nota." });
+      const webhookUrl = `${baseWebhookUrl}?action=send_message`;
+  
+      const webhookPayload = {
+        number: selectedChatId,
+        message: replyMessage,
+        instanceName: whatsAppInstance.name,
+        token: whatsAppInstance.apiKey,
+        userId: user.uid,
+      };
+      
+      try {
+        const webhookResponse = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(webhookPayload)
+        });
+        if (!webhookResponse.ok) {
+            const errorData = await webhookResponse.json();
+            console.error("Error from n8n webhook:", webhookResponse.status, errorData);
+            toast({ variant: "destructive", title: "Error de envío", description: errorData.message || `No se pudo enviar el mensaje a través de N8N: ${webhookResponse.statusText}`});
+        }
+      } catch (error: any) {
+        console.error("Error calling n8n webhook:", error);
+        toast({ variant: "destructive", title: "Error de Red", description: `No se pudo conectar con N8N: ${error.message}` });
+      }
     }
   };
   
@@ -1093,3 +1108,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    

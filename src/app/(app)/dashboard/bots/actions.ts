@@ -85,7 +85,7 @@ function buildVentasPrompt(botData: BotData): string {
     const toolsConfig = buildToolsConfigXml([
         { 
             name: 'createAppointment', 
-            description: `Creates a new appointment. Use this when a user confirms they want to schedule something. Parameters to provide: 'title' (string, the purpose of the appointment), 'date' (string, format YYYY-MM-DD), 'startTime' (string, format HH:mm), and 'endTime' (string, format HH:mm). You can also include optional details like 'contactName' or 'description'.`,
+            description: `Creates a new appointment. Use this when a user confirms they want to schedule something. Parameters to provide: 'title' (string), 'date' (string, format YYYY-MM-DD), 'startTime' (string, format HH:mm), 'endTime' (string, format HH:mm), 'userId' (string, required), and 'organizationId' (string, required). You can also include optional details like 'contactName' or 'description'.`,
         }
     ]);
 
@@ -327,3 +327,5 @@ export async function migrateAndActivateLegacyBot(userId: string, legacyData: an
         instanceIdAssociated,
     }, { merge: true });
 }
+
+    
