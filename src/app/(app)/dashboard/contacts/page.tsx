@@ -2,7 +2,7 @@
 "use client";
 
 import type { ChangeEvent } from 'react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, doc, addDoc, deleteDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Users, UserPlus, Edit3, Trash2, Building, Mail, Phone, UserCheck, Bot, UserRound, Briefcase, Star, MessageSquareDashed, ListTodo, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, Users, UserPlus, Edit3, Trash2, Building, Mail, Phone, UserCheck, Bot, UserRound, Briefcase, Star, MessageSquareDashed, ListTodo, ChevronLeft, ChevronRight, Search, FilterX } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
@@ -88,6 +88,11 @@ export default function ContactsPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<ContactDetails | null>(null);
 
+  // Search and Filter State
+  const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(12);
@@ -133,13 +138,6 @@ export default function ContactsPage() {
         }
       }).filter((contact): contact is ContactDetails => contact !== null); // Filter out any nulls
       
-      // Sort contacts in the client
-      fetchedContacts.sort((a, b) => {
-        const nameA = `${a.nombre || ''} ${a.apellido || ''}`.trim().toLowerCase();
-        const nameB = `${b.nombre || ''} ${b.apellido || ''}`.trim().toLowerCase();
-        return nameA.localeCompare(nameB);
-      });
-
       setContacts(fetchedContacts);
       setStats({ total: fetchedContacts.length, prospectos, clientes, proveedores, otros });
 
@@ -154,6 +152,33 @@ export default function ContactsPage() {
   useEffect(() => {
     fetchContacts();
   }, [fetchContacts]);
+
+  const filteredContacts = useMemo(() => {
+    return contacts
+      .filter(contact => {
+        const searchTermLower = searchTerm.toLowerCase();
+        return (
+          (contact.nombre?.toLowerCase() || '').includes(searchTermLower) ||
+          (contact.apellido?.toLowerCase() || '').includes(searchTermLower) ||
+          (contact.email?.toLowerCase() || '').includes(searchTermLower) ||
+          (contact.empresa?.toLowerCase() || '').includes(searchTermLower)
+        );
+      })
+      .filter(contact => typeFilter === 'all' || contact.tipoCliente === typeFilter)
+      .filter(contact => statusFilter === 'all' || contact.estadoConversacion === statusFilter)
+      .sort((a, b) => { // Sort after filtering
+        const nameA = `${a.nombre || ''} ${a.apellido || ''}`.trim().toLowerCase();
+        const nameB = `${b.nombre || ''} ${b.apellido || ''}`.trim().toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
+  }, [contacts, searchTerm, typeFilter, statusFilter]);
+
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setTypeFilter('all');
+    setStatusFilter('all');
+    setCurrentPage(1);
+  };
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -238,10 +263,10 @@ export default function ContactsPage() {
   };
 
   // Pagination logic
-  const totalPages = Math.ceil(contacts.length / itemsPerPage);
+  const totalPages = Math.ceil(filteredContacts.length / itemsPerPage);
   const lastContactIndex = currentPage * itemsPerPage;
   const firstContactIndex = lastContactIndex - itemsPerPage;
-  const currentContacts = contacts.slice(firstContactIndex, lastContactIndex);
+  const currentContacts = filteredContacts.slice(firstContactIndex, lastContactIndex);
 
   if (isLoading && !dataFetchUserId) {
     return (
@@ -302,14 +327,71 @@ export default function ContactsPage() {
         </Card>
       </div>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Filtrar y Buscar Contactos</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="lg:col-span-2">
+            <Label htmlFor="search">Buscar</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="search"
+                placeholder="Buscar por nombre, correo, empresa..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="type-filter">Tipo de Cliente</Label>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger id="type-filter">
+                <SelectValue placeholder="Todos los tipos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los Tipos</SelectItem>
+                <SelectItem value="Prospecto">Prospecto</SelectItem>
+                <SelectItem value="Cliente">Cliente</SelectItem>
+                <SelectItem value="Proveedor">Proveedor</SelectItem>
+                <SelectItem value="Otro">Otro</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="status-filter">Estado</Label>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger id="status-filter">
+                <SelectValue placeholder="Todos los estados" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los Estados</SelectItem>
+                <SelectItem value="Abierto">Abierto</SelectItem>
+                <SelectItem value="Pendiente">Pendiente</SelectItem>
+                <SelectItem value="Cerrado">Cerrado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+        <CardFooter>
+            <Button variant="ghost" onClick={handleClearFilters}>
+                <FilterX className="h-4 w-4 mr-2"/>
+                Limpiar Filtros
+            </Button>
+        </CardFooter>
+      </Card>
+
+
       {isLoading ? (
         <div className="flex items-center justify-center p-6">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <span className="ml-3 text-muted-foreground">Cargando contactos...</span>
         </div>
-      ) : contacts.length === 0 ? (
+      ) : currentContacts.length === 0 ? (
         <div className="text-center py-10 border-2 border-dashed rounded-lg">
-          <p className="text-muted-foreground">No hay contactos para mostrar. ¡Añade uno nuevo!</p>
+          <p className="text-muted-foreground">No se encontraron contactos que coincidan con tus filtros.</p>
         </div>
       ) : (
         <>
