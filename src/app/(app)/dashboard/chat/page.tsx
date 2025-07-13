@@ -509,7 +509,7 @@ export default function ChatPage() {
   }, [fetchQuickReplies]);
 
   const handleSendMessage = async () => {
-    if (!replyMessage.trim() || !selectedChatId || !whatsAppInstance || !user) return;
+    if (!replyMessage.trim() || !selectedChatId || !whatsAppInstance || !user || !user.organizationId) return;
   
     const trimmedMessage = replyMessage.trim();
   
@@ -535,26 +535,17 @@ export default function ChatPage() {
       setReplyMessage(""); // Clear input immediately
   
       if (chatMode === 'message') {
-        const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
-        const prodWebhookUrl = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL;
-        const testWebhookUrl = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL;
+        const webhookUrl = '/api/chat/send-message'; // Use the internal Qyvoo endpoint
         
-        const webhookUrl = useTestWebhook ? testWebhookUrl : prodWebhookUrl;
-
-        if (!webhookUrl) {
-            toast({ variant: "destructive", title: "Error de Configuración", description: "La URL del webhook de N8N no está configurada en el entorno." });
-            return;
-        }
-
-        const webhookPayload = [{
-          chat_id: selectedChatId,
+        const webhookPayload = {
+          chatId: selectedChatId,
           instanceId: whatsAppInstance.id,
-          mensaje: trimmedMessage,
-          instance: whatsAppInstance.name,
-          user_name: "agente",
-          timestamp: new Date().toISOString(),
-        }];
+          message: trimmedMessage,
+          userId: user.uid, // The agent's UID
+          organizationId: user.organizationId,
+        };
 
+        // Call the internal API to process the message with Genkit
         const webhookResponse = await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -562,11 +553,11 @@ export default function ChatPage() {
         });
 
         if (!webhookResponse.ok) {
-          const errorData = await webhookResponse.text();
-          console.error("Error forwarding message to N8N webhook:", webhookResponse.status, errorData);
-          toast({ variant: "destructive", title: "Error de envío", description: `No se pudo procesar el mensaje a través de N8N: ${webhookResponse.statusText}` });
+          const errorData = await webhookResponse.json();
+          console.error("Error forwarding message to Qyvoo API:", webhookResponse.status, errorData);
+          toast({ variant: "destructive", title: "Error de envío", description: errorData.error || `No se pudo procesar el mensaje a través de la API: ${webhookResponse.statusText}` });
         } else {
-           console.log("Message forwarded to N8N successfully.");
+           console.log("Message forwarded to Qyvoo API successfully.");
         }
       }
     } catch (error) {
