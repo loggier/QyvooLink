@@ -29,17 +29,19 @@ export const CreateAppointmentSchema = z.object({
 // It can be called from any server-side context (e.g., an API route).
 export async function createAppointment(input: z.infer<typeof CreateAppointmentSchema>): Promise<{ success: boolean; appointmentId?: string }> {
   try {
-    const [year, month, day] = input.date.split('-').map(Number);
-    const [startHour, startMinute] = input.startTime.split(':').map(Number);
-    const [endHour, endMinute] = input.endTime.split(':').map(Number);
+    // Create ISO-like strings without timezone information.
+    // This forces the JavaScript Date object to parse it as "local" time, but local to the specified date, not the server's date.
+    const startString = `${input.date}T${input.startTime}:00`;
+    const endString = `${input.date}T${input.endTime}:00`;
 
-    // Use Date.UTC to create a timestamp from numbers, avoiding local timezone interpretation.
-    // The month is 0-indexed for Date.UTC, so we subtract 1.
-    const startMillis = Date.UTC(year, month - 1, day, startHour, startMinute);
-    const endMillis = Date.UTC(year, month - 1, day, endHour, endMinute);
-
-    const startDate = new Date(startMillis);
-    const endDate = new Date(endMillis);
+    const startDate = new Date(startString);
+    const endDate = new Date(endString);
+    
+    // Final check to ensure dates are valid
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      console.error("Invalid date created from input strings.");
+      return { success: false };
+    }
 
     if (endDate <= startDate) {
       console.error("End time must be after start time.");
