@@ -85,7 +85,7 @@ function buildVentasPrompt(botData: BotData): string {
     const toolsConfig = buildToolsConfigXml([
         { 
             name: 'createAppointment', 
-            description: `Creates a new appointment. Use this when a user confirms they want to schedule something. Parameters to provide: 'title' (string), 'date' (string, format YYYY-MM-DD), 'startTime' (string, format HH:mm), 'endTime' (string, format HH:mm), 'userId' (string, required), 'organizationId' (string, required), and 'timezone' (string, required, e.g., 'America/Mexico_City'). You can also include optional details like 'contactName' or 'description'.`,
+            description: `Creates a new appointment. Use this when a user confirms they want to schedule something. Parameters to provide: 'title' (string), 'date' (string, format YYYY-MM-DD), 'startTime' (string, format HH:mm), 'endTime' (string, format HH:mm), 'userId' (string, required), 'organizationId' (string, required), 'timezone' (string, required, e.g., 'America/Mexico_City'), and optionally 'contactPhone' (string, user's phone number). You can also include 'description'.`,
         }
     ]);
 
