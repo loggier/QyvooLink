@@ -1,4 +1,5 @@
 
+'use server';
 /**
  * @fileOverview A tool for scheduling appointments.
  *
@@ -10,8 +11,7 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { addDoc, collection, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { parse } from 'date-fns';
-import { utcToZonedTime } from 'date-fns-tz';
+import { zonedTimeToUtc } from 'date-fns-tz';
 
 export const CreateAppointmentSchema = z.object({
   title: z.string().describe("The main title or purpose of the appointment."),
@@ -23,7 +23,6 @@ export const CreateAppointmentSchema = z.object({
   contactId: z.string().optional().describe("The unique ID of the contact, if available."),
   assignedTo: z.string().optional().describe("The user ID of the team member assigned to the appointment."),
   assignedToName: z.string().optional().describe("The name of the team member assigned to the appointment."),
-  // Metadata required for saving to the correct Firestore document
   organizationId: z.string().describe("The organization ID of the user creating the appointment."),
   userId: z.string().describe("The user ID of the user creating the appointment."),
   timezone: z.string().describe("The IANA timezone of the user (e.g., 'America/Mexico_City')."),
@@ -35,28 +34,24 @@ export async function createAppointment(input: z.infer<typeof CreateAppointmentS
   try {
     const { date, startTime, endTime, timezone } = input;
 
-    // 1. Combine date and time strings
-    const startString = `${date}T${startTime}:00`;
-    const endString = `${date}T${endTime}:00`;
+    // 1. Create a local date-time string from the input.
+    // E.g., "2025-07-13 10:00"
+    const localStartString = `${date} ${startTime}`;
+    const localEndString = `${date} ${endTime}`;
 
-    // 2. Create Date objects from these strings. JavaScript's Date constructor will parse this
-    // as local time according to the server's timezone.
-    const serverStartDate = new Date(startString);
-    const serverEndDate = new Date(endString);
-
-    // 3. Convert these server-local dates to the user's specified timezone.
-    // This is the key step. `utcToZonedTime` correctly interprets the server time
-    // as if it were in the target timezone, giving us the correct UTC offset.
-    const zonedStartDate = utcToZonedTime(serverStartDate, timezone);
-    const zonedEndDate = utcToZonedTime(serverEndDate, timezone);
+    // 2. Convert this local time string to a UTC Date object using the user's timezone.
+    // This is the crucial step. It tells the function: "Treat '10:00' as the time in 'America/Mexico_City',
+    // and give me the corresponding UTC time."
+    const utcStartDate = zonedTimeToUtc(localStartString, timezone);
+    const utcEndDate = zonedTimeToUtc(localEndString, timezone);
 
     // Final check to ensure dates are valid
-    if (isNaN(zonedStartDate.getTime()) || isNaN(zonedEndDate.getTime())) {
-      console.error("Invalid date created from input strings.");
+    if (isNaN(utcStartDate.getTime()) || isNaN(utcEndDate.getTime())) {
+      console.error("Invalid date created from input strings and timezone.");
       return { success: false };
     }
 
-    if (zonedEndDate <= zonedStartDate) {
+    if (utcEndDate <= utcStartDate) {
       console.error("End time must be after start time.");
       return { success: false };
     }
@@ -66,8 +61,8 @@ export async function createAppointment(input: z.infer<typeof CreateAppointmentS
       userId: input.userId,
       title: input.title,
       description: input.description || '',
-      start: Timestamp.fromDate(zonedStartDate),
-      end: Timestamp.fromDate(zonedEndDate),
+      start: Timestamp.fromDate(utcStartDate),
+      end: Timestamp.fromDate(utcEndDate),
       contactId: input.contactId || '',
       contactName: input.contactName || '',
       assignedTo: input.assignedTo || '',
