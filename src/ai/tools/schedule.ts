@@ -9,7 +9,6 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { addDoc, collection, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { set, parse } from 'date-fns';
 
 export const CreateAppointmentSchema = z.object({
   title: z.string().describe("The main title or purpose of the appointment."),
@@ -30,12 +29,14 @@ export const CreateAppointmentSchema = z.object({
 // It can be called from any server-side context (e.g., an API route).
 export async function createAppointment(input: z.infer<typeof CreateAppointmentSchema>): Promise<{ success: boolean; appointmentId?: string }> {
   try {
-    const baseDate = parse(input.date, 'yyyy-MM-dd', new Date());
+    const [year, month, day] = input.date.split('-').map(Number);
     const [startHour, startMinute] = input.startTime.split(':').map(Number);
     const [endHour, endMinute] = input.endTime.split(':').map(Number);
-    
-    const startDate = set(baseDate, { hours: startHour, minutes: startMinute, seconds: 0, milliseconds: 0 });
-    const endDate = set(baseDate, { hours: endHour, minutes: endMinute, seconds: 0, milliseconds: 0 });
+
+    // Construct date objects this way to avoid timezone shifts during creation.
+    // The month is 0-indexed in JavaScript's Date constructor.
+    const startDate = new Date(year, month - 1, day, startHour, startMinute);
+    const endDate = new Date(year, month - 1, day, endHour, endMinute);
 
     if (endDate <= startDate) {
       console.error("End time must be after start time.");
