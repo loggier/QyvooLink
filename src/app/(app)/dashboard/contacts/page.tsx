@@ -83,18 +83,33 @@ export default function ContactsPage() {
     if (!dataFetchUserId) return;
     setIsLoading(true);
     try {
-      // Remove orderBy to fetch all documents regardless of whether they have a specific field.
       const q = query(collection(db, 'contacts'), where('userId', '==', dataFetchUserId));
       const querySnapshot = await getDocs(q);
+      
       const fetchedContacts: ContactDetails[] = [];
-      let prospectos = 0;
-      let clientes = 0;
-      let proveedores = 0;
-      let otros = 0;
+      let prospectos = 0, clientes = 0, proveedores = 0, otros = 0;
 
       querySnapshot.forEach((docSnap) => {
-        const data = docSnap.data() as Omit<ContactDetails, 'id'>;
-        fetchedContacts.push({ id: docSnap.id, ...data });
+        const data = docSnap.data();
+        // Robustly create the contact object, providing defaults for missing fields
+        const contact: ContactDetails = {
+          id: docSnap.id,
+          nombre: data.nombre || '',
+          apellido: data.apellido || '',
+          email: data.email || '',
+          telefono: data.telefono || '',
+          empresa: data.empresa || '',
+          ubicacion: data.ubicacion || '',
+          tipoCliente: data.tipoCliente,
+          estadoConversacion: data.estadoConversacion || 'Abierto',
+          chatbotEnabledForContact: data.chatbotEnabledForContact ?? true,
+          userId: data.userId,
+          _chatIdOriginal: data._chatIdOriginal,
+          createdAt: data.createdAt,
+        };
+        fetchedContacts.push(contact);
+        
+        // Calculate stats
         switch (data.tipoCliente) {
           case 'Prospecto': prospectos++; break;
           case 'Cliente': clientes++; break;
@@ -103,7 +118,7 @@ export default function ContactsPage() {
         }
       });
       
-      // Sort the contacts on the client-side to ensure consistent ordering.
+      // Sort the contacts on the client-side to ensure consistent ordering
       fetchedContacts.sort((a, b) => {
         const nameA = `${a.nombre || ''} ${a.apellido || ''}`.trim().toLowerCase();
         const nameB = `${b.nombre || ''} ${b.apellido || ''}`.trim().toLowerCase();
@@ -176,12 +191,12 @@ export default function ContactsPage() {
     }
     setIsSaving(true);
     
-    const contactDataToSave: Omit<ContactDetails, 'id'> & { userId: string } = {
+    const contactDataToSave = {
       ...currentContactData,
       userId: dataFetchUserId,
       chatbotEnabledForContact: currentContactData.chatbotEnabledForContact ?? true,
       estadoConversacion: currentContactData.estadoConversacion ?? 'Abierto',
-      createdAt: serverTimestamp() as Timestamp, // Ensure new contacts have a timestamp
+      createdAt: serverTimestamp(), // Ensure new contacts have a timestamp
     };
 
     try {
