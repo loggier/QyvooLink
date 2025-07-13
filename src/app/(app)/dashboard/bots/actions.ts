@@ -52,7 +52,7 @@ function buildToolsConfigXml(tools: { name: string, description: string }[]): st
 
 function buildVentasPrompt(botData: BotData): string {
     const {
-        agentRole = "Eres un asistente de ventas virtual para [Nombre de la Empresa]. Tu objetivo principal es entender las necesidades del cliente, ofrecer soluciones basadas en nuestro catálogo de servicios, proporcionar precios y cerrar la venta o agendar una demostración. Debes ser amable, profesional y eficiente. Si un cliente muestra una clara intención de agendar una cita, una reunión o una demostración, DEBES usar la herramienta 'createAppointment' para crear el evento directamente en el calendario.",
+        agentRole = "Eres un asistente de ventas virtual para [Nombre de la Empresa]. Tu objetivo principal es entender las necesidades del cliente, ofrecer soluciones basadas en nuestro catálogo de servicios, proporcionar precios y cerrar la venta o agendar una demostración. Debes ser amable, profesional y eficiente. Si un cliente muestra una clara intención de agendar una cita, una reunión o una demostración, DEBES usar la herramienta 'createAppointment' para crear el evento directamente en el calendario. Si el cliente pregunta por sus citas agendadas, DEBES usar la herramienta 'getFutureAppointments'.",
         selectedRules = [],
         businessContext = { description: '', location: '', mission: '' },
         serviceCatalog = [],
@@ -86,6 +86,10 @@ function buildVentasPrompt(botData: BotData): string {
         { 
             name: 'createAppointment', 
             description: `Creates a new appointment. Use this when a user confirms they want to schedule something. Parameters to provide: 'title' (string), 'date' (string, format YYYY-MM-DD), 'startTime' (string, format HH:mm), 'endTime' (string, format HH:mm), 'userId' (string, required), 'organizationId' (string, required), 'timezone' (string, required, e.g., 'America/Mexico_City'), and 'contactPhone' (string, required, user's phone number). You can also include 'description'.`,
+        },
+        {
+            name: 'getFutureAppointments',
+            description: `Retrieves a list of all upcoming appointments for a contact. Use this when a user asks about their scheduled appointments. Parameters to provide: 'contactPhone' (string, required, user's phone number), 'userId' (string, required), and 'organizationId' (string, required).`,
         }
     ]);
 
@@ -181,6 +185,17 @@ function buildAsistentePersonalPrompt(botData: BotData): string {
 
     const rulesConfig = buildRulesXml(rules);
     const driveLinksConfig = buildDriveLinksXml(botData.driveLinks);
+    
+     const toolsConfig = buildToolsConfigXml([
+        { 
+            name: 'createAppointment', 
+            description: `Creates a new appointment. Use this when a user confirms they want to schedule something. Parameters to provide: 'title' (string), 'date' (string, format YYYY-MM-DD), 'startTime' (string, format HH:mm), 'endTime' (string, format HH:mm), 'userId' (string, required), 'organizationId' (string, required), 'timezone' (string, required, e.g., 'America/Mexico_City'), and 'contactPhone' (string, required, user's phone number). You can also include 'description'.`,
+        },
+        {
+            name: 'getFutureAppointments',
+            description: `Retrieves a list of all upcoming appointments for a contact. Use this when a user asks about their scheduled appointments. Parameters to provide: 'contactPhone' (string, required, user's phone number), 'userId' (string, required), and 'organizationId' (string, required).`,
+        }
+    ]);
 
     return [
         rulesConfig,
@@ -189,6 +204,7 @@ function buildAsistentePersonalPrompt(botData: BotData): string {
         `<taskInstructions>${escapeXml(taskInstructions)}</taskInstructions>`,
         driveLinksConfig,
         `<calendarLink>${escapeXml(calendarLink)}</calendarLink>`,
+        toolsConfig,
     ].filter(Boolean).join('\n').trim();
 }
 

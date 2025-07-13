@@ -16,9 +16,9 @@ interface AsistentePersonalBotFormProps {
 
 export default function AsistentePersonalBotForm({ data, onDataChange }: AsistentePersonalBotFormProps) {
     const {
-        agentRole = "Eres un asistente personal altamente eficiente. Tu objetivo es gestionar mi agenda, tomar notas, recordar tareas y filtrar comunicaciones. Debes ser proactivo, discreto y aprender mis preferencias.",
+        agentRole = "Eres un asistente personal altamente eficiente. Tu objetivo es gestionar mi agenda, tomar notas, recordar tareas y filtrar comunicaciones. Debes ser proactivo, discreto y aprender mis preferencias. Utiliza la herramienta `createAppointment` para agendar citas y `getFutureAppointments` para consultar citas existentes.",
         userPreferences = "Prefiero comunicarme por texto. Mi horario de no molestar es de 10pm a 8am.",
-        taskInstructions = "Para crear un recordatorio, pídeme el título, la fecha y la hora. Para agendar una cita, solicita el nombre del contacto, motivo y duración.",
+        taskInstructions = "Para crear un recordatorio, pídeme el título, la fecha y la hora. Para agendar una cita, solicita el nombre del contacto, motivo y duración. Si el usuario pregunta por sus citas, usa la herramienta para buscarlas.",
         calendarLink = ""
     } = data;
 

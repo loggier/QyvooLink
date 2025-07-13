@@ -1,10 +1,16 @@
 
+'use server';
+
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { addDoc, collection, Timestamp, query, where, getDocs, limit } from 'firebase/firestore';
+import { addDoc, collection, Timestamp, query, where, getDocs, limit, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { zonedTimeToUtc } from 'date-fns-tz';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
+
+// Schema for creating an appointment
 export const CreateAppointmentSchema = z.object({
   title: z.string().describe("The main title or purpose of the appointment."),
   date: z.string().describe("The date of the appointment in YYYY-MM-DD format (e.g., '2024-08-10')."),
@@ -22,12 +28,8 @@ export const CreateAppointmentSchema = z.object({
 function createUtcDate(dateStr: string, timeStr: string, timezone: string): Date {
   const [year, month, day] = dateStr.split('-').map(Number);
   const [hour, minute] = timeStr.split(':').map(Number);
-  
-  // Directly create a date in the target timezone and convert to UTC
-  // Note: month is 0-indexed in JS, so we subtract 1
   return zonedTimeToUtc(new Date(year, month - 1, day, hour, minute), timezone);
 }
-
 
 export async function createAppointment(input: z.infer<typeof CreateAppointmentSchema>): Promise<{ success: boolean; appointmentId?: string }> {
   try {
@@ -52,7 +54,6 @@ export async function createAppointment(input: z.infer<typeof CreateAppointmentS
 
     if (contactPhone) {
       const contactsRef = collection(db, 'contacts');
-      // Query by _chatIdOriginal and userId for precise, isolated matching.
       const q = query(
         contactsRef, 
         where('userId', '==', rest.userId), 
@@ -67,8 +68,8 @@ export async function createAppointment(input: z.infer<typeof CreateAppointmentS
         const contactData = contactDoc.data();
         contactName = `${contactData.nombre || ''} ${contactData.apellido || ''}`.trim() || contactData.telefono;
       } else {
-        // If contact not found in this user's contacts, add contactPhone to title
-        finalTitle = `${rest.title} con ${contactPhone.split('@')[0]}`;
+        const phoneOnly = contactPhone.split('@')[0];
+        finalTitle = `${rest.title} con ${phoneOnly}`;
       }
     }
 
@@ -92,6 +93,82 @@ export async function createAppointment(input: z.infer<typeof CreateAppointmentS
   }
 }
 
+// Schema for querying future appointments
+const GetFutureAppointmentsSchema = z.object({
+  contactPhone: z.string().describe("The WhatsApp Chat ID of the contact asking for their appointments (e.g., '5218112345678@s.whatsapp.net')."),
+  organizationId: z.string().describe("The organization ID of the user requesting the information."),
+  userId: z.string().describe("The user ID associated with the organization."),
+});
+
+// The structure of a single appointment in the output
+const AppointmentDetailSchema = z.object({
+  title: z.string(),
+  date: z.string().describe("The date of the appointment, formatted as 'DD de MMMM de YYYY'."),
+  startTime: z.string().describe("The start time of the appointment, formatted as 'HH:mm'."),
+});
+
+// Output schema for the getFutureAppointments tool
+const GetFutureAppointmentsOutputSchema = z.object({
+  appointments: z.array(AppointmentDetailSchema).describe("A list of future appointments."),
+  count: z.number().describe("The total number of future appointments found."),
+});
+
+// Function to get future appointments
+export async function getFutureAppointments(input: z.infer<typeof GetFutureAppointmentsSchema>): Promise<z.infer<typeof GetFutureAppointmentsOutputSchema>> {
+  try {
+    const { contactPhone, organizationId, userId } = input;
+    
+    // First, find the contact ID based on the phone number (chatId)
+    const contactsRef = collection(db, 'contacts');
+    const contactQuery = query(
+      contactsRef,
+      where('userId', '==', userId),
+      where('_chatIdOriginal', '==', contactPhone),
+      limit(1)
+    );
+    const contactSnapshot = await getDocs(contactQuery);
+    
+    if (contactSnapshot.empty) {
+      return { appointments: [], count: 0 }; // No contact found, so no appointments
+    }
+    const contactId = contactSnapshot.docs[0].id;
+
+    // Now, query for future appointments for this contactId in the organization
+    const appointmentsRef = collection(db, 'appointments');
+    const now = Timestamp.now();
+    
+    const q = query(
+      appointmentsRef,
+      where('organizationId', '==', organizationId),
+      where('contactId', '==', contactId),
+      where('start', '>=', now),
+      orderBy('start', 'asc')
+    );
+    
+    const querySnapshot = await getDocs(q);
+    
+    const appointments: z.infer<typeof AppointmentDetailSchema>[] = [];
+    querySnapshot.forEach(doc => {
+      const data = doc.data();
+      const startDate = (data.start as Timestamp).toDate();
+      appointments.push({
+        title: data.title,
+        date: format(startDate, "dd 'de' MMMM 'de' yyyy", { locale: es }),
+        startTime: format(startDate, 'HH:mm'),
+      });
+    });
+
+    return { appointments, count: appointments.length };
+  } catch (error) {
+    console.error('Error in getFutureAppointments function:', error);
+    // Return an empty list in case of an error to prevent breaking the flow
+    return { appointments: [], count: 0 };
+  }
+}
+
+
+// --- Tool Definitions ---
+
 ai.defineTool(
   {
     name: 'createAppointment',
@@ -103,4 +180,14 @@ ai.defineTool(
     }),
   },
   createAppointment
+);
+
+ai.defineTool(
+  {
+    name: 'getFutureAppointments',
+    description: "Retrieves a list of all upcoming (future) appointments for a specific contact. Use this when a user asks about their scheduled appointments, such as '¿cuándo es mi cita?' or '¿tengo algo agendado?'. You must provide the contact's phone number (WhatsApp Chat ID).",
+    inputSchema: GetFutureAppointmentsSchema,
+    outputSchema: GetFutureAppointmentsOutputSchema,
+  },
+  getFutureAppointments
 );
