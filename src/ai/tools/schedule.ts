@@ -36,7 +36,7 @@ function createUtcDate(dateStr: string, timeStr: string, timezone: string): Date
   // We pass the components directly to zonedTimeToUtc to avoid local timezone interpretation.
   return zonedTimeToUtc({
     year: year,
-    month: month - 1, // CRITICAL FIX: Month must be 0-indexed.
+    month: month - 1,
     day: day,
     hours: hours,
     minutes: minutes
