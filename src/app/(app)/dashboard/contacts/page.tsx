@@ -86,39 +86,40 @@ export default function ContactsPage() {
       const q = query(collection(db, 'contacts'), where('userId', '==', dataFetchUserId));
       const querySnapshot = await getDocs(q);
       
-      const fetchedContacts: ContactDetails[] = [];
       let prospectos = 0, clientes = 0, proveedores = 0, otros = 0;
 
-      querySnapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        // Robustly create the contact object, providing defaults for missing fields
-        const contact: ContactDetails = {
-          id: docSnap.id,
-          nombre: data.nombre || '',
-          apellido: data.apellido || '',
-          email: data.email || '',
-          telefono: data.telefono || '',
-          empresa: data.empresa || '',
-          ubicacion: data.ubicacion || '',
-          tipoCliente: data.tipoCliente,
-          estadoConversacion: data.estadoConversacion || 'Abierto',
-          chatbotEnabledForContact: data.chatbotEnabledForContact ?? true,
-          userId: data.userId,
-          _chatIdOriginal: data._chatIdOriginal,
-          createdAt: data.createdAt,
-        };
-        fetchedContacts.push(contact);
-        
-        // Calculate stats
-        switch (data.tipoCliente) {
-          case 'Prospecto': prospectos++; break;
-          case 'Cliente': clientes++; break;
-          case 'Proveedor': proveedores++; break;
-          case 'Otro': otros++; break;
+      const fetchedContacts: ContactDetails[] = querySnapshot.docs.map((docSnap) => {
+        try {
+            const data = docSnap.data();
+            const contact: ContactDetails = {
+              id: docSnap.id,
+              nombre: data.nombre || '',
+              apellido: data.apellido || '',
+              email: data.email || '',
+              telefono: data.telefono || '',
+              empresa: data.empresa || '',
+              ubicacion: data.ubicacion || '',
+              tipoCliente: data.tipoCliente,
+              estadoConversacion: data.estadoConversacion || 'Abierto',
+              chatbotEnabledForContact: data.chatbotEnabledForContact ?? true,
+              userId: data.userId,
+              _chatIdOriginal: data._chatIdOriginal,
+              createdAt: data.createdAt,
+            };
+            
+            switch (data.tipoCliente) {
+              case 'Prospecto': prospectos++; break;
+              case 'Cliente': clientes++; break;
+              case 'Proveedor': proveedores++; break;
+              case 'Otro': otros++; break;
+            }
+            return contact;
+        } catch (e) {
+            console.error(`Error processing contact document ${docSnap.id}:`, e);
+            return null; // Return null for documents that cause an error
         }
-      });
+      }).filter((contact): contact is ContactDetails => contact !== null); // Filter out any nulls
       
-      // Sort the contacts on the client-side to ensure consistent ordering
       fetchedContacts.sort((a, b) => {
         const nameA = `${a.nombre || ''} ${a.apellido || ''}`.trim().toLowerCase();
         const nameB = `${b.nombre || ''} ${b.apellido || ''}`.trim().toLowerCase();
@@ -127,6 +128,7 @@ export default function ContactsPage() {
 
       setContacts(fetchedContacts);
       setStats({ total: fetchedContacts.length, prospectos, clientes, proveedores, otros });
+
     } catch (error) {
       console.error("Error fetching contacts:", error);
       toast({ variant: "destructive", title: "Error", description: "No se pudieron cargar los contactos." });
