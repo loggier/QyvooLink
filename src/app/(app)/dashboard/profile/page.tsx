@@ -12,13 +12,31 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, UserCircle, Building, Phone, Mail, User, MapPin, Globe, Briefcase, Users, Lock, CreditCard, Clock } from 'lucide-react';
+import { Loader2, Save, UserCircle, Building, Phone, Mail, User, MapPin, Globe, Briefcase, Users, Lock, CreditCard, Clock, CalendarClock } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import SubscriptionManager from '@/components/dashboard/subscriptions-display';
 import { timezones } from '@/lib/timezones';
+import { produce } from 'immer';
+import { Switch } from '@/components/ui/switch';
+
+interface WorkDay {
+  enabled: boolean;
+  start: string;
+  end: string;
+}
+
+interface WorkSchedule {
+  monday: WorkDay;
+  tuesday: WorkDay;
+  wednesday: WorkDay;
+  thursday: WorkDay;
+  friday: WorkDay;
+  saturday: WorkDay;
+  sunday: WorkDay;
+}
 
 interface UserProfileData {
   fullName?: string;
@@ -31,7 +49,22 @@ interface UserProfileData {
   sector?: string;
   employeeCount?: string;
   timezone?: string;
+  workSchedule?: WorkSchedule;
 }
+
+const defaultWorkDay: WorkDay = { enabled: true, start: '09:00', end: '18:00' };
+const disabledWorkDay: WorkDay = { enabled: false, start: '09:00', end: '18:00' };
+
+const defaultWorkSchedule: WorkSchedule = {
+  monday: { ...defaultWorkDay },
+  tuesday: { ...defaultWorkDay },
+  wednesday: { ...defaultWorkDay },
+  thursday: { ...defaultWorkDay },
+  friday: { ...defaultWorkDay },
+  saturday: { ...disabledWorkDay },
+  sunday: { ...disabledWorkDay },
+};
+
 
 const sectorOptions = [
   "Tecnología", "Salud", "Educación", "Finanzas", "Retail", 
@@ -54,6 +87,17 @@ const changePasswordSchema = z.object({
 
 type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
 
+const dayNames: { [key in keyof WorkSchedule]: string } = {
+  monday: 'Lunes',
+  tuesday: 'Martes',
+  wednesday: 'Miércoles',
+  thursday: 'Jueves',
+  friday: 'Viernes',
+  saturday: 'Sábado',
+  sunday: 'Domingo',
+};
+
+
 export default function ProfilePage() {
   const { user, loading: authLoading, updateUserPassword } = useAuth();
   const { toast } = useToast();
@@ -69,6 +113,7 @@ export default function ProfilePage() {
     sector: '',
     employeeCount: '',
     timezone: '',
+    workSchedule: defaultWorkSchedule,
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -102,6 +147,7 @@ export default function ProfilePage() {
             sector: dbData.sector || user.sector || '',
             employeeCount: dbData.employeeCount || user.employeeCount || '',
             timezone: dbData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+            workSchedule: { ...defaultWorkSchedule, ...dbData.workSchedule },
           });
         } else {
           setFormData(prev => ({
@@ -116,6 +162,7 @@ export default function ProfilePage() {
             sector: user.sector || '',
             employeeCount: user.employeeCount || '',
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            workSchedule: defaultWorkSchedule,
           }));
           toast({ variant: "default", title: "Perfil Parcial", description: "Completa tu información de perfil." });
         }
@@ -143,6 +190,15 @@ export default function ProfilePage() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleScheduleChange = (day: keyof WorkSchedule, field: keyof WorkDay, value: string | boolean) => {
+      setFormData(produce(draft => {
+        if (!draft.workSchedule) {
+            draft.workSchedule = defaultWorkSchedule;
+        }
+        (draft.workSchedule[day] as any)[field] = value;
+    }));
+  };
+
   const handleSubmitProfile = async (e: FormEvent) => {
     e.preventDefault();
     if (!user) {
@@ -158,6 +214,7 @@ export default function ProfilePage() {
       country: formData.country,
       city: formData.city,
       timezone: formData.timezone,
+      workSchedule: formData.workSchedule,
     };
     
     // Only include owner/admin fields if the user is not an agent
@@ -217,155 +274,199 @@ export default function ProfilePage() {
 
   return (
     <div className="container mx-auto max-w-4xl py-8 space-y-8">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center text-2xl">
-            <UserCircle className="mr-3 h-7 w-7 text-primary" />
-            Tu Perfil
-          </CardTitle>
-          <CardDescription>
-            Administra la información de tu cuenta. El correo electrónico y el nombre de usuario no son editables.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmitProfile} className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="fullName" className="flex items-center"><User className="mr-2 h-4 w-4 text-muted-foreground"/>Nombre Completo</Label>
-              <Input 
-                id="fullName" 
-                name="fullName" 
-                value={formData.fullName || ''} 
-                onChange={handleInputChange} 
-                placeholder="Tu nombre completo"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="company" className="flex items-center"><Building className="mr-2 h-4 w-4 text-muted-foreground"/>Empresa</Label>
-              <Input 
-                id="company" 
-                name="company" 
-                value={formData.company || ''} 
-                onChange={handleInputChange} 
-                placeholder="Nombre de tu empresa"
-                readOnly={user.role === 'agent'}
-                disabled={user.role === 'agent'}
-                className={user.role === 'agent' ? 'bg-muted/50' : ''}
-              />
-            </div>
+      <form onSubmit={handleSubmitProfile}>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center text-2xl">
+              <UserCircle className="mr-3 h-7 w-7 text-primary" />
+              Tu Perfil
+            </CardTitle>
+            <CardDescription>
+              Administra la información de tu cuenta. El correo electrónico y el nombre de usuario no son editables.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="fullName" className="flex items-center"><User className="mr-2 h-4 w-4 text-muted-foreground"/>Nombre Completo</Label>
+                <Input 
+                  id="fullName" 
+                  name="fullName" 
+                  value={formData.fullName || ''} 
+                  onChange={handleInputChange} 
+                  placeholder="Tu nombre completo"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="company" className="flex items-center"><Building className="mr-2 h-4 w-4 text-muted-foreground"/>Empresa</Label>
+                <Input 
+                  id="company" 
+                  name="company" 
+                  value={formData.company || ''} 
+                  onChange={handleInputChange} 
+                  placeholder="Nombre de tu empresa"
+                  readOnly={user.role === 'agent'}
+                  disabled={user.role === 'agent'}
+                  className={user.role === 'agent' ? 'bg-muted/50' : ''}
+                />
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="phone" className="flex items-center"><Phone className="mr-2 h-4 w-4 text-muted-foreground"/>Teléfono</Label>
-              <Input 
-                id="phone" 
-                name="phone" 
-                value={formData.phone || ''} 
-                onChange={handleInputChange} 
-                placeholder="Tu número de teléfono"
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label htmlFor="country" className="flex items-center"><Globe className="mr-2 h-4 w-4 text-muted-foreground"/>País</Label>
+                <Label htmlFor="phone" className="flex items-center"><Phone className="mr-2 h-4 w-4 text-muted-foreground"/>Teléfono</Label>
                 <Input 
-                  id="country" 
-                  name="country" 
-                  value={formData.country || ''} 
+                  id="phone" 
+                  name="phone" 
+                  value={formData.phone || ''} 
                   onChange={handleInputChange} 
-                  placeholder="País de residencia"
+                  placeholder="Tu número de teléfono"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="city" className="flex items-center"><MapPin className="mr-2 h-4 w-4 text-muted-foreground"/>Ciudad</Label>
-                <Input 
-                  id="city" 
-                  name="city" 
-                  value={formData.city || ''} 
-                  onChange={handleInputChange} 
-                  placeholder="Ciudad de residencia"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="country" className="flex items-center"><Globe className="mr-2 h-4 w-4 text-muted-foreground"/>País</Label>
+                  <Input 
+                    id="country" 
+                    name="country" 
+                    value={formData.country || ''} 
+                    onChange={handleInputChange} 
+                    placeholder="País de residencia"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="city" className="flex items-center"><MapPin className="mr-2 h-4 w-4 text-muted-foreground"/>Ciudad</Label>
+                  <Input 
+                    id="city" 
+                    name="city" 
+                    value={formData.city || ''} 
+                    onChange={handleInputChange} 
+                    placeholder="Ciudad de residencia"
+                  />
+                </div>
               </div>
-            </div>
-            
-            <div className="space-y-2">
-                <Label htmlFor="timezone" className="flex items-center"><Clock className="mr-2 h-4 w-4 text-muted-foreground"/>Zona Horaria</Label>
-                <Select name="timezone" value={formData.timezone || ""} onValueChange={(value) => handleSelectChange('timezone', value)}>
-                    <SelectTrigger id="timezone">
-                        <SelectValue placeholder="Selecciona tu zona horaria" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {timezones.map(tz => (
-                            <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
+              
+              <div className="space-y-2">
+                  <Label htmlFor="timezone" className="flex items-center"><Clock className="mr-2 h-4 w-4 text-muted-foreground"/>Zona Horaria</Label>
+                  <Select name="timezone" value={formData.timezone || ""} onValueChange={(value) => handleSelectChange('timezone', value)}>
+                      <SelectTrigger id="timezone">
+                          <SelectValue placeholder="Selecciona tu zona horaria" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          {timezones.map(tz => (
+                              <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
+                          ))}
+                      </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                      Esto asegurará que las citas se guarden en tu hora local correcta.
+                  </p>
+              </div>
+
+              {user.role !== 'agent' && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="sector" className="flex items-center"><Briefcase className="mr-2 h-4 w-4 text-muted-foreground"/>Sector</Label>
+                    <Select name="sector" value={formData.sector || ""} onValueChange={(value) => handleSelectChange('sector', value)}>
+                      <SelectTrigger id="sector">
+                        <SelectValue placeholder="Selecciona tu sector" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sectorOptions.map(option => (
+                          <SelectItem key={option} value={option}>{option}</SelectItem>
                         ))}
-                    </SelectContent>
-                </Select>
-                 <p className="text-xs text-muted-foreground">
-                    Esto asegurará que las citas se guarden en tu hora local correcta.
-                 </p>
-            </div>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="employeeCount" className="flex items-center"><Users className="mr-2 h-4 w-4 text-muted-foreground"/>Número de Empleados</Label>
+                    <Select name="employeeCount" value={formData.employeeCount || ""} onValueChange={(value) => handleSelectChange('employeeCount', value)}>
+                      <SelectTrigger id="employeeCount">
+                        <SelectValue placeholder="Selecciona rango de empleados" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {employeeCountOptions.map(option => (
+                          <SelectItem key={option} value={option}>{option}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
 
-            {user.role !== 'agent' && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="sector" className="flex items-center"><Briefcase className="mr-2 h-4 w-4 text-muted-foreground"/>Sector</Label>
-                  <Select name="sector" value={formData.sector || ""} onValueChange={(value) => handleSelectChange('sector', value)}>
-                    <SelectTrigger id="sector">
-                      <SelectValue placeholder="Selecciona tu sector" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sectorOptions.map(option => (
-                        <SelectItem key={option} value={option}>{option}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="employeeCount" className="flex items-center"><Users className="mr-2 h-4 w-4 text-muted-foreground"/>Número de Empleados</Label>
-                  <Select name="employeeCount" value={formData.employeeCount || ""} onValueChange={(value) => handleSelectChange('employeeCount', value)}>
-                    <SelectTrigger id="employeeCount">
-                      <SelectValue placeholder="Selecciona rango de empleados" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {employeeCountOptions.map(option => (
-                        <SelectItem key={option} value={option}>{option}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            )}
+              <div className="space-y-2">
+                <Label htmlFor="email" className="flex items-center"><Mail className="mr-2 h-4 w-4 text-muted-foreground"/>Correo Electrónico (No editable)</Label>
+                <Input 
+                  id="email" 
+                  name="email" 
+                  value={formData.email || ''} 
+                  readOnly 
+                  disabled
+                  className="bg-muted/50 cursor-not-allowed"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="username" className="flex items-center"><User className="mr-2 h-4 w-4 text-muted-foreground"/>Nombre de Usuario (No editable)</Label>
+                <Input 
+                  id="username" 
+                  name="username" 
+                  value={formData.username || ''} 
+                  readOnly
+                  disabled
+                  className="bg-muted/50 cursor-not-allowed"
+                />
+              </div>
+          </CardContent>
+        </Card>
 
-             <div className="space-y-2">
-              <Label htmlFor="email" className="flex items-center"><Mail className="mr-2 h-4 w-4 text-muted-foreground"/>Correo Electrónico (No editable)</Label>
-              <Input 
-                id="email" 
-                name="email" 
-                value={formData.email || ''} 
-                readOnly 
-                disabled
-                className="bg-muted/50 cursor-not-allowed"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="username" className="flex items-center"><User className="mr-2 h-4 w-4 text-muted-foreground"/>Nombre de Usuario (No editable)</Label>
-              <Input 
-                id="username" 
-                name="username" 
-                value={formData.username || ''} 
-                readOnly
-                disabled
-                className="bg-muted/50 cursor-not-allowed"
-              />
-            </div>
-            <div className="pt-4">
-              <Button type="submit" className="w-full sm:w-auto" disabled={isSaving || authLoading || isLoading}>
-                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                {isSaving ? "Guardando..." : "Guardar Cambios de Perfil"}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center text-2xl">
+              <CalendarClock className="mr-3 h-7 w-7 text-primary" />
+              Horario Laboral
+            </CardTitle>
+            <CardDescription>
+              Define tu disponibilidad semanal para que la IA pueda agendar citas de forma inteligente.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {Object.entries(dayNames).map(([dayKey, dayLabel]) => {
+              const dayData = formData.workSchedule?.[dayKey as keyof WorkSchedule] ?? defaultWorkDay;
+              return (
+                <div key={dayKey} className="grid grid-cols-3 items-center gap-4">
+                  <div className="col-span-1 flex items-center space-x-2">
+                    <Switch
+                      id={`switch-${dayKey}`}
+                      checked={dayData.enabled}
+                      onCheckedChange={(checked) => handleScheduleChange(dayKey as keyof WorkSchedule, 'enabled', checked)}
+                    />
+                    <Label htmlFor={`switch-${dayKey}`} className="font-semibold">{dayLabel}</Label>
+                  </div>
+                  <div className="col-span-2 grid grid-cols-2 gap-2">
+                    <Input
+                      type="time"
+                      value={dayData.start}
+                      onChange={(e) => handleScheduleChange(dayKey as keyof WorkSchedule, 'start', e.target.value)}
+                      disabled={!dayData.enabled}
+                    />
+                    <Input
+                      type="time"
+                      value={dayData.end}
+                      onChange={(e) => handleScheduleChange(dayKey as keyof WorkSchedule, 'end', e.target.value)}
+                      disabled={!dayData.enabled}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+        
+        <div className="flex justify-end pt-4">
+          <Button type="submit" className="w-full sm:w-auto" disabled={isSaving || authLoading || isLoading}>
+            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            {isSaving ? "Guardando..." : "Guardar Cambios"}
+          </Button>
+        </div>
+      </form>
       
       {user.role !== 'agent' && (
         <Card>

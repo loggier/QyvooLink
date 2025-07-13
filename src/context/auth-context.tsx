@@ -21,6 +21,22 @@ import type { LoginFormData } from '@/components/auth/login-form';
 import { useRouter } from 'next/navigation';
 import { sendWelcomeEmail, sendInvitationEmail } from '@/lib/email';
 
+interface WorkDay {
+  enabled: boolean;
+  start: string;
+  end: string;
+}
+
+interface WorkSchedule {
+  monday: WorkDay;
+  tuesday: WorkDay;
+  wednesday: WorkDay;
+  thursday: WorkDay;
+  friday: WorkDay;
+  saturday: WorkDay;
+  sunday: WorkDay;
+}
+
 interface UserProfile {
   uid: string;
   email: string | null;
@@ -32,6 +48,8 @@ interface UserProfile {
   city?: string;
   sector?: string;
   employeeCount?: string;
+  timezone?: string;
+  workSchedule?: WorkSchedule;
   role?: 'owner' | 'admin' | 'agent'; // User role within the organization
   organizationId?: string; // ID of the organization the user belongs to
   ownerId?: string; // UID of the organization's owner
@@ -137,6 +155,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           city: dbData.city,
           sector: dbData.sector,
           employeeCount: dbData.employeeCount,
+          timezone: dbData.timezone,
+          workSchedule: dbData.workSchedule,
           role: dbData.role || 'agent',
           organizationId: dbData.organizationId,
           ownerId: ownerId,
