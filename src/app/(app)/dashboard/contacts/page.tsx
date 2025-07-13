@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Users, UserPlus, Edit3, Trash2, Building, Mail, Phone, UserCheck, Bot, UserRound, Briefcase, Star, MessageSquareDashed, ListTodo } from 'lucide-react';
+import { Loader2, Users, UserPlus, Edit3, Trash2, Building, Mail, Phone, UserCheck, Bot, UserRound, Briefcase, Star, MessageSquareDashed, ListTodo, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
@@ -87,6 +87,10 @@ export default function ContactsPage() {
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<ContactDetails | null>(null);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(12);
 
   const fetchContacts = useCallback(async () => {
     if (!dataFetchUserId) return;
@@ -233,6 +237,12 @@ export default function ContactsPage() {
     return <Badge variant={variant} className={cn(className, "text-xs")}>{statusText}</Badge>
   };
 
+  // Pagination logic
+  const totalPages = Math.ceil(contacts.length / itemsPerPage);
+  const lastContactIndex = currentPage * itemsPerPage;
+  const firstContactIndex = lastContactIndex - itemsPerPage;
+  const currentContacts = contacts.slice(firstContactIndex, lastContactIndex);
+
   if (isLoading && !dataFetchUserId) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -302,8 +312,9 @@ export default function ContactsPage() {
           <p className="text-muted-foreground">No hay contactos para mostrar. ¡Añade uno nuevo!</p>
         </div>
       ) : (
+        <>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {contacts.map((contact) => (
+          {currentContacts.map((contact) => (
             <Card key={contact.id} className="flex flex-col">
               <CardContent className="pt-6 flex-grow">
                 <div className="flex items-start gap-4">
@@ -349,6 +360,32 @@ export default function ContactsPage() {
             </Card>
           ))}
         </div>
+        {totalPages > 1 && (
+            <div className="flex items-center justify-end space-x-4 pt-4">
+              <span className="text-sm text-muted-foreground">
+                Página {currentPage} de {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Anterior
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+              >
+                Siguiente
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+        )}
+       </>
       )}
 
       <Dialog open={isFormOpen} onOpenChange={(isOpen) => {
