@@ -1,9 +1,3 @@
-/**
- * @fileOverview A tool for scheduling appointments.
- *
- * This file defines the Genkit tool and its associated Zod schema for creating appointments.
- * It is not an API endpoint itself but provides the logic to be called by one.
- */
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
@@ -26,36 +20,21 @@ export const CreateAppointmentSchema = z.object({
   timezone: z.string().describe("The IANA timezone of the user (e.g., 'America/Mexico_City')."),
 });
 
-// Helper function to parse date and time strings into a UTC Date object
-// respecting the provided timezone. This is the robust way to handle timezones.
-function createUtcDate(dateStr: string, timeStr: string, timezone: string): Date {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const [hours, minutes] = timeStr.split(':').map(Number);
-  
-  // Important: The month for JavaScript's Date is 0-indexed (0=Jan, 1=Feb, etc.)
-  // We pass the components directly to zonedTimeToUtc to avoid local timezone interpretation.
-  return zonedTimeToUtc({
-    year: year,
-    month: month - 1,
-    day: day,
-    hours: hours,
-    minutes: minutes
-  }, timezone);
-}
-
-// This is the core logic for creating an appointment.
-// It can be called from any server-side context (e.g., an API route).
 export async function createAppointment(input: z.infer<typeof CreateAppointmentSchema>): Promise<{ success: boolean; appointmentId?: string }> {
   try {
-    const { date, startTime, endTime, timezone } = input;
+    const { date, startTime, endTime, timezone, ...rest } = input;
 
-    // 1. Convert local time strings to UTC Date objects using the user's timezone.
-    const utcStartDate = createUtcDate(date, startTime, timezone);
-    const utcEndDate = createUtcDate(date, endTime, timezone);
+    // 1. Combine date and time into a standard ISO-like string.
+    const startDateTimeString = `${date}T${startTime}:00`;
+    const endDateTimeString = `${date}T${endTime}:00`;
+    
+    // 2. Convert the local time string to a UTC Date object using the provided timezone.
+    const utcStartDate = zonedTimeToUtc(startDateTimeString, timezone);
+    const utcEndDate = zonedTimeToUtc(endDateTimeString, timezone);
 
-    // 2. Final check to ensure dates are valid
+    // 3. Final check to ensure dates are valid.
     if (isNaN(utcStartDate.getTime()) || isNaN(utcEndDate.getTime())) {
-      console.error("Invalid date created from input strings and timezone.", { input });
+      console.error("Invalid date created from input.", { start: startDateTimeString, end: endDateTimeString, timezone });
       return { success: false };
     }
 
@@ -63,31 +42,28 @@ export async function createAppointment(input: z.infer<typeof CreateAppointmentS
       console.error("End time must be after start time.", { utcStartDate, utcEndDate });
       return { success: false };
     }
-
-    // 3. Add to Firestore
+    
+    // 4. Add to Firestore using the correct Timestamp format.
     const docRef = await addDoc(collection(db, 'appointments'), {
-      organizationId: input.organizationId,
-      userId: input.userId,
-      title: input.title,
-      description: input.description || '',
+      organizationId: rest.organizationId,
+      userId: rest.userId,
+      title: rest.title,
+      description: rest.description || '',
       start: Timestamp.fromDate(utcStartDate),
       end: Timestamp.fromDate(utcEndDate),
-      contactId: input.contactId || '',
-      contactName: input.contactName || '',
-      assignedTo: input.assignedTo || '',
-      assignedToName: input.assignedToName || '',
+      contactId: rest.contactId || '',
+      contactName: rest.contactName || '',
+      assignedTo: rest.assignedTo || '',
+      assignedToName: rest.assignedToName || '',
     });
 
     return { success: true, appointmentId: docRef.id };
   } catch (error) {
-    console.error('Error creating appointment:', error);
+    console.error('Error in createAppointment function:', error);
     return { success: false };
   }
 }
 
-
-// We define the tool for Genkit to use. This provides the structure for the AI.
-// The actual execution is handled by the API endpoint calling the `createAppointment` function.
 ai.defineTool(
   {
     name: 'createAppointment',
@@ -99,9 +75,6 @@ ai.defineTool(
     }),
   },
   async (input) => {
-    // This function body is used when the tool is called directly within a Genkit flow.
-    // In our case, the API endpoint is the primary executor.
-    // However, it's good practice to have the tool's implementation here as well.
-    return await createAppointment(input);
+    return createAppointment(input);
   }
 );
