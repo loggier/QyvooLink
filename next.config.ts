@@ -1,4 +1,5 @@
 
+
 import type { NextConfig } from 'next';
 
 /** @type {import('next').NextConfig} */
@@ -40,6 +41,8 @@ const nextConfig: NextConfig = {
         buffer: require.resolve('buffer/'),
         child_process: false,
         async_hooks: false,
+        fs: false,
+        net: false,
       };
     }
     return config;
