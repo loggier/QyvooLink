@@ -3,7 +3,7 @@
 ## 1. Visión General y Propósito
 
 Qyvoo es una plataforma de software como servicio (SaaS) diseñada para centralizar y automatizar la comunicación a través de WhatsApp. Permite a las empresas gestionar conversaciones, configurar asistentes virtuales (bots), administrar contactos y colaborar en equipo, todo desde un panel de control unificado.
-
+ 
 ## 2. Módulos y Secciones Principales
 
 El panel de control se divide en las siguientes secciones clave, accesibles a través de la barra de navegación:
