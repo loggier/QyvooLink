@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useForm } from 'react-hook-form';
@@ -13,6 +14,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
@@ -22,6 +24,7 @@ import { useState } from 'react';
 const loginSchema = z.object({
   email: z.string().email({ message: "Dirección de correo electrónico inválida." }),
   password: z.string().min(1, { message: "La contraseña es obligatoria." }),
+  robotCheck: z.boolean().refine(val => val === true, { message: "Debes confirmar que no eres un robot." }),
 });
 
 export type LoginFormData = z.infer<typeof loginSchema>;
@@ -33,6 +36,7 @@ export function LoginForm() {
     defaultValues: {
       email: "",
       password: "",
+      robotCheck: false,
     },
   });
 
@@ -93,6 +97,26 @@ export function LoginForm() {
                 <Input type="password" placeholder="••••••••" {...field} />
               </FormControl>
               <FormMessage />
+            </FormItem>
+          )}
+        />
+         <FormField
+          control={form.control}
+          name="robotCheck"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+              <FormControl>
+                <Checkbox
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
+              <div className="space-y-1 leading-none">
+                <FormLabel>
+                  No soy un robot
+                </FormLabel>
+                <FormMessage />
+              </div>
             </FormItem>
           )}
         />
