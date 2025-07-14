@@ -18,7 +18,7 @@ import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import ReCAPTCHA from 'react-google-recaptcha';
 import { verifyRecaptcha } from '@/lib/recaptcha';
 
@@ -32,6 +32,7 @@ export type LoginFormData = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
+  const [isProduction, setIsProduction] = useState(false);
   const recaptchaRef = useRef<ReCAPTCHA>(null);
   
   const form = useForm<LoginFormData>({
@@ -45,31 +46,40 @@ export function LoginForm() {
   const { loginUser } = useAuth();
   const { toast } = useToast();
 
+  useEffect(() => {
+    // This check runs only on the client side
+    if (typeof window !== 'undefined') {
+      setIsProduction(window.location.hostname === 'admin.qyvoo.com');
+    }
+  }, []);
+
   async function onSubmit(values: LoginFormData) {
     setIsLoading(true);
     
-    const token = recaptchaRef.current?.getValue();
-    if (!token) {
-        toast({
-            variant: "destructive",
-            title: "Verificación Requerida",
-            description: "Por favor, completa el CAPTCHA.",
-        });
-        setIsLoading(false);
-        return;
-    }
-    
-    const isRecaptchaValid = await verifyRecaptcha(token);
-    recaptchaRef.current?.reset();
-    
-    if (!isRecaptchaValid) {
-        toast({
-            variant: "destructive",
-            title: "Verificación Fallida",
-            description: "No se pudo verificar el CAPTCHA. Inténtalo de nuevo.",
-        });
-        setIsLoading(false);
-        return;
+    if (isProduction) {
+        const token = recaptchaRef.current?.getValue();
+        if (!token) {
+            toast({
+                variant: "destructive",
+                title: "Verificación Requerida",
+                description: "Por favor, completa el CAPTCHA.",
+            });
+            setIsLoading(false);
+            return;
+        }
+        
+        const isRecaptchaValid = await verifyRecaptcha(token);
+        recaptchaRef.current?.reset();
+        
+        if (!isRecaptchaValid) {
+            toast({
+                variant: "destructive",
+                title: "Verificación Fallida",
+                description: "No se pudo verificar el CAPTCHA. Inténtalo de nuevo.",
+            });
+            setIsLoading(false);
+            return;
+        }
     }
 
     try {
@@ -127,10 +137,12 @@ export function LoginForm() {
             </FormItem>
           )}
         />
-        <ReCAPTCHA
-            ref={recaptchaRef}
-            sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
-        />
+        {isProduction && (
+            <ReCAPTCHA
+                ref={recaptchaRef}
+                sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
+            />
+        )}
         <Button type="submit" className="w-full" disabled={isLoading}>
            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Iniciar Sesión

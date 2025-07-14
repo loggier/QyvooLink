@@ -50,6 +50,7 @@ export function RegisterForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [isInvitation, setIsInvitation] = useState(false);
   const [invitationOrgName, setInvitationOrgName] = useState('');
+  const [isProduction, setIsProduction] = useState(false);
   
   const recaptchaRef = useRef<ReCAPTCHA>(null);
   const searchParams = useSearchParams();
@@ -73,6 +74,11 @@ export function RegisterForm() {
   const { toast } = useToast();
 
   useEffect(() => {
+    // This check runs only on the client side
+    if (typeof window !== 'undefined') {
+      setIsProduction(window.location.hostname === 'admin.qyvoo.com');
+    }
+
     const fetchInvitationDetails = async () => {
       if (invitationId) {
         setIsLoading(true);
@@ -102,28 +108,30 @@ export function RegisterForm() {
   async function onSubmit(values: RegisterFormData) {
     setIsLoading(true);
     
-    const token = recaptchaRef.current?.getValue();
-    if (!token) {
-        toast({
-            variant: "destructive",
-            title: "Verificación Requerida",
-            description: "Por favor, completa el CAPTCHA.",
-        });
-        setIsLoading(false);
-        return;
-    }
-    
-    const isRecaptchaValid = await verifyRecaptcha(token);
-    recaptchaRef.current?.reset();
+    if (isProduction) {
+        const token = recaptchaRef.current?.getValue();
+        if (!token) {
+            toast({
+                variant: "destructive",
+                title: "Verificación Requerida",
+                description: "Por favor, completa el CAPTCHA.",
+            });
+            setIsLoading(false);
+            return;
+        }
+        
+        const isRecaptchaValid = await verifyRecaptcha(token);
+        recaptchaRef.current?.reset();
 
-    if (!isRecaptchaValid) {
-        toast({
-            variant: "destructive",
-            title: "Verificación Fallida",
-            description: "No se pudo verificar el CAPTCHA. Inténtalo de nuevo.",
-        });
-        setIsLoading(false);
-        return;
+        if (!isRecaptchaValid) {
+            toast({
+                variant: "destructive",
+                title: "Verificación Fallida",
+                description: "No se pudo verificar el CAPTCHA. Inténtalo de nuevo.",
+            });
+            setIsLoading(false);
+            return;
+        }
     }
 
     try {
@@ -299,10 +307,12 @@ export function RegisterForm() {
             </FormItem>
           )}
         />
-         <ReCAPTCHA
-            ref={recaptchaRef}
-            sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
-         />
+         {isProduction && (
+            <ReCAPTCHA
+                ref={recaptchaRef}
+                sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
+            />
+         )}
         <Button type="submit" className="w-full" disabled={isLoading}>
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {isInvitation ? 'Unirme a la Organización' : 'Crear Cuenta'}
