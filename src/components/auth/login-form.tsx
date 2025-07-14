@@ -18,22 +18,27 @@ import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import ReCAPTCHA from 'react-google-recaptcha';
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Dirección de correo electrónico inválida." }),
   password: z.string().min(1, { message: "La contraseña es obligatoria." }),
+  recaptchaToken: z.string().min(1, { message: "Por favor, completa el CAPTCHA." }),
 });
 
 export type LoginFormData = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
+  const recaptchaRef = useRef<ReCAPTCHA>(null);
+  
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
       email: "",
       password: "",
+      recaptchaToken: "",
     },
   });
 
@@ -55,6 +60,8 @@ export function LoginForm() {
         title: "Falló el Inicio de Sesión",
         description: error.message || "Correo electrónico o contraseña inválidos. Por favor, inténtalo de nuevo.",
       });
+      recaptchaRef.current?.reset();
+      form.setValue('recaptchaToken', '');
     } finally {
       setIsLoading(false);
     }
@@ -92,6 +99,23 @@ export function LoginForm() {
               </div>
               <FormControl>
                 <Input type="password" placeholder="••••••••" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="recaptchaToken"
+          render={({ field }) => (
+            <FormItem>
+              <FormControl>
+                <ReCAPTCHA
+                  ref={recaptchaRef}
+                  sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
+                  onChange={(token) => field.onChange(token || "")}
+                  onExpired={() => field.onChange("")}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>

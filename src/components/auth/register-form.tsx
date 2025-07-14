@@ -19,10 +19,11 @@ import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { Loader2, Building, Mail } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import ReCAPTCHA from 'react-google-recaptcha';
 
 const phoneRegex = new RegExp(
   /^([+]?[\s0-9]+)?(\d{3}|[(]?[0-9]+[)])?([-]?[\s]?[0-9])+$/
@@ -37,6 +38,7 @@ const registerSchema = z.object({
   password: z.string().min(6, { message: "La contraseña debe tener al menos 6 caracteres." }),
   confirmPassword: z.string(),
   terms: z.boolean().refine(val => val === true, { message: "Debes aceptar los términos y condiciones." }),
+  recaptchaToken: z.string().min(1, { message: "Por favor, completa el CAPTCHA." }),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Las contraseñas no coinciden.",
   path: ["confirmPassword"],
@@ -49,6 +51,7 @@ export function RegisterForm() {
   const [isInvitation, setIsInvitation] = useState(false);
   const [invitationOrgName, setInvitationOrgName] = useState('');
   
+  const recaptchaRef = useRef<ReCAPTCHA>(null);
   const searchParams = useSearchParams();
   const invitationId = searchParams.get('invitationId');
 
@@ -63,6 +66,7 @@ export function RegisterForm() {
       password: "",
       confirmPassword: "",
       terms: false,
+      recaptchaToken: "",
     },
   });
 
@@ -113,6 +117,8 @@ export function RegisterForm() {
         title: "Falló el Registro",
         description: error.message || "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.",
       });
+      recaptchaRef.current?.reset();
+      form.setValue('recaptchaToken', '');
     } finally {
       setIsLoading(false);
     }
@@ -268,6 +274,23 @@ export function RegisterForm() {
                 </FormLabel>
                 <FormMessage />
               </div>
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="recaptchaToken"
+          render={({ field }) => (
+            <FormItem>
+              <FormControl>
+                <ReCAPTCHA
+                  ref={recaptchaRef}
+                  sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
+                  onChange={(token) => field.onChange(token || "")}
+                  onExpired={() => field.onChange("")}
+                />
+              </FormControl>
+              <FormMessage />
             </FormItem>
           )}
         />
