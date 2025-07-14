@@ -21,7 +21,8 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Shield, Wifi, Bot, Users, MessagesSquare, CalendarDays, TrendingUp, ShieldCheck, Clock, XCircle, Star, AlertCircle } from 'lucide-react';
-import { differenceInDays } from 'date-fns';
+import { differenceInDays, formatDistanceToNow } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 interface SubscriptionDetails {
   planName: string;
@@ -37,6 +38,7 @@ interface AdminViewUser {
   fullName?: string;
   email?: string;
   createdAt?: Timestamp;
+  lastLogin?: Timestamp;
   isActive: boolean;
   isVip?: boolean; // Added VIP status
   instanceStatus?: 'Conectado' | 'Desconectado' | 'Pendiente' | 'No Configurada';
@@ -156,6 +158,7 @@ export default function AdminDashboardPage() {
           fullName: userData.fullName || 'N/A',
           email: userData.email,
           createdAt: userData.createdAt,
+          lastLogin: userData.lastLogin,
           isActive: userData.isActive ?? true,
           isVip: userData.isVip ?? false,
           instanceStatus,
@@ -280,6 +283,15 @@ export default function AdminDashboardPage() {
       day: 'numeric',
     });
   };
+
+  const formatRelativeDate = (date?: Date | Timestamp | null) => {
+    if (!date) return 'Nunca';
+    const dateObj = date instanceof Timestamp ? date.toDate() : date;
+    if (!dateObj || isNaN(dateObj.getTime()) || dateObj.getFullYear() < 1971) {
+        return 'Fecha inválida';
+    }
+    return formatDistanceToNow(dateObj, { addSuffix: true, locale: es });
+  };
   
   const getInstanceStatusBadge = (status?: AdminViewUser['instanceStatus']) => {
     switch (status) {
@@ -395,7 +407,10 @@ export default function AdminDashboardPage() {
                     <TableCell>
                       <div className="font-medium">{u.fullName}</div>
                       <div className="text-sm text-muted-foreground">{u.email}</div>
-                      <div className="text-xs text-muted-foreground mt-1">Registrado: {formatDate(u.createdAt)}</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        <p>Reg: {formatDate(u.createdAt)}</p>
+                        <p>Último login: {formatRelativeDate(u.lastLogin)}</p>
+                      </div>
                     </TableCell>
                      <TableCell>
                         {u.subscription ? (

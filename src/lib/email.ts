@@ -181,3 +181,45 @@ export const sendWelcomeEmail = async ({ userEmail, userName }: WelcomeEmailProp
     html,
   });
 };
+
+interface NewUserAdminNotificationProps {
+  userName: string;
+  userEmail: string;
+  company: string;
+  phone: string;
+}
+
+export const sendNewUserAdminNotification = async ({ userName, userEmail, company, phone }: NewUserAdminNotificationProps) => {
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@qyvoo.com';
+  const subject = `Nuevo Registro en Qyvoo: ${userName}`;
+  const qyvooLogoUrl = 'https://qyvoo.vemontech.com/img/logo-2x1.png';
+
+  const html = `
+  <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f5f7fa; padding: 20px;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #ddd; border-radius: 8px; background-color: #ffffff;">
+      <div style="text-align: center; margin-bottom: 30px; border-bottom: 1px solid #eee; padding-bottom: 20px;">
+        <img src="${qyvooLogoUrl}" alt="Qyvoo Logo" style="max-width: 150px;"/>
+      </div>
+      <h1 style="color: #1E88E5; font-size: 24px; text-align: center;">Nuevo Usuario Registrado</h1>
+      <p style="font-size: 16px;">Un nuevo usuario se ha registrado en la plataforma. Aquí están sus detalles:</p>
+      <div style="font-size: 16px; background-color: #f9f9f9; padding: 15px; border-radius: 5px;">
+        <p><strong>Nombre:</strong> ${userName}</p>
+        <p><strong>Email:</strong> ${userEmail}</p>
+        <p><strong>Empresa:</strong> ${company}</p>
+        <p><strong>Teléfono:</strong> ${phone}</p>
+      </div>
+      <p style="font-size: 14px; color: #666; margin-top: 20px;">Este es un correo de notificación automático.</p>
+      <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+      <p style="font-size: 12px; color: #888; text-align: center;">
+        Qyvoo - Panel de Administración
+      </p>
+    </div>
+  </div>
+  `;
+
+  await sendEmail({
+    to: adminEmail,
+    subject,
+    html,
+  });
+};

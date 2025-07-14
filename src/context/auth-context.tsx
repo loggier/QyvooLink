@@ -19,7 +19,7 @@ import { doc, setDoc, getDoc, Timestamp, collection, query, where, getDocs, addD
 import type { RegisterFormData } from '@/components/auth/register-form';
 import type { LoginFormData } from '@/components/auth/login-form';
 import { useRouter } from 'next/navigation';
-import { sendWelcomeEmail, sendInvitationEmail } from '@/lib/email';
+import { sendWelcomeEmail, sendInvitationEmail, sendNewUserAdminNotification } from '@/lib/email';
 
 interface WorkDay {
   enabled: boolean;
@@ -54,6 +54,7 @@ interface UserProfile {
   organizationId?: string; // ID of the organization the user belongs to
   ownerId?: string; // UID of the organization's owner
   createdAt?: Timestamp; // Registration date
+  lastLogin?: Timestamp; // Last login date
   isActive?: boolean; // Account status
   isVip?: boolean; // VIP access flag
   subscriptionStatus?: 'active' | 'trialing' | 'canceled' | 'inactive';
@@ -161,6 +162,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           organizationId: dbData.organizationId,
           ownerId: ownerId,
           createdAt: dbData.createdAt,
+          lastLogin: dbData.lastLogin,
           isActive: dbData.isActive ?? true,
           isVip: dbData.isVip ?? false,
           subscriptionStatus: subscriptionStatus,
@@ -230,6 +232,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 role: invitationData.role,
                 organizationId: invitationData.organizationId,
                 createdAt: serverTimestamp(),
+                lastLogin: serverTimestamp(),
                 isActive: true,
                 isVip: false,
                 onboardingCompleted: true,
@@ -278,19 +281,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 role: 'owner',
                 organizationId: orgRef.id,
                 createdAt: serverTimestamp(),
+                lastLogin: serverTimestamp(),
                 isActive: true,
                 isVip: false,
                 onboardingCompleted: false,
             };
             await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
             
+            // Send notifications
             try {
                 await sendWelcomeEmail({
                     userEmail: data.email,
                     userName: data.fullName,
                 });
+                await sendNewUserAdminNotification({
+                    userEmail: data.email,
+                    userName: data.fullName,
+                    company: data.company,
+                    phone: data.phone,
+                });
             } catch (emailError) {
-                console.error("Failed to send welcome email:", emailError);
+                console.error("Failed to send notification emails:", emailError);
             }
 
             router.push('/subscribe');
@@ -333,9 +344,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (firebaseUser) {
             const userDocRef = doc(db, 'users', firebaseUser.uid);
             const userDocSnap = await getDoc(userDocRef);
-            if (userDocSnap.exists() && userDocSnap.data().isActive === false) {
-                await firebaseSignOut(auth);
-                throw new Error("Tu cuenta ha sido desactivada por un administrador.");
+
+            if (userDocSnap.exists()) {
+                if (userDocSnap.data().isActive === false) {
+                    await firebaseSignOut(auth);
+                    throw new Error("Tu cuenta ha sido desactivada por un administrador.");
+                }
+                // Update last login timestamp
+                await updateDoc(userDocRef, {
+                    lastLogin: serverTimestamp(),
+                });
             }
         }
         return userCredential;
