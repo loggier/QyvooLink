@@ -143,7 +143,7 @@ export default function SubscriptionsPage() {
       // Optimistic update of local state for snappier UI
       setPlans(prevPlans => 
           prevPlans.map(p => 
-              p.id === plan.id ? { ...p, [field]: !plan[field] } : p
+              p.id === plan.id ? { ...p, [field]: !p[field] } : p
           )
       );
       toast({ title: "Estado Actualizado" });
@@ -279,7 +279,8 @@ export default function SubscriptionsPage() {
                               <TooltipTrigger asChild>
                                   <div className="flex items-center space-x-2">
                                       <Switch
-                                          checked={plan.isComingSoon}
+                                          id={`comingsoon-${plan.id}`}
+                                          checked={plan.isComingSoon ?? false}
                                           onCheckedChange={() => handleToggleSwitchInTable(plan, 'isComingSoon')}
                                           disabled={isToggling[plan.id]}
                                       />
@@ -306,6 +307,7 @@ export default function SubscriptionsPage() {
                               <TooltipTrigger asChild>
                                   <div className="flex items-center space-x-2">
                                       <Switch
+                                          id={`active-${plan.id}`}
                                           checked={plan.isActive}
                                           onCheckedChange={() => handleToggleSwitchInTable(plan, 'isActive')}
                                           disabled={isToggling[plan.id]}
@@ -505,3 +507,5 @@ export default function SubscriptionsPage() {
     </div>
   );
 }
+
+    
