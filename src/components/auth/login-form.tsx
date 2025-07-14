@@ -20,11 +20,12 @@ import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 import { useState, useRef } from 'react';
 import ReCAPTCHA from 'react-google-recaptcha';
+import { verifyRecaptcha } from '@/lib/recaptcha';
+
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Dirección de correo electrónico inválida." }),
   password: z.string().min(1, { message: "La contraseña es obligatoria." }),
-  recaptchaToken: z.string().min(1, { message: "Por favor, completa el CAPTCHA." }),
 });
 
 export type LoginFormData = z.infer<typeof loginSchema>;
@@ -38,7 +39,6 @@ export function LoginForm() {
     defaultValues: {
       email: "",
       password: "",
-      recaptchaToken: "",
     },
   });
 
@@ -47,6 +47,31 @@ export function LoginForm() {
 
   async function onSubmit(values: LoginFormData) {
     setIsLoading(true);
+    
+    const token = recaptchaRef.current?.getValue();
+    if (!token) {
+        toast({
+            variant: "destructive",
+            title: "Verificación Requerida",
+            description: "Por favor, completa el CAPTCHA.",
+        });
+        setIsLoading(false);
+        return;
+    }
+    
+    const isRecaptchaValid = await verifyRecaptcha(token);
+    recaptchaRef.current?.reset();
+    
+    if (!isRecaptchaValid) {
+        toast({
+            variant: "destructive",
+            title: "Verificación Fallida",
+            description: "No se pudo verificar el CAPTCHA. Inténtalo de nuevo.",
+        });
+        setIsLoading(false);
+        return;
+    }
+
     try {
       await loginUser(values);
       toast({
@@ -60,8 +85,6 @@ export function LoginForm() {
         title: "Falló el Inicio de Sesión",
         description: error.message || "Correo electrónico o contraseña inválidos. Por favor, inténtalo de nuevo.",
       });
-      recaptchaRef.current?.reset();
-      form.setValue('recaptchaToken', '');
     } finally {
       setIsLoading(false);
     }
@@ -104,22 +127,9 @@ export function LoginForm() {
             </FormItem>
           )}
         />
-        <FormField
-          control={form.control}
-          name="recaptchaToken"
-          render={({ field }) => (
-            <FormItem>
-              <FormControl>
-                <ReCAPTCHA
-                  ref={recaptchaRef}
-                  sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
-                  onChange={(token) => field.onChange(token || "")}
-                  onExpired={() => field.onChange("")}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+        <ReCAPTCHA
+            ref={recaptchaRef}
+            sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
         />
         <Button type="submit" className="w-full" disabled={isLoading}>
            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

@@ -75,23 +75,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Helper function to verify reCAPTCHA token
-async function verifyRecaptcha(token: string): Promise<boolean> {
-  try {
-    const response = await fetch('/api/verify-recaptcha', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
-    });
-    const data = await response.json();
-    return data.success;
-  } catch (error) {
-    console.error("reCAPTCHA verification request failed:", error);
-    return false;
-  }
-}
-
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -200,11 +183,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const registerUser = async (data: RegisterFormData, invitationId?: string | null) => {
     setLoading(true);
     try {
-        const isRecaptchaValid = await verifyRecaptcha(data.recaptchaToken);
-        if (!isRecaptchaValid) {
-          throw new Error("La verificación reCAPTCHA ha fallado. Por favor, inténtalo de nuevo.");
-        }
-
         let firebaseUser: FirebaseUser | null = null;
         let isExistingUser = false;
 
@@ -360,11 +338,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const loginUser = async (data: LoginFormData) => {
     setLoading(true);
     try {
-        const isRecaptchaValid = await verifyRecaptcha(data.recaptchaToken);
-        if (!isRecaptchaValid) {
-          throw new Error("La verificación reCAPTCHA ha fallado. Por favor, inténtalo de nuevo.");
-        }
-
         const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
         const firebaseUser = userCredential.user;
 

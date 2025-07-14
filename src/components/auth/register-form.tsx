@@ -24,6 +24,7 @@ import { useSearchParams } from 'next/navigation';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import ReCAPTCHA from 'react-google-recaptcha';
+import { verifyRecaptcha } from '@/lib/recaptcha';
 
 const phoneRegex = new RegExp(
   /^([+]?[\s0-9]+)?(\d{3}|[(]?[0-9]+[)])?([-]?[\s]?[0-9])+$/
@@ -38,7 +39,6 @@ const registerSchema = z.object({
   password: z.string().min(6, { message: "La contraseña debe tener al menos 6 caracteres." }),
   confirmPassword: z.string(),
   terms: z.boolean().refine(val => val === true, { message: "Debes aceptar los términos y condiciones." }),
-  recaptchaToken: z.string().min(1, { message: "Por favor, completa el CAPTCHA." }),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Las contraseñas no coinciden.",
   path: ["confirmPassword"],
@@ -66,7 +66,6 @@ export function RegisterForm() {
       password: "",
       confirmPassword: "",
       terms: false,
-      recaptchaToken: "",
     },
   });
 
@@ -102,6 +101,31 @@ export function RegisterForm() {
 
   async function onSubmit(values: RegisterFormData) {
     setIsLoading(true);
+    
+    const token = recaptchaRef.current?.getValue();
+    if (!token) {
+        toast({
+            variant: "destructive",
+            title: "Verificación Requerida",
+            description: "Por favor, completa el CAPTCHA.",
+        });
+        setIsLoading(false);
+        return;
+    }
+    
+    const isRecaptchaValid = await verifyRecaptcha(token);
+    recaptchaRef.current?.reset();
+
+    if (!isRecaptchaValid) {
+        toast({
+            variant: "destructive",
+            title: "Verificación Fallida",
+            description: "No se pudo verificar el CAPTCHA. Inténtalo de nuevo.",
+        });
+        setIsLoading(false);
+        return;
+    }
+
     try {
       await registerUser(values, invitationId);
       toast({
@@ -117,8 +141,6 @@ export function RegisterForm() {
         title: "Falló el Registro",
         description: error.message || "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.",
       });
-      recaptchaRef.current?.reset();
-      form.setValue('recaptchaToken', '');
     } finally {
       setIsLoading(false);
     }
@@ -277,23 +299,10 @@ export function RegisterForm() {
             </FormItem>
           )}
         />
-        <FormField
-          control={form.control}
-          name="recaptchaToken"
-          render={({ field }) => (
-            <FormItem>
-              <FormControl>
-                <ReCAPTCHA
-                  ref={recaptchaRef}
-                  sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
-                  onChange={(token) => field.onChange(token || "")}
-                  onExpired={() => field.onChange("")}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+         <ReCAPTCHA
+            ref={recaptchaRef}
+            sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
+         />
         <Button type="submit" className="w-full" disabled={isLoading}>
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {isInvitation ? 'Unirme a la Organización' : 'Crear Cuenta'}
