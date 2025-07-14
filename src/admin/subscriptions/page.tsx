@@ -265,6 +265,7 @@ export default function SubscriptionsPage() {
                     <TableHead>Precio Anual</TableHead>
                     <TableHead>Tipo</TableHead>
                     <TableHead>Estado</TableHead>
+                    <TableHead>Próximamente</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -275,32 +276,11 @@ export default function SubscriptionsPage() {
                       <TableCell>${plan.priceMonthly.toFixed(2)}</TableCell>
                       <TableCell>${plan.priceYearly.toFixed(2)}</TableCell>
                       <TableCell>
-                        <TooltipProvider>
-                          <Tooltip>
-                              <TooltipTrigger asChild>
-                                  <div className="flex items-center space-x-2">
-                                      <Switch
-                                          id={`comingsoon-${plan.id}`}
-                                          checked={plan.isComingSoon ?? false}
-                                          onCheckedChange={() => handleToggleSwitchInTable(plan, 'isComingSoon')}
-                                          disabled={isToggling[plan.id]}
-                                      />
-                                      <Label htmlFor={`comingsoon-${plan.id}`}>
-                                          {plan.isComingSoon ? 
-                                          <Badge variant="secondary" className="bg-blue-100 text-blue-800">Próximamente</Badge>
-                                           : plan.isTrial ?
-                                          <Badge variant="secondary">Prueba ({plan.trialDays} días)</Badge>
-                                           : 
-                                          <Badge variant="outline">Estándar</Badge>
-                                          }
-                                      </Label>
-                                  </div>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                  <p>Click para cambiar a "Próximamente"</p>
-                              </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                         {plan.isTrial ?
+                          <Badge variant="secondary">Prueba ({plan.trialDays} días)</Badge>
+                           : 
+                          <Badge variant="outline">Estándar</Badge>
+                          }
                       </TableCell>
                       <TableCell>
                          <TooltipProvider>
@@ -322,6 +302,32 @@ export default function SubscriptionsPage() {
                               </TooltipTrigger>
                               <TooltipContent>
                                   <p>Click para cambiar a {plan.isActive ? 'Inactivo' : 'Activo'}</p>
+                              </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableCell>
+                      <TableCell>
+                         <TooltipProvider>
+                          <Tooltip>
+                              <TooltipTrigger asChild>
+                                  <div className="flex items-center space-x-2">
+                                      <Switch
+                                          id={`comingsoon-${plan.id}`}
+                                          checked={plan.isComingSoon ?? false}
+                                          onCheckedChange={() => handleToggleSwitchInTable(plan, 'isComingSoon')}
+                                          disabled={isToggling[plan.id]}
+                                      />
+                                      <Label htmlFor={`comingsoon-${plan.id}`}>
+                                          {plan.isComingSoon ? 
+                                          <Badge variant="secondary" className="bg-blue-100 text-blue-800">Sí</Badge>
+                                           :
+                                          <Badge variant="outline">No</Badge>
+                                          }
+                                      </Label>
+                                  </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                  <p>Click para marcar como "Próximamente"</p>
                               </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
