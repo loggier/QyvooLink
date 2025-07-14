@@ -158,7 +158,8 @@ export default function SubscriptionsPage() {
   const handleOpenFormDialog = (plan: SubscriptionPlan | null = null) => {
     if (plan) {
       setEditingPlan(plan);
-      setCurrentFormData({ ...initialFormState, ...plan, features: plan.features || [] });
+      // Ensure isComingSoon has a default value if it's undefined
+      setCurrentFormData({ ...initialFormState, ...plan, features: plan.features || [], isComingSoon: plan.isComingSoon ?? false });
     } else {
       setEditingPlan(null);
       setCurrentFormData(initialFormState);
@@ -507,5 +508,3 @@ export default function SubscriptionsPage() {
     </div>
   );
 }
-
-    
