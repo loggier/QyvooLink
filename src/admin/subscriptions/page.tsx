@@ -143,7 +143,7 @@ export default function SubscriptionsPage() {
       // Optimistic update of local state for snappier UI
       setPlans(prevPlans => 
           prevPlans.map(p => 
-              p.id === plan.id ? { ...p, [field]: !p[field] } : p
+              p.id === plan.id ? { ...p, [field]: !plan[field] } : p
           )
       );
       toast({ title: "Estado Actualizado" });
@@ -508,3 +508,5 @@ export default function SubscriptionsPage() {
     </div>
   );
 }
+
+    
