@@ -30,6 +30,7 @@ interface SubscriptionPlan {
   isTrial: boolean;
   trialDays: number;
   isActive: boolean;
+  isComingSoon?: boolean;
   monthlyPriceId?: string; // Stripe Price ID for monthly plan
   yearlyPriceId?: string;  // Stripe Price ID for yearly plan
 }
@@ -50,6 +51,7 @@ const initialFormState: Omit<SubscriptionPlan, 'id'> = {
   isTrial: false,
   trialDays: 0,
   isActive: true,
+  isComingSoon: false,
   monthlyPriceId: '',
   yearlyPriceId: '',
 };
@@ -126,7 +128,7 @@ export default function SubscriptionsPage() {
     setCurrentFormData(prev => ({ ...prev, features: e.target.value.split('\n') }));
   };
 
-  const handleSwitchChange = (name: 'isTrial' | 'isActive', checked: boolean) => {
+  const handleSwitchChange = (name: 'isTrial' | 'isActive' | 'isComingSoon', checked: boolean) => {
     setCurrentFormData(prev => ({ ...prev, [name]: checked }));
   };
   
@@ -249,7 +251,9 @@ export default function SubscriptionsPage() {
                       <TableCell>${plan.priceMonthly.toFixed(2)}</TableCell>
                       <TableCell>${plan.priceYearly.toFixed(2)}</TableCell>
                       <TableCell>
-                        {plan.isTrial ? (
+                        {plan.isComingSoon ? (
+                           <Badge variant="secondary" className="bg-blue-100 text-blue-800">Próximamente</Badge>
+                        ) : plan.isTrial ? (
                            <Badge variant="secondary">Prueba ({plan.trialDays} días)</Badge>
                         ) : (
                            <Badge variant="outline">Estándar</Badge>
@@ -397,6 +401,15 @@ export default function SubscriptionsPage() {
                 <p className="text-xs text-muted-foreground">
                     Los planes inactivos no se mostrarán a los nuevos usuarios.
                 </p>
+
+                <div className="flex items-center space-x-2 pt-2">
+                   <Switch id="isComingSoon" name="isComingSoon" checked={currentFormData.isComingSoon ?? false} onCheckedChange={(c) => handleSwitchChange('isComingSoon', c)} />
+                   <Label htmlFor="isComingSoon">Marcar como "Próximamente"</Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                    Los planes "Próximamente" se mostrarán pero no se podrán contratar.
+                </p>
+
 
             </div>
             </ScrollArea>

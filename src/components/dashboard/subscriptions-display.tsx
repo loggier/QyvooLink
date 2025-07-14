@@ -8,7 +8,7 @@ import { collection, getDocs, doc, getDoc, query, where, onSnapshot, Timestamp }
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, CheckCircle, CreditCard, Sparkles, MessageSquare } from 'lucide-react';
+import { Loader2, CheckCircle, CreditCard, Sparkles, MessageSquare, Clock } from 'lucide-react';
 import { Switch } from '../ui/switch';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
@@ -26,6 +26,7 @@ interface SubscriptionPlan {
   isTrial: boolean;
   trialDays: number;
   isActive: boolean;
+  isComingSoon?: boolean;
   monthlyPriceId?: string;
   yearlyPriceId?: string;
 }
@@ -240,17 +241,22 @@ export default function SubscriptionManager() {
         {plans.map((plan) => {
           const isCurrentPlan = subscription?.planId === plan.id;
           const isSubscribed = !!subscription;
+          const isDisabled = isSubscribed || plan.isComingSoon;
 
           return (
           <Card key={plan.id} className={cn(
             "flex flex-col transition-shadow hover:shadow-xl", 
-            isCurrentPlan && "ring-2 ring-primary shadow-lg"
+            isCurrentPlan && "ring-2 ring-primary shadow-lg",
+            plan.isComingSoon && "bg-muted/50"
           )}>
             <CardHeader>
-              <CardTitle className="flex items-center">
-                 <Sparkles className="h-5 w-5 mr-2 text-primary"/>
-                 {plan.name}
-              </CardTitle>
+              <div className="flex justify-between items-start">
+                <CardTitle className="flex items-center">
+                   <Sparkles className="h-5 w-5 mr-2 text-primary"/>
+                   {plan.name}
+                </CardTitle>
+                {plan.isComingSoon && <Badge variant="secondary" className="bg-blue-100 text-blue-800">Próximamente</Badge>}
+              </div>
               <CardDescription>
                 {plan.priceMonthly === 0 && plan.priceYearly === 0 ? (
                     <span className="text-3xl font-bold text-foreground">
@@ -292,11 +298,13 @@ export default function SubscriptionManager() {
                 <Button 
                   className="w-full" 
                   onClick={() => handleSubscribe(plan)}
-                  disabled={isProcessing[plan.id] || isSubscribed}
+                  disabled={isProcessing[plan.id] || isDisabled}
                 >
                   {isProcessing[plan.id] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 
-                   isCurrentPlan ? <CheckCircle className="mr-2 h-4 w-4" /> : <CreditCard className="mr-2 h-4 w-4" />}
-                  {isCurrentPlan ? "Tu Plan Actual" : "Suscribirse"}
+                   plan.isComingSoon ? <Clock className="mr-2 h-4 w-4" /> :
+                   isCurrentPlan ? <CheckCircle className="mr-2 h-4 w-4" /> : 
+                   <CreditCard className="mr-2 h-4 w-4" />}
+                  {isCurrentPlan ? "Tu Plan Actual" : plan.isComingSoon ? "Próximamente" : "Suscribirse"}
                 </Button>
               )}
             </CardFooter>
