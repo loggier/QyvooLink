@@ -20,7 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, PlusCircle, Edit, Trash2, CreditCard, DollarSign } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tooltip, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
 interface SubscriptionPlan {
   id: string;
@@ -143,7 +143,7 @@ export default function SubscriptionsPage() {
       // Optimistic update of local state for snappier UI
       setPlans(prevPlans => 
           prevPlans.map(p => 
-              p.id === plan.id ? { ...p, [field]: !p[field] } : p
+              p.id === plan.id ? { ...p, [field]: !plan[field] } : p
           )
       );
       toast({ title: "Estado Actualizado" });
@@ -505,5 +505,3 @@ export default function SubscriptionsPage() {
     </div>
   );
 }
-
-    
