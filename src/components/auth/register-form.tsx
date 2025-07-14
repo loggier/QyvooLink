@@ -37,7 +37,6 @@ const registerSchema = z.object({
   password: z.string().min(6, { message: "La contraseña debe tener al menos 6 caracteres." }),
   confirmPassword: z.string(),
   terms: z.boolean().refine(val => val === true, { message: "Debes aceptar los términos y condiciones." }),
-  robotCheck: z.boolean().refine(val => val === true, { message: "Debes confirmar que no eres un robot." }),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Las contraseñas no coinciden.",
   path: ["confirmPassword"],
@@ -64,7 +63,6 @@ export function RegisterForm() {
       password: "",
       confirmPassword: "",
       terms: false,
-      robotCheck: false,
     },
   });
 
@@ -250,26 +248,6 @@ export function RegisterForm() {
                 <Input type="password" placeholder="••••••••" {...field} />
               </FormControl>
               <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="robotCheck"
-          render={({ field }) => (
-            <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-              <FormControl>
-                <Checkbox
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
-              </FormControl>
-              <div className="space-y-1 leading-none">
-                <FormLabel>
-                  No soy un robot
-                </FormLabel>
-                <FormMessage />
-              </div>
             </FormItem>
           )}
         />
