@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, PlusCircle, Edit, Trash2, CreditCard, DollarSign } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
 interface SubscriptionPlan {
   id: string;
@@ -30,6 +31,7 @@ interface SubscriptionPlan {
   isTrial: boolean;
   trialDays: number;
   isActive: boolean;
+  isComingSoon?: boolean;
   monthlyPriceId?: string; // Stripe Price ID for monthly plan
   yearlyPriceId?: string;  // Stripe Price ID for yearly plan
 }
@@ -50,6 +52,7 @@ const initialFormState: Omit<SubscriptionPlan, 'id'> = {
   isTrial: false,
   trialDays: 0,
   isActive: true,
+  isComingSoon: false,
   monthlyPriceId: '',
   yearlyPriceId: '',
 };
@@ -64,6 +67,8 @@ export default function SubscriptionsPage() {
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
   const [currentFormData, setCurrentFormData] = useState(initialFormState);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isToggling, setIsToggling] = useState<Record<string, boolean>>({});
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [planToDelete, setPlanToDelete] = useState<SubscriptionPlan | null>(null);
 
@@ -126,14 +131,35 @@ export default function SubscriptionsPage() {
     setCurrentFormData(prev => ({ ...prev, features: e.target.value.split('\n') }));
   };
 
-  const handleSwitchChange = (name: 'isTrial' | 'isActive', checked: boolean) => {
+  const handleSwitchChangeInForm = (name: 'isTrial' | 'isActive' | 'isComingSoon', checked: boolean) => {
     setCurrentFormData(prev => ({ ...prev, [name]: checked }));
+  };
+
+  const handleToggleSwitchInTable = async (plan: SubscriptionPlan, field: 'isActive' | 'isComingSoon') => {
+    setIsToggling(prev => ({ ...prev, [plan.id]: true }));
+    try {
+      const planDocRef = doc(db, 'subscriptions', plan.id);
+      await updateDoc(planDocRef, { [field]: !plan[field] });
+      // Optimistic update of local state for snappier UI
+      setPlans(prevPlans => 
+          prevPlans.map(p => 
+              p.id === plan.id ? { ...p, [field]: !p[field] } : p
+          )
+      );
+      toast({ title: "Estado Actualizado" });
+    } catch (error) {
+       console.error(`Error toggling ${field} for plan ${plan.id}:`, error);
+       toast({ variant: "destructive", title: "Error", description: `No se pudo actualizar el estado del plan.` });
+    } finally {
+        setIsToggling(prev => ({ ...prev, [plan.id]: false }));
+    }
   };
   
   const handleOpenFormDialog = (plan: SubscriptionPlan | null = null) => {
     if (plan) {
       setEditingPlan(plan);
-      setCurrentFormData({ ...initialFormState, ...plan, features: plan.features || [] });
+      // Ensure isComingSoon has a default value if it's undefined
+      setCurrentFormData({ ...initialFormState, ...plan, features: plan.features || [], isComingSoon: plan.isComingSoon ?? false });
     } else {
       setEditingPlan(null);
       setCurrentFormData(initialFormState);
@@ -186,7 +212,7 @@ export default function SubscriptionsPage() {
 
   const confirmDeletePlan = async () => {
     if (!planToDelete) return;
-    setIsSaving(true);
+    setIsDeleting(true);
     try {
       await deleteDoc(doc(db, 'subscriptions', planToDelete.id));
       toast({ title: "Plan Eliminado" });
@@ -197,7 +223,7 @@ export default function SubscriptionsPage() {
       console.error("Error deleting plan:", error);
       toast({ variant: "destructive", title: "Error", description: "No se pudo eliminar el plan." });
     } finally {
-      setIsSaving(false);
+      setIsDeleting(false);
     }
   };
 
@@ -239,6 +265,7 @@ export default function SubscriptionsPage() {
                     <TableHead>Precio Anual</TableHead>
                     <TableHead>Tipo</TableHead>
                     <TableHead>Estado</TableHead>
+                    <TableHead>Próximamente</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -249,16 +276,61 @@ export default function SubscriptionsPage() {
                       <TableCell>${plan.priceMonthly.toFixed(2)}</TableCell>
                       <TableCell>${plan.priceYearly.toFixed(2)}</TableCell>
                       <TableCell>
-                        {plan.isTrial ? (
-                           <Badge variant="secondary">Prueba ({plan.trialDays} días)</Badge>
-                        ) : (
-                           <Badge variant="outline">Estándar</Badge>
-                        )}
+                         {plan.isTrial ?
+                          <Badge variant="secondary">Prueba ({plan.trialDays} días)</Badge>
+                           : 
+                          <Badge variant="outline">Estándar</Badge>
+                          }
                       </TableCell>
                       <TableCell>
-                         <Badge variant={plan.isActive ? 'default' : 'destructive'} className={plan.isActive ? 'bg-green-500' : ''}>
-                          {plan.isActive ? "Activo" : "Inactivo"}
-                        </Badge>
+                         <TooltipProvider>
+                          <Tooltip>
+                              <TooltipTrigger asChild>
+                                  <div className="flex items-center space-x-2">
+                                      <Switch
+                                          id={`active-${plan.id}`}
+                                          checked={plan.isActive}
+                                          onCheckedChange={() => handleToggleSwitchInTable(plan, 'isActive')}
+                                          disabled={isToggling[plan.id]}
+                                      />
+                                      <Label htmlFor={`active-${plan.id}`}>
+                                          <Badge variant={plan.isActive ? 'default' : 'destructive'} className={plan.isActive ? 'bg-green-500' : ''}>
+                                              {plan.isActive ? "Activo" : "Inactivo"}
+                                          </Badge>
+                                      </Label>
+                                  </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                  <p>Click para cambiar a {plan.isActive ? 'Inactivo' : 'Activo'}</p>
+                              </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableCell>
+                      <TableCell>
+                         <TooltipProvider>
+                          <Tooltip>
+                              <TooltipTrigger asChild>
+                                  <div className="flex items-center space-x-2">
+                                      <Switch
+                                          id={`comingsoon-${plan.id}`}
+                                          checked={plan.isComingSoon ?? false}
+                                          onCheckedChange={() => handleToggleSwitchInTable(plan, 'isComingSoon')}
+                                          disabled={isToggling[plan.id]}
+                                      />
+                                      <Label htmlFor={`comingsoon-${plan.id}`}>
+                                          {plan.isComingSoon ? 
+                                          <Badge variant="secondary" className="bg-blue-100 text-blue-800">Sí</Badge>
+                                           :
+                                          <Badge variant="outline">No</Badge>
+                                          }
+                                      </Label>
+                                  </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                  <p>Click para marcar como "Próximamente"</p>
+                              </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </TableCell>
                       <TableCell className="text-right space-x-2">
                         <Button variant="outline" size="icon" onClick={() => handleOpenFormDialog(plan)} title="Editar">
@@ -379,7 +451,7 @@ export default function SubscriptionsPage() {
                 </div>
                 
                 <div className="flex items-center space-x-2 pt-2">
-                   <Switch id="isTrial" name="isTrial" checked={currentFormData.isTrial} onCheckedChange={(c) => handleSwitchChange('isTrial', c)} />
+                   <Switch id="isTrial" name="isTrial" checked={currentFormData.isTrial} onCheckedChange={(c) => handleSwitchChangeInForm('isTrial', c)} />
                    <Label htmlFor="isTrial">¿Es un plan de prueba?</Label>
                 </div>
 
@@ -391,12 +463,21 @@ export default function SubscriptionsPage() {
                 )}
                 
                 <div className="flex items-center space-x-2 pt-2">
-                   <Switch id="isActive" name="isActive" checked={currentFormData.isActive} onCheckedChange={(c) => handleSwitchChange('isActive', c)} />
+                   <Switch id="isActive" name="isActive" checked={currentFormData.isActive} onCheckedChange={(c) => handleSwitchChangeInForm('isActive', c)} />
                    <Label htmlFor="isActive">Plan Activo</Label>
                 </div>
                 <p className="text-xs text-muted-foreground">
                     Los planes inactivos no se mostrarán a los nuevos usuarios.
                 </p>
+
+                <div className="flex items-center space-x-2 pt-2">
+                   <Switch id="isComingSoon" name="isComingSoon" checked={currentFormData.isComingSoon ?? false} onCheckedChange={(c) => handleSwitchChangeInForm('isComingSoon', c)} />
+                   <Label htmlFor="isComingSoon">Marcar como "Próximamente"</Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                    Los planes "Próximamente" se mostrarán pero no se podrán contratar.
+                </p>
+
 
             </div>
             </ScrollArea>
@@ -422,9 +503,9 @@ export default function SubscriptionsPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setPlanToDelete(null)} disabled={isSaving}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeletePlan} disabled={isSaving} className="bg-destructive hover:bg-destructive/90">
-              {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Eliminar"}
+            <AlertDialogCancel onClick={() => setPlanToDelete(null)} disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeletePlan} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
+              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Eliminar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
