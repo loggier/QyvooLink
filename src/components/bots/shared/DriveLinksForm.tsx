@@ -11,6 +11,7 @@ import { PlusCircle, Trash2, FileText, AlertTriangle } from 'lucide-react';
 import { generateSafeId } from '@/lib/uuid';
 import { produce } from 'immer';
 import { useMemo } from 'react';
+import { Textarea } from '@/components/ui/textarea';
 
 interface DriveLinksFormProps {
   data: BotData;
@@ -29,7 +30,7 @@ export default function DriveLinksForm({ data, onDataChange }: DriveLinksFormPro
         if (!firstAvailableType) return;
 
         const newLinks = produce(driveLinks, (draft: DriveLink[]) => {
-            draft.push({ id: generateSafeId(), type: firstAvailableType, url: '' });
+            draft.push({ id: generateSafeId(), name: '', type: firstAvailableType, url: '' });
         });
         onDataChange({ driveLinks: newLinks });
     };
@@ -39,15 +40,11 @@ export default function DriveLinksForm({ data, onDataChange }: DriveLinksFormPro
         onDataChange({ driveLinks: newLinks });
     };
 
-    const handleLinkChange = (linkId: string, field: 'type' | 'url', value: string) => {
+    const handleLinkChange = (linkId: string, field: keyof DriveLink, value: string) => {
         const newLinks = produce(driveLinks, (draft: DriveLink[]) => {
             const link = draft.find(l => l.id === linkId);
             if (link) {
-                if (field === 'type') {
-                    link.type = value as DriveLink['type'];
-                } else {
-                    link.url = value;
-                }
+                (link as any)[field] = value;
             }
         });
         onDataChange({ driveLinks: newLinks });
@@ -99,12 +96,33 @@ export default function DriveLinksForm({ data, onDataChange }: DriveLinksFormPro
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor={`link-url-${link.id}`}>URL del Documento</Label>
+                                <Label htmlFor={`link-name-${link.id}`}>Nombre del Documento (Obligatorio)</Label>
+                                <Input
+                                    id={`link-name-${link.id}`}
+                                    value={link.name}
+                                    onChange={(e) => handleLinkChange(link.id, 'name', e.target.value)}
+                                    placeholder="Ej: Catálogo de Verano 2024"
+                                    required
+                                />
+                            </div>
+                             <div className="space-y-2">
+                                <Label htmlFor={`link-desc-${link.id}`}>Descripción (Opcional)</Label>
+                                <Textarea
+                                    id={`link-desc-${link.id}`}
+                                    value={link.description || ''}
+                                    onChange={(e) => handleLinkChange(link.id, 'description', e.target.value)}
+                                    placeholder="Breve descripción del contenido del documento."
+                                    rows={2}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor={`link-url-${link.id}`}>URL del Documento (Obligatorio)</Label>
                                 <Input
                                     id={`link-url-${link.id}`}
                                     value={link.url}
                                     onChange={(e) => handleLinkChange(link.id, 'url', e.target.value)}
                                     placeholder="https://docs.google.com/document/d/..."
+                                    required
                                 />
                             </div>
                         </div>

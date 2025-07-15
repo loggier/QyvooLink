@@ -31,8 +31,11 @@ function buildRulesXml(rules?: string[]): string {
 function buildDriveLinksXml(links?: DriveLink[]): string {
     if (!links || links.length === 0) return '';
     const documents = links
-        .filter(link => link.url && link.type)
-        .map(link => `<document type="${escapeXml(link.type)}">${escapeXml(link.url)}</document>`)
+        .filter(link => link.url && link.type && link.name)
+        .map(link => {
+            const descriptionXml = link.description ? `<description>${escapeXml(link.description)}</description>` : '';
+            return `<document type="${escapeXml(link.type)}">\n      <name>${escapeXml(link.name)}</name>\n      ${descriptionXml}\n      <url>${escapeXml(link.url)}</url>\n    </document>`;
+        })
         .join('\n    ');
 
     if (!documents) return '';
@@ -180,7 +183,6 @@ function buildAsistentePersonalPrompt(botData: BotData): string {
         rules = [],
         userPreferences = '',
         taskInstructions = '',
-        calendarLink = ''
     } = botData;
 
     const rulesConfig = buildRulesXml(rules);
@@ -203,7 +205,6 @@ function buildAsistentePersonalPrompt(botData: BotData): string {
         `<userPreferences>${escapeXml(userPreferences)}</userPreferences>`,
         `<taskInstructions>${escapeXml(taskInstructions)}</taskInstructions>`,
         driveLinksConfig,
-        `<calendarLink>${escapeXml(calendarLink)}</calendarLink>`,
         toolsConfig,
     ].filter(Boolean).join('\n').trim();
 }

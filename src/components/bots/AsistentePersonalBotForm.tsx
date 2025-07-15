@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Bot, User, ClipboardList, Calendar } from 'lucide-react';
+import { Bot, User, ClipboardList } from 'lucide-react';
 import DriveLinksForm from './shared/DriveLinksForm';
 
 interface AsistentePersonalBotFormProps {
@@ -19,7 +19,6 @@ export default function AsistentePersonalBotForm({ data, onDataChange }: Asisten
         agentRole = "Eres un asistente personal altamente eficiente. Tu objetivo es gestionar mi agenda, tomar notas, recordar tareas y filtrar comunicaciones. Debes ser proactivo, discreto y aprender mis preferencias. Utiliza la herramienta `createAppointment` para agendar citas y `getFutureAppointments` para consultar citas existentes.",
         userPreferences = "Prefiero comunicarme por texto. Mi horario de no molestar es de 10pm a 8am.",
         taskInstructions = "Para crear un recordatorio, pídeme el título, la fecha y la hora. Para agendar una cita, solicita el nombre del contacto, motivo y duración. Si el usuario pregunta por sus citas, usa la herramienta para buscarlas.",
-        calendarLink = ""
     } = data;
 
     const handleFieldChange = (field: keyof BotData, value: string) => {
@@ -68,16 +67,7 @@ export default function AsistentePersonalBotForm({ data, onDataChange }: Asisten
             </Card>
             
             <DriveLinksForm data={data} onDataChange={onDataChange} />
-
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center"><Calendar className="mr-2 h-5 w-5 text-primary"/>Enlace de Calendario</CardTitle>
-                    <CardDescription>Si usas un servicio como Calendly, pon el enlace aquí para que el bot pueda compartirlo.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Input value={calendarLink || ''} onChange={(e) => handleFieldChange('calendarLink', e.target.value)} placeholder="https://calendly.com/tu-usuario"/>
-                </CardContent>
-            </Card>
+            
         </div>
     );
 }

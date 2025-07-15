@@ -24,6 +24,8 @@ export type BotCategory = 'Ventas' | 'Atención al Cliente' | 'Asistente Persona
 
 export interface DriveLink {
   id: string;
+  name: string;
+  description?: string;
   type: 'Catálogo de Productos' | 'Base de Conocimiento' | 'Preguntas Frecuentes' | 'Otro';
   url: string;
 }
