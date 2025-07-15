@@ -136,4 +136,3 @@ export function CatalogManager({ isOpen, onOpenChange, serviceCatalog, onUpdate 
         </Dialog>
     );
 }
-
