@@ -30,7 +30,7 @@ export default function DriveLinksForm({ data, onDataChange }: DriveLinksFormPro
         if (!firstAvailableType) return;
 
         const newLinks = produce(driveLinks, (draft: DriveLink[]) => {
-            draft.push({ id: generateSafeId(), name: '', type: firstAvailableType, url: '' });
+            draft.push({ id: generateSafeId(), name: '', description: '', type: firstAvailableType, url: '' });
         });
         onDataChange({ driveLinks: newLinks });
     };
@@ -40,7 +40,7 @@ export default function DriveLinksForm({ data, onDataChange }: DriveLinksFormPro
         onDataChange({ driveLinks: newLinks });
     };
 
-    const handleLinkChange = (linkId: string, field: keyof DriveLink, value: string) => {
+    const handleLinkChange = (linkId: string, field: keyof Omit<DriveLink, 'id'>, value: string) => {
         const newLinks = produce(driveLinks, (draft: DriveLink[]) => {
             const link = draft.find(l => l.id === linkId);
             if (link) {
@@ -89,6 +89,7 @@ export default function DriveLinksForm({ data, onDataChange }: DriveLinksFormPro
                                         <SelectValue placeholder="Seleccionar tipo" />
                                     </SelectTrigger>
                                     <SelectContent>
+                                        <SelectItem value={link.type}>{link.type}</SelectItem>
                                         {availableTypesForThisLink.map(type => (
                                             <SelectItem key={type} value={type}>{type}</SelectItem>
                                         ))}

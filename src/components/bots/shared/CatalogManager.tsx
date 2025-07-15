@@ -1,6 +1,7 @@
 
 "use client";
 
+import { useState } from 'react';
 import { produce } from 'immer';
 import { generateSafeId } from '@/lib/uuid';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PlusCircle, Trash2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface Service {
     id: string;
@@ -25,6 +27,10 @@ interface ServiceCategory {
     services: Service[];
 }
 
+interface NewServiceState {
+    [categoryId: string]: Omit<Service, 'id'>;
+}
+
 interface CatalogManagerProps {
     isOpen: boolean;
     onOpenChange: (isOpen: boolean) => void;
@@ -32,7 +38,11 @@ interface CatalogManagerProps {
     onUpdate: (newCatalog: ServiceCategory[]) => void;
 }
 
+const initialServiceState: Omit<Service, 'id'> = { name: '', price: '', notes: '' };
+
 export function CatalogManager({ isOpen, onOpenChange, serviceCatalog, onUpdate }: CatalogManagerProps) {
+    const [newServiceForms, setNewServiceForms] = useState<NewServiceState>({});
+    
     const handleAddCategory = () => {
         const newCatalog = produce(serviceCatalog, (draft) => {
             draft.push({ id: generateSafeId(), categoryName: "Nueva Categoría", services: [] });
@@ -52,14 +62,19 @@ export function CatalogManager({ isOpen, onOpenChange, serviceCatalog, onUpdate 
         onUpdate(newCatalog);
     };
 
-    const handleAddService = (catIndex: number) => {
+    const handleAddService = (catIndex: number, categoryId: string) => {
+        const serviceToAdd = newServiceForms[categoryId] || initialServiceState;
+        if (!serviceToAdd.name) return; // Do not add empty services
+
         const newCatalog = produce(serviceCatalog, (draft) => {
             if (!draft[catIndex].services) {
                 draft[catIndex].services = [];
             }
-            draft[catIndex].services.push({ id: generateSafeId(), name: "", price: "", notes: "" });
+            draft[catIndex].services.push({ id: generateSafeId(), ...serviceToAdd });
         });
         onUpdate(newCatalog);
+        // Reset the form for that category
+        setNewServiceForms(prev => ({ ...prev, [categoryId]: initialServiceState }));
     };
 
     const handleRemoveService = (catIndex: number, serviceId: string) => {
@@ -68,28 +83,38 @@ export function CatalogManager({ isOpen, onOpenChange, serviceCatalog, onUpdate 
         });
         onUpdate(newCatalog);
     };
-
+    
     const handleServiceChange = (catIndex: number, srvIndex: number, field: keyof Service, value: string) => {
         const newCatalog = produce(serviceCatalog, (draft) => {
-            draft[catIndex].services[srvIndex][field] = value;
+            (draft[catIndex].services[srvIndex] as any)[field] = value;
         });
         onUpdate(newCatalog);
     };
 
+    const handleNewServiceFormChange = (categoryId: string, field: keyof Omit<Service, 'id'>, value: string) => {
+        setNewServiceForms(prev => ({
+            ...prev,
+            [categoryId]: {
+                ...(prev[categoryId] || initialServiceState),
+                [field]: value,
+            }
+        }));
+    };
+
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-3xl h-[90vh] flex flex-col">
+            <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle>Gestionar Catálogo de Servicios</DialogTitle>
                     <DialogDescription>
-                        Añade, edita o elimina categorías y servicios de tu catálogo. Los cambios se guardarán al cerrar esta ventana.
+                        Añade, edita o elimina categorías y servicios de tu catálogo.
                     </DialogDescription>
                 </DialogHeader>
                 <ScrollArea className="flex-grow pr-6 -mr-6">
-                    <div className="space-y-4 py-4">
+                    <div className="space-y-6 py-4">
                         {serviceCatalog.map((category, catIndex) => (
-                            <Card key={category.id} className="p-4 border rounded-md space-y-3 bg-muted/30">
-                                <div className="flex justify-between items-center mb-2">
+                            <Card key={category.id} className="p-4 border rounded-md space-y-4 bg-muted/30">
+                                <div className="flex justify-between items-center">
                                     <Input
                                         value={category.categoryName}
                                         onChange={(e) => handleCategoryNameChange(catIndex, e.target.value)}
@@ -100,26 +125,64 @@ export function CatalogManager({ isOpen, onOpenChange, serviceCatalog, onUpdate 
                                         <Trash2 className="h-4 w-4 text-destructive" />
                                     </Button>
                                 </div>
-                                {category.services?.map((service, srvIndex) => (
-                                    <Card key={service.id} className="p-3 bg-background">
-                                        <div className="space-y-2">
-                                            <Label>Servicio</Label>
-                                            <Input value={service.name} onChange={(e) => handleServiceChange(catIndex, srvIndex, 'name', e.target.value)} placeholder="Nombre del servicio" />
-                                            <Label>Precio</Label>
-                                            <Input value={service.price} onChange={(e) => handleServiceChange(catIndex, srvIndex, 'price', e.target.value)} placeholder="Ej: $100" />
-                                            <Label>Notas</Label>
-                                            <Textarea value={service.notes} onChange={(e) => handleServiceChange(catIndex, srvIndex, 'notes', e.target.value)} placeholder="Notas adicionales" rows={2}/>
-                                        </div>
-                                        <div className="flex justify-end mt-2">
-                                            <Button variant="outline" size="sm" onClick={() => handleRemoveService(catIndex, service.id)}>
-                                                <Trash2 className="h-3 w-3 mr-1" /> Eliminar Servicio
-                                            </Button>
-                                        </div>
-                                    </Card>
-                                ))}
-                                <Button variant="outline" onClick={() => handleAddService(catIndex)}>
-                                    <PlusCircle className="h-4 w-4 mr-2" /> Añadir Servicio a esta Categoría
-                                </Button>
+                                
+                                <div className="p-4 bg-background rounded-md border space-y-3">
+                                    <h4 className="font-medium">Añadir Nuevo Servicio</h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                        <Input 
+                                           value={newServiceForms[category.id]?.name || ''} 
+                                           onChange={(e) => handleNewServiceFormChange(category.id, 'name', e.target.value)} 
+                                           placeholder="Nombre del servicio"
+                                        />
+                                        <Input 
+                                           value={newServiceForms[category.id]?.price || ''}
+                                           onChange={(e) => handleNewServiceFormChange(category.id, 'price', e.target.value)}
+                                           placeholder="Precio (Ej: $100)"
+                                        />
+                                        <Input
+                                            value={newServiceForms[category.id]?.notes || ''}
+                                            onChange={(e) => handleNewServiceFormChange(category.id, 'notes', e.target.value)}
+                                            placeholder="Notas (opcional)"
+                                        />
+                                    </div>
+                                    <Button size="sm" onClick={() => handleAddService(catIndex, category.id)} className="w-full md:w-auto">
+                                        <PlusCircle className="h-4 w-4 mr-2"/>
+                                        Añadir Servicio
+                                    </Button>
+                                </div>
+
+                                {(category.services?.length > 0) && (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Nombre</TableHead>
+                                            <TableHead>Precio</TableHead>
+                                            <TableHead>Notas</TableHead>
+                                            <TableHead className="text-right">Acción</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {category.services.map((service, srvIndex) => (
+                                            <TableRow key={service.id}>
+                                                <TableCell>
+                                                    <Input value={service.name} onChange={(e) => handleServiceChange(catIndex, srvIndex, 'name', e.target.value)} className="h-8"/>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Input value={service.price} onChange={(e) => handleServiceChange(catIndex, srvIndex, 'price', e.target.value)} className="h-8"/>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Input value={service.notes} onChange={(e) => handleServiceChange(catIndex, srvIndex, 'notes', e.target.value)} className="h-8"/>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <Button variant="ghost" size="icon" onClick={() => handleRemoveService(catIndex, service.id)}>
+                                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                                )}
                             </Card>
                         ))}
                         <Button onClick={handleAddCategory} className="w-full">

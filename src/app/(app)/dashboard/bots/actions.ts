@@ -179,7 +179,7 @@ function buildAgenteInmobiliarioPrompt(botData: BotData): string {
 
 function buildAsistentePersonalPrompt(botData: BotData): string {
     const {
-        agentRole = "Eres un asistente personal altamente eficiente. Tu objetivo es gestionar mi agenda. Para citas, sigue estas reglas ESTRICTAS: si un cliente quiere AGENDAR, DEBES usar la herramienta 'createAppointment'. Si el cliente PREGUNTA por citas existentes (ej: '¿cuándo es mi cita?'), TIENES PROHIBIDO responder de memoria. DEBES usar OBLIGATORIAMENTE la herramienta 'getFutureAppointments' para obtener la información real y actualizada. NO inventes citas.",
+        agentRole = "Eres un asistente personal altamente eficiente. Tu objetivo es gestionar mi agenda, tomar notas, recordar tareas y filtrar comunicaciones. Debes ser proactivo, discreto y aprender mis preferencias. Utiliza la herramienta `createAppointment` para agendar citas y `getFutureAppointments` para consultar citas existentes.",
         rules = [],
         userPreferences = '',
         taskInstructions = '',
@@ -344,7 +344,3 @@ export async function migrateAndActivateLegacyBot(userId: string, legacyData: an
         instanceIdAssociated,
     }, { merge: true });
 }
-
-    
-
-    
