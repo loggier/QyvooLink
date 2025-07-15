@@ -1,6 +1,7 @@
 
 "use client";
 
+import { useState } from 'react';
 import type { BotData } from '@/app/(app)/dashboard/bots/page';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,10 +9,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, Trash2, Bot, Building, Phone, Bell } from 'lucide-react';
-import { generateSafeId } from '@/lib/uuid';
-import { produce } from 'immer';
+import { Bot, Building, Phone, Bell, BookOpen } from 'lucide-react';
 import DriveLinksForm from './shared/DriveLinksForm';
+import { CatalogManager } from './shared/CatalogManager';
 
 interface VentasBotFormProps {
   data: BotData;
@@ -37,6 +37,8 @@ export default function VentasBotForm({ data, onDataChange }: VentasBotFormProps
         notificationPhoneNumber = "",
         notificationRule = ""
     } = data;
+    
+    const [isCatalogManagerOpen, setIsCatalogManagerOpen] = useState(false);
 
     const handleSimpleChange = (field: keyof BotData, value: any) => {
         onDataChange({ [field]: value });
@@ -53,50 +55,18 @@ export default function VentasBotForm({ data, onDataChange }: VentasBotFormProps
           : [...selectedRules, rule];
         onDataChange({ selectedRules: newRules });
     };
-
-    // Service Catalog handlers using Immer for easier nested state updates
-    const handleAddCategory = () => {
-        const newCatalog = produce(serviceCatalog, (draft: any) => {
-            draft.push({ id: generateSafeId(), categoryName: "Nueva Categoría", services: [] });
-        });
-        onDataChange({ serviceCatalog: newCatalog });
-    };
-
-    const handleRemoveCategory = (categoryId: string) => {
-        const newCatalog = serviceCatalog.filter((cat: any) => cat.id !== categoryId);
-        onDataChange({ serviceCatalog: newCatalog });
-    };
-
-    const handleCategoryNameChange = (catIndex: number, newName: string) => {
-        const newCatalog = produce(serviceCatalog, (draft: any) => {
-            draft[catIndex].categoryName = newName;
-        });
-        onDataChange({ serviceCatalog: newCatalog });
-    };
     
-    const handleAddService = (catIndex: number) => {
-        const newCatalog = produce(serviceCatalog, (draft: any) => {
-            draft[catIndex].services.push({ id: generateSafeId(), name: "", price: "", notes: "" });
-        });
-        onDataChange({ serviceCatalog: newCatalog });
+    const catalogSummary = () => {
+        const numCategories = serviceCatalog.length;
+        const numServices = serviceCatalog.reduce((acc: number, cat: any) => acc + (cat.services?.length || 0), 0);
+        if (numCategories === 0 && numServices === 0) {
+            return "No se ha configurado ningún servicio.";
+        }
+        return `${numCategories} categorías, ${numServices} servicios definidos.`;
     };
-
-    const handleRemoveService = (catIndex: number, serviceId: string) => {
-        const newCatalog = produce(serviceCatalog, (draft: any) => {
-            draft[catIndex].services = draft[catIndex].services.filter((srv: any) => srv.id !== serviceId);
-        });
-        onDataChange({ serviceCatalog: newCatalog });
-    };
-
-    const handleServiceChange = (catIndex: number, srvIndex: number, field: string, value: string) => {
-        const newCatalog = produce(serviceCatalog, (draft: any) => {
-            draft[catIndex].services[srvIndex][field] = value;
-        });
-        onDataChange({ serviceCatalog: newCatalog });
-    };
-
 
   return (
+    <>
     <div className="space-y-6">
       <Card>
         <CardHeader>
@@ -148,32 +118,12 @@ export default function VentasBotForm({ data, onDataChange }: VentasBotFormProps
           <CardTitle>Catálogo de Servicios</CardTitle>
           <CardDescription>Define los servicios que ofrece el bot. Puedes agruparlos por categorías.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {serviceCatalog.map((category: any, catIndex: number) => (
-            <div key={category.id} className="p-4 border rounded-md space-y-3 bg-muted/30">
-              <div className="flex justify-between items-center mb-2">
-                <Input value={category.categoryName} onChange={(e) => handleCategoryNameChange(catIndex, e.target.value)} className="text-lg font-semibold"/>
-                <Button variant="destructive" size="icon" onClick={() => handleRemoveCategory(category.id)}><Trash2 className="h-4 w-4" /></Button>
-              </div>
-              {category.services.map((service: any, srvIndex: number) => (
-                <Card key={service.id} className="p-3 bg-background">
-                  <div className="space-y-2">
-                    <Label>Servicio</Label>
-                    <Input value={service.name} onChange={(e) => handleServiceChange(catIndex, srvIndex, 'name', e.target.value)} placeholder="Nombre del servicio"/>
-                    <Label>Precio</Label>
-                    <Input value={service.price} onChange={(e) => handleServiceChange(catIndex, srvIndex, 'price', e.target.value)} placeholder="Ej: $100"/>
-                    <Label>Notas</Label>
-                    <Textarea value={service.notes} onChange={(e) => handleServiceChange(catIndex, srvIndex, 'notes', e.target.value)} placeholder="Notas adicionales"/>
-                  </div>
-                   <Button variant="outline" size="sm" onClick={() => handleRemoveService(catIndex, service.id)} className="mt-2 float-right">
-                    <Trash2 className="h-4 w-4 mr-1" /> Eliminar Servicio
-                  </Button>
-                </Card>
-              ))}
-              <Button variant="outline" onClick={() => handleAddService(catIndex)}><PlusCircle className="h-4 w-4 mr-2"/>Añadir Servicio</Button>
-            </div>
-          ))}
-          <Button onClick={handleAddCategory} className="w-full"><PlusCircle className="h-4 w-4 mr-2"/>Añadir Categoría</Button>
+        <CardContent className="space-y-4 text-center">
+            <p className="text-sm text-muted-foreground mb-4">{catalogSummary()}</p>
+            <Button type="button" variant="outline" onClick={() => setIsCatalogManagerOpen(true)}>
+                <BookOpen className="mr-2 h-4 w-4" />
+                Gestionar Catálogo de Servicios
+            </Button>
         </CardContent>
       </Card>
       
@@ -212,5 +162,13 @@ export default function VentasBotForm({ data, onDataChange }: VentasBotFormProps
         </CardContent>
       </Card>
     </div>
+    
+    <CatalogManager 
+        isOpen={isCatalogManagerOpen}
+        onOpenChange={setIsCatalogManagerOpen}
+        serviceCatalog={serviceCatalog}
+        onUpdate={(newCatalog) => onDataChange({ serviceCatalog: newCatalog })}
+    />
+    </>
   );
 }
