@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,7 +17,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { useState, useEffect, useCallback } from 'react';
-import { Copy, Eye, EyeOff, MessageSquareText, Settings2, Trash2, Users, PlusCircle, ExternalLink, RefreshCw, ListChecks, Loader2, QrCode, Bot, FlaskConical, Save, HelpCircle } from 'lucide-react';
+import { Copy, Eye, EyeOff, MessageSquareText, Settings2, Trash2, Users, PlusCircle, ExternalLink, RefreshCw, ListChecks, Loader2, QrCode, Bot, FlaskConical, Save, HelpCircle, Code2, Link as LinkIcon, Server } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { db } from '@/lib/firebase'; 
@@ -563,13 +564,21 @@ export default function ConfigurationPage() {
   
   const copyToClipboard = (text?: string) => {
     if (!text) {
-      toast({ variant: "destructive", title: "Error", description: "No hay API Key para copiar." });
+      toast({ variant: "destructive", title: "Error", description: "No hay texto para copiar." });
       return;
     }
     navigator.clipboard.writeText(text)
-      .then(() => toast({ title: "Copiado", description: "API Key copiada al portapapeles." }))
-      .catch(() => toast({ variant: "destructive", title: "Error", description: "No se pudo copiar la API Key." }));
+      .then(() => toast({ title: "Copiado", description: "Texto copiado al portapapeles." }))
+      .catch(() => toast({ variant: "destructive", title: "Error", description: "No se pudo copiar el texto." }));
   };
+  
+  const apiExampleCurl = `curl -X POST ${process.env.NEXT_PUBLIC_BASE_URL || 'https://admin.qyvoo.com'}/api/send-message \\
+-H "Content-Type: application/json" \\
+-d '{
+  "apiKey": "${whatsAppInstance?.apiKey || 'TU_API_KEY'}",
+  "number": "5218112345678@s.whatsapp.net",
+  "message": "Hola desde la API de Qyvoo!"
+}'`;
 
   if (isPageLoading) {
     return (
@@ -585,7 +594,7 @@ export default function ConfigurationPage() {
       <div>
         <h2 className="text-3xl font-bold tracking-tight text-foreground">Panel de Configuración Qyvoo</h2>
         <p className="text-muted-foreground">
-          Gestiona la configuración de tu API Qyvoo, instancias de WhatsApp, horarios comerciales y mensajes.
+          Gestiona la conexión de tu instancia de WhatsApp, el chatbot y el acceso a la API.
         </p>
       </div>
       <Separator />
@@ -657,39 +666,6 @@ export default function ConfigurationPage() {
                 <CardTitle className="text-lg font-semibold">{whatsAppInstance.name}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="qyvooApiKey">Qyvoo API Key (Hash/Token)</Label>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Esta es tu clave secreta para conectar servicios externos a la API de Qyvoo.</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Input
-                      id="qyvooApiKey"
-                      type={showApiKey ? "text" : "password"}
-                      readOnly
-                      value={whatsAppInstance.apiKey || "No disponible"}
-                      className="flex-grow font-mono"
-                    />
-                    <Button variant="ghost" size="icon" onClick={() => copyToClipboard(whatsAppInstance.apiKey)} disabled={!whatsAppInstance.apiKey}>
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setShowApiKey(!showApiKey)}>
-                      {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                </div>
-                
-                <Separator />
-
                 <div className="flex items-center space-x-4">
                   <Avatar className="h-16 w-16">
                     <AvatarImage src={`https://ui-avatars.com/api/?name=${encodeURIComponent(whatsAppInstance.name)}&background=random&size=128`} alt={whatsAppInstance.name} data-ai-hint="business logo"/>
@@ -794,11 +770,125 @@ export default function ConfigurationPage() {
           ) : (
             <div className="text-center py-12 rounded-lg border-2 border-dashed">
               <p className="text-muted-foreground">No hay ninguna instancia de Qyvoo WhatsApp configurada.</p>
-              <p className="text-sm text-muted-foreground mt-2">Haz clic en "Agregar Instancia" para comenzar.</p>
+              <p className="text-sm text-muted-foreground mt-2">Usa el botón "Agregar Instancia" para comenzar.</p>
             </div>
           )}
         </CardContent>
       </Card>
+      
+      {whatsAppInstance && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Settings2 className="mr-2 h-5 w-5 text-primary" />
+                Configuración Avanzada
+              </CardTitle>
+              <CardDescription>
+                Gestiona el comportamiento del chatbot y el modo de prueba para esta instancia.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="chatbotEnabled"
+                  checked={chatbotEnabled}
+                  onCheckedChange={setChatbotEnabled}
+                  disabled={!whatsAppInstance || isSavingSettings}
+                />
+                <Label htmlFor="chatbotEnabled" className="flex items-center">
+                  <Bot className="mr-2 h-4 w-4" />
+                  Activar Chatbot
+                </Label>
+              </div>
+              <Separator />
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                   <Switch
+                    id="demoMode"
+                    checked={isDemoMode}
+                    onCheckedChange={setIsDemoMode}
+                    disabled={!whatsAppInstance || isSavingSettings}
+                  />
+                  <Label htmlFor="demoMode" className="flex items-center">
+                    <FlaskConical className="mr-2 h-4 w-4" />
+                    Activar Modo Demo
+                  </Label>
+                </div>
+                {isDemoMode && (
+                  <div className="pl-8 space-y-2">
+                    <Label htmlFor="demoPhoneNumber">Número de Teléfono para Simulación</Label>
+                    <Input
+                      id="demoPhoneNumber"
+                      value={demoPhoneNumber}
+                      onChange={(e) => setDemoPhoneNumber(e.target.value)}
+                      placeholder="Ej: +1234567890"
+                      disabled={!whatsAppInstance || isSavingSettings}
+                    />
+                  </div>
+                )}
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button onClick={handleSaveInstanceSettings} disabled={!whatsAppInstance || isSavingSettings}>
+                {isSavingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4"/>}
+                Guardar Configuración
+              </Button>
+            </CardFooter>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Server className="mr-2 h-5 w-5 text-primary"/>
+                Acceso a la API para Envíos
+              </CardTitle>
+              <CardDescription>
+                Usa este endpoint y tu API Key para enviar mensajes desde tus propias aplicaciones.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="endpointUrl" className="flex items-center"><LinkIcon className="h-4 w-4 mr-2"/>Endpoint URL (POST)</Label>
+                <div className="flex items-center space-x-2">
+                  <Input id="endpointUrl" readOnly value={`${process.env.NEXT_PUBLIC_BASE_URL || 'https://admin.qyvoo.com'}/api/send-message`} className="font-mono"/>
+                  <Button variant="ghost" size="icon" onClick={() => copyToClipboard(`${process.env.NEXT_PUBLIC_BASE_URL || 'https://admin.qyvoo.com'}/api/send-message`)}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="qyvooApiKey">Tu API Key</Label>
+                <div className="flex items-center space-x-2">
+                  <Input
+                    id="qyvooApiKey"
+                    type={showApiKey ? "text" : "password"}
+                    readOnly
+                    value={whatsAppInstance.apiKey || "No disponible"}
+                    className="flex-grow font-mono"
+                  />
+                  <Button variant="ghost" size="icon" onClick={() => copyToClipboard(whatsAppInstance.apiKey)} disabled={!whatsAppInstance.apiKey}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => setShowApiKey(!showApiKey)}>
+                    {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+              <Separator />
+              <div>
+                <Label className="flex items-center"><Code2 className="h-4 w-4 mr-2"/>Ejemplo de Petición (cURL)</Label>
+                <div className="mt-2 p-4 rounded-md bg-muted text-sm font-mono relative">
+                  <pre className="whitespace-pre-wrap break-all"><code>{apiExampleCurl}</code></pre>
+                  <Button variant="ghost" size="icon" className="absolute top-2 right-2 h-8 w-8" onClick={() => copyToClipboard(apiExampleCurl)}>
+                    <Copy className="h-4 w-4"/>
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       <Dialog open={isQrCodeModalOpen} onOpenChange={setIsQrCodeModalOpen}>
         <DialogContent className="sm:max-w-md">
@@ -825,78 +915,6 @@ export default function ConfigurationPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      
-      {whatsAppInstance && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Settings2 className="mr-2 h-5 w-5 text-primary" />
-              Configuración Avanzada de la Instancia
-            </CardTitle>
-            <CardDescription>
-              Gestiona el comportamiento del chatbot y el modo de prueba para esta instancia.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Chatbot Configuration */}
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="chatbotEnabled"
-                checked={chatbotEnabled}
-                onCheckedChange={setChatbotEnabled}
-                disabled={!whatsAppInstance || isSavingSettings}
-              />
-              <Label htmlFor="chatbotEnabled" className="flex items-center">
-                <Bot className="mr-2 h-4 w-4" />
-                Activar Chatbot
-              </Label>
-            </div>
-            
-            <Separator />
-            
-            {/* Demo Mode Configuration */}
-            <div className="space-y-4">
-              <div className="flex items-center space-x-2">
-                 <Switch
-                  id="demoMode"
-                  checked={isDemoMode}
-                  onCheckedChange={setIsDemoMode}
-                  disabled={!whatsAppInstance || isSavingSettings}
-                />
-                <Label htmlFor="demoMode" className="flex items-center">
-                  <FlaskConical className="mr-2 h-4 w-4" />
-                  Activar Modo Demo
-                </Label>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Habilita un modo de demostración para probar tu bot sin conectar un teléfono real.
-              </p>
-              {isDemoMode && (
-                <div className="pl-8 space-y-2">
-                  <Label htmlFor="demoPhoneNumber">Número de Teléfono para Simulación</Label>
-                  <Input
-                    id="demoPhoneNumber"
-                    value={demoPhoneNumber}
-                    onChange={(e) => setDemoPhoneNumber(e.target.value)}
-                    placeholder="Ej: +1234567890"
-                    disabled={!whatsAppInstance || isSavingSettings}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Este número se usará para simular conversaciones en el modo demo.
-                  </p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button onClick={handleSaveInstanceSettings} disabled={!whatsAppInstance || isSavingSettings}>
-              {isSavingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4"/>}
-              Guardar Configuración
-            </Button>
-          </CardFooter>
-        </Card>
-      )}
-      
     </div>
   );
 }
