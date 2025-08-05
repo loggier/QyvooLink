@@ -1,4 +1,6 @@
 
+'use server';
+
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
@@ -36,10 +38,11 @@ export async function POST(req: Request) {
     const instanceData = instanceDoc.data();
     const { name: instanceName, userId } = instanceData;
 
-    // 3. Formatear el número de teléfono si es necesario
-    if (!number.includes('@')) {
-        number = `${number}@s.whatsapp.net`;
-    }
+    // 3. Formatear el número de teléfono
+    // Limpia el número de cualquier caracter que no sea un dígito
+    const cleanedNumber = number.replace(/\D/g, '');
+    const formattedNumber = `${cleanedNumber}@s.whatsapp.net`;
+
 
     // 4. Determinar el Webhook URL (Test o Producción)
     const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
@@ -62,7 +65,7 @@ export async function POST(req: Request) {
     
     // 5. Preparar y enviar la petición al webhook de n8n
     const webhookPayload = {
-      number: number,
+      number: formattedNumber,
       message: message,
       instanceName: instanceName,
       token: apiKey, // El token es la misma apiKey
