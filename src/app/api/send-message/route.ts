@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Datos de entrada inválidos.', details: validation.error.flatten() }, { status: 400 });
     }
 
-    const { apiKey, number, message } = validation.data;
+    let { apiKey, number, message } = validation.data;
 
     // 2. Autenticar la apiKey
     const instancesRef = collection(db, 'instances');
@@ -36,7 +36,12 @@ export async function POST(req: Request) {
     const instanceData = instanceDoc.data();
     const { name: instanceName, userId } = instanceData;
 
-    // 3. Determinar el Webhook URL (Test o Producción)
+    // 3. Formatear el número de teléfono si es necesario
+    if (!number.includes('@')) {
+        number = `${number}@s.whatsapp.net`;
+    }
+
+    // 4. Determinar el Webhook URL (Test o Producción)
     const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
     const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL;
     const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL;
@@ -55,7 +60,7 @@ export async function POST(req: Request) {
 
     const webhookUrl = `${baseWebhookUrl}?action=send_message`;
     
-    // 4. Preparar y enviar la petición al webhook de n8n
+    // 5. Preparar y enviar la petición al webhook de n8n
     const webhookPayload = {
       number: number,
       message: message,
@@ -70,7 +75,7 @@ export async function POST(req: Request) {
       body: JSON.stringify(webhookPayload),
     });
     
-    // 5. Manejar la respuesta del webhook
+    // 6. Manejar la respuesta del webhook
     if (!webhookResponse.ok) {
       const errorData = await webhookResponse.json();
       console.error("Error desde el webhook de n8n:", webhookResponse.status, errorData);

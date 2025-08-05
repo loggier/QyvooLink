@@ -576,7 +576,7 @@ export default function ConfigurationPage() {
 -H "Content-Type: application/json" \\
 -d '{
   "apiKey": "${whatsAppInstance?.apiKey || 'TU_API_KEY'}",
-  "number": "5218112345678@s.whatsapp.net",
+  "number": "528112345678",
   "message": "Hola desde la API de Qyvoo!"
 }'`;
 
