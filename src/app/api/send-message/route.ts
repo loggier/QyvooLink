@@ -39,9 +39,8 @@ export async function POST(req: Request) {
     const { name: instanceName, userId } = instanceData;
 
     // 3. Formatear el número de teléfono
-    // Limpia el número de cualquier caracter que no sea un dígito
     const cleanedNumber = number.replace(/\D/g, '');
-    const formattedNumber = `${cleanedNumber}@s.whatsapp.net`;
+    const formattedNumber = cleanedNumber.includes('@s.whatsapp.net') ? cleanedNumber : `${cleanedNumber}@s.whatsapp.net`;
 
 
     // 4. Determinar el Webhook URL (Test o Producción)
@@ -68,6 +67,7 @@ export async function POST(req: Request) {
       number: formattedNumber,
       message: message,
       instanceName: instanceName,
+      instance: instanceName, // Añadido para compatibilidad
       token: apiKey, // El token es la misma apiKey
       userId: userId,
     };
