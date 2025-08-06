@@ -3,7 +3,7 @@
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, addDoc, serverTimestamp } from 'firebase/firestore';
 import { z } from 'zod';
 
 // Define el esquema para validar los datos de entrada de la API
@@ -36,14 +36,32 @@ export async function POST(req: Request) {
 
     const instanceDoc = querySnapshot.docs[0];
     const instanceData = instanceDoc.data();
-    const { name: instanceName, userId } = instanceData;
+    const { name: instanceName, id: instanceId, userId, phoneNumber } = instanceData;
 
     // 3. Formatear el número de teléfono
     const cleanedNumber = number.replace(/\D/g, '');
     const formattedNumber = cleanedNumber.includes('@s.whatsapp.net') ? cleanedNumber : `${cleanedNumber}@s.whatsapp.net`;
 
+    // 4. Guardar el mensaje saliente en Firestore
+    const newMessageDataForDb = {
+        chat_id: formattedNumber,
+        from: phoneNumber || `instance_${instanceId}`,
+        to: formattedNumber,
+        instance: instanceName,
+        instanceId: instanceId,
+        mensaje: message,
+        user_name: 'agente', // Se marca como si un agente lo enviara
+        timestamp: serverTimestamp(),
+        type: 'message',
+        author: {
+          uid: userId,
+          name: "API", // Se identifica que fue enviado por la API
+        }
+    };
+    await addDoc(collection(db, 'chat'), newMessageDataForDb);
 
-    // 4. Determinar el Webhook URL (Test o Producción)
+
+    // 5. Determinar el Webhook URL (Test o Producción)
     const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
     const prodWebhookBase = process.env.NEXT_PUBLIC_N8N_PROD_WEBHOOK_URL;
     const testWebhookBase = process.env.NEXT_PUBLIC_N8N_TEST_WEBHOOK_URL;
@@ -62,12 +80,11 @@ export async function POST(req: Request) {
 
     const webhookUrl = `${baseWebhookUrl}?action=send_message`;
     
-    // 5. Preparar y enviar la petición al webhook de n8n
+    // 6. Preparar y enviar la petición al webhook de n8n
     const webhookPayload = {
       number: formattedNumber,
       message: message,
       instanceName: instanceName,
-      instance: instanceName, // Añadido para compatibilidad
       token: apiKey, // El token es la misma apiKey
       userId: userId,
     };
@@ -78,14 +95,14 @@ export async function POST(req: Request) {
       body: JSON.stringify(webhookPayload),
     });
     
-    // 6. Manejar la respuesta del webhook
+    // 7. Manejar la respuesta del webhook
     if (!webhookResponse.ok) {
       const errorData = await webhookResponse.json();
       console.error("Error desde el webhook de n8n:", webhookResponse.status, errorData);
       return NextResponse.json({ success: false, error: 'El servicio de envío de mensajes falló.', details: errorData.message || `Error del webhook: ${webhookResponse.statusText}` }, { status: 502 });
     }
     
-    console.log(`Mensaje para ${number} enviado exitosamente a la cola de n8n.`);
+    console.log(`Mensaje para ${number} enviado exitosamente a la cola de n8n y guardado en Firestore.`);
     return NextResponse.json({ success: true, message: 'Mensaje encolado para envío.' });
 
   } catch (error: any) {
