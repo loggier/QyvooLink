@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, PlusCircle, Edit, Trash2, CreditCard, DollarSign } from 'lucide-react';
+import { Loader2, PlusCircle, Edit, Trash2, CreditCard, DollarSign, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -34,6 +34,7 @@ interface SubscriptionPlan {
   isComingSoon?: boolean;
   monthlyPriceId?: string; // Stripe Price ID for monthly plan
   yearlyPriceId?: string;  // Stripe Price ID for yearly plan
+  isAddon?: boolean; // New field to identify addon plans
 }
 
 interface StripePrice {
@@ -55,6 +56,7 @@ const initialFormState: Omit<SubscriptionPlan, 'id'> = {
   isComingSoon: false,
   monthlyPriceId: '',
   yearlyPriceId: '',
+  isAddon: false,
 };
 
 export default function SubscriptionsPage() {
@@ -131,7 +133,7 @@ export default function SubscriptionsPage() {
     setCurrentFormData(prev => ({ ...prev, features: e.target.value.split('\n') }));
   };
 
-  const handleSwitchChangeInForm = (name: 'isTrial' | 'isActive' | 'isComingSoon', checked: boolean) => {
+  const handleSwitchChangeInForm = (name: 'isTrial' | 'isActive' | 'isComingSoon' | 'isAddon', checked: boolean) => {
     setCurrentFormData(prev => ({ ...prev, [name]: checked }));
   };
 
@@ -158,8 +160,8 @@ export default function SubscriptionsPage() {
   const handleOpenFormDialog = (plan: SubscriptionPlan | null = null) => {
     if (plan) {
       setEditingPlan(plan);
-      // Ensure isComingSoon has a default value if it's undefined
-      setCurrentFormData({ ...initialFormState, ...plan, features: plan.features || [], isComingSoon: plan.isComingSoon ?? false });
+      // Ensure new fields have a default value if they're undefined
+      setCurrentFormData({ ...initialFormState, ...plan, features: plan.features || [], isComingSoon: plan.isComingSoon ?? false, isAddon: plan.isAddon ?? false });
     } else {
       setEditingPlan(null);
       setCurrentFormData(initialFormState);
@@ -276,9 +278,8 @@ export default function SubscriptionsPage() {
                       <TableCell>${plan.priceMonthly.toFixed(2)}</TableCell>
                       <TableCell>${plan.priceYearly.toFixed(2)}</TableCell>
                       <TableCell>
-                         {plan.isTrial ?
-                          <Badge variant="secondary">Prueba ({plan.trialDays} días)</Badge>
-                           : 
+                         {plan.isAddon ? <Badge variant="secondary" className="bg-purple-100 text-purple-800">Add-on</Badge> :
+                          plan.isTrial ? <Badge variant="secondary">Prueba ({plan.trialDays} días)</Badge> : 
                           <Badge variant="outline">Estándar</Badge>
                           }
                       </TableCell>
@@ -478,6 +479,14 @@ export default function SubscriptionsPage() {
                     Los planes "Próximamente" se mostrarán pero no se podrán contratar.
                 </p>
 
+                <div className="flex items-center space-x-2 pt-2 border-t mt-2">
+                   <Switch id="isAddon" name="isAddon" checked={currentFormData.isAddon ?? false} onCheckedChange={(c) => handleSwitchChangeInForm('isAddon', c)} />
+                   <Label htmlFor="isAddon" className="flex items-center font-semibold"><AlertTriangle className="h-4 w-4 mr-2 text-amber-500"/>Marcar como Add-on</Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                    Los Add-ons son planes especiales (como "Instancia Adicional") que no se muestran en la lista principal de suscripciones.
+                </p>
+
 
             </div>
             </ScrollArea>
@@ -514,5 +523,3 @@ export default function SubscriptionsPage() {
     </div>
   );
 }
-
-    

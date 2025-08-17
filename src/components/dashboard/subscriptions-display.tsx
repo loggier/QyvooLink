@@ -8,7 +8,7 @@ import { collection, getDocs, doc, getDoc, query, where, onSnapshot, Timestamp }
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, CheckCircle, CreditCard, Sparkles, MessageSquare, Clock } from 'lucide-react';
+import { Loader2, CheckCircle, CreditCard, Sparkles, MessageSquare, Clock, PlusCircle } from 'lucide-react';
 import { Switch } from '../ui/switch';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
@@ -29,13 +29,14 @@ interface SubscriptionPlan {
   isComingSoon?: boolean;
   monthlyPriceId?: string;
   yearlyPriceId?: string;
+  isAddon?: boolean;
 }
 
 interface UserSubscription {
     id: string; // Stripe subscription ID
     status: string;
     planId: string;
-    priceId: string;
+    priceIds: string[];
     current_period_end: Date | null;
     cancel_at_period_end: boolean;
 }
@@ -46,6 +47,7 @@ export default function SubscriptionManager() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [addonPlan, setAddonPlan] = useState<SubscriptionPlan | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState<Record<string, boolean>>({});
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
@@ -56,24 +58,20 @@ export default function SubscriptionManager() {
     if (!user) return;
     const fetchPlans = async () => {
       try {
-        const q = query(collection(db, 'subscriptions'), where('isActive', '==', true));
+        const q = query(collection(db, 'subscriptions'));
         const querySnapshot = await getDocs(q);
         const fetchedPlans: SubscriptionPlan[] = [];
         querySnapshot.forEach((doc) => {
           fetchedPlans.push({ id: doc.id, ...doc.data() } as SubscriptionPlan);
         });
         
-        fetchedPlans.sort((a, b) => {
-          const aIsFree = a.priceMonthly === 0 && a.priceYearly === 0;
-          const bIsFree = b.priceMonthly === 0 && b.priceYearly === 0;
+        const mainPlans = fetchedPlans.filter(p => !p.isAddon && p.isActive);
+        mainPlans.sort((a, b) => a.priceMonthly - b.priceMonthly);
+        setPlans(mainPlans);
 
-          if (aIsFree && !bIsFree) return 1; 
-          if (!aIsFree && bIsFree) return -1;
-          
-          return a.priceMonthly - b.priceMonthly;
-        });
+        const foundAddon = fetchedPlans.find(p => p.isAddon);
+        setAddonPlan(foundAddon || null);
 
-        setPlans(fetchedPlans);
       } catch (error) {
         console.error("Error fetching plans:", error);
         toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar los planes.' });
@@ -92,14 +90,13 @@ export default function SubscriptionManager() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
         const docData = snapshot.docs[0].data();
-
         const firestoreTimestamp = docData.current_period_end;
         
         const subData: UserSubscription = {
             id: docData.id,
             status: docData.status,
             planId: docData.planId,
-            priceId: docData.priceId,
+            priceIds: docData.priceIds || [docData.priceId],
             cancel_at_period_end: docData.cancel_at_period_end,
             current_period_end: firestoreTimestamp?.toDate() ?? null,
         };
@@ -136,24 +133,37 @@ export default function SubscriptionManager() {
       const res = await fetch('/api/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.uid, priceId, planId: plan.id }),
+        body: JSON.stringify({ 
+            userId: user.uid, 
+            priceId, 
+            planId: plan.id,
+            isAddon: plan.isAddon,
+        }),
       });
 
       if (!res.ok) {
-        const { message } = await res.json();
-        throw new Error(message || 'No se pudo iniciar el proceso de pago.');
+        const body = await res.json();
+        throw new Error(body.message || 'No se pudo iniciar el proceso de pago.');
       }
 
-      const { sessionId } = await res.json();
+      const { sessionId, success, message } = await res.json();
+      
+      // Handle direct add-on success
+      if (success && message) {
+          toast({ title: "Éxito", description: message });
+          setIsProcessing({ [plan.id]: false });
+          return;
+      }
+
       const stripe = await stripePromise;
-      if (stripe) {
+      if (stripe && sessionId) {
         const { error } = await stripe.redirectToCheckout({ sessionId });
         if (error) {
           throw new Error(error.message);
         }
       }
     } catch (error: any) {
-      console.error("Error creating checkout session:", error);
+      console.error("Error in subscription process:", error);
       toast({ variant: 'destructive', title: 'Error de Pago', description: error.message });
     } finally {
       setIsProcessing({ [plan.id]: false });
@@ -180,6 +190,7 @@ export default function SubscriptionManager() {
      }
   };
 
+  const addonInstancesCount = subscription?.priceIds.filter(pId => pId === addonPlan?.monthlyPriceId || pId === addonPlan?.yearlyPriceId).length || 0;
 
   if (isLoading) {
     return <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin" /></div>;
@@ -213,104 +224,111 @@ export default function SubscriptionManager() {
                 ) : (
                     <p className="text-sm font-semibold">Fecha de renovación no disponible.</p>
                 )}
+                {addonInstancesCount > 0 && (
+                    <p className="text-sm mt-2">
+                        Tienes <span className="font-semibold">{addonInstancesCount}</span> instancia(s) adicional(es) activa(s).
+                    </p>
+                )}
                 {subscription.cancel_at_period_end && (
                     <Badge variant="destructive" className="mt-2 block w-fit">Cancelación programada.</Badge>
                 )}
             </CardContent>
-            <CardFooter>
+            <CardFooter className="flex flex-col sm:flex-row gap-2 items-start">
                  <Button onClick={handleManageSubscription} disabled={isProcessing.manage}>
                     {isProcessing.manage ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
                     Gestionar Suscripción y Pagos
                 </Button>
+                {addonPlan && (
+                    <Button variant="outline" onClick={() => handleSubscribe(addonPlan)} disabled={isProcessing[addonPlan.id]}>
+                         {isProcessing[addonPlan.id] ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlusCircle className="mr-2 h-4 w-4"/>}
+                        Añadir Instancia Adicional (${addonPlan.priceMonthly}/mes)
+                    </Button>
+                )}
             </CardFooter>
         </Card>
       )}
 
-      <div className="flex items-center justify-center space-x-2">
-        <Label htmlFor="billingCycle" className={billingCycle === 'monthly' ? 'text-foreground font-semibold' : 'text-muted-foreground'}>Mensual</Label>
-        <Switch 
-            id="billingCycle"
-            checked={billingCycle === 'yearly'}
-            onCheckedChange={(checked) => setBillingCycle(checked ? 'yearly' : 'monthly')}
-            disabled={!!subscription}
-        />
-        <Label htmlFor="billingCycle" className={billingCycle === 'yearly' ? 'text-foreground font-semibold' : 'text-muted-foreground'}>Anual (Ahorra ~20%)</Label>
-      </div>
+      {!subscription && (
+        <>
+        <div className="flex items-center justify-center space-x-2">
+            <Label htmlFor="billingCycle" className={billingCycle === 'monthly' ? 'text-foreground font-semibold' : 'text-muted-foreground'}>Mensual</Label>
+            <Switch 
+                id="billingCycle"
+                checked={billingCycle === 'yearly'}
+                onCheckedChange={(checked) => setBillingCycle(checked ? 'yearly' : 'monthly')}
+            />
+            <Label htmlFor="billingCycle" className={billingCycle === 'yearly' ? 'text-foreground font-semibold' : 'text-muted-foreground'}>Anual (Ahorra ~20%)</Label>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {plans.map((plan) => {
-          const isCurrentPlan = subscription?.planId === plan.id;
-          const isSubscribed = !!subscription;
-          const isDisabled = isSubscribed || plan.isComingSoon;
-
-          return (
-          <Card key={plan.id} className={cn(
-            "flex flex-col transition-shadow hover:shadow-xl", 
-            isCurrentPlan && "ring-2 ring-primary shadow-lg",
-            plan.isComingSoon && "bg-muted/50"
-          )}>
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <CardTitle className="flex items-center">
-                   <Sparkles className="h-5 w-5 mr-2 text-primary"/>
-                   {plan.name}
-                </CardTitle>
-                {plan.isComingSoon && <Badge variant="secondary" className="bg-blue-100 text-blue-800">Próximamente</Badge>}
-              </div>
-              <CardDescription>
-                {plan.priceMonthly === 0 && plan.priceYearly === 0 ? (
-                    <span className="text-3xl font-bold text-foreground">
-                        Personalizado
-                    </span>
-                ) : (
-                    <>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {plans.map((plan) => (
+            <Card key={plan.id} className={cn(
+                "flex flex-col transition-shadow hover:shadow-xl", 
+                plan.isComingSoon && "bg-muted/50"
+            )}>
+                <CardHeader>
+                <div className="flex justify-between items-start">
+                    <CardTitle className="flex items-center">
+                    <Sparkles className="h-5 w-5 mr-2 text-primary"/>
+                    {plan.name}
+                    </CardTitle>
+                    {plan.isComingSoon && <Badge variant="secondary" className="bg-blue-100 text-blue-800">Próximamente</Badge>}
+                </div>
+                <CardDescription>
+                    {plan.priceMonthly === 0 && plan.priceYearly === 0 ? (
                         <span className="text-3xl font-bold text-foreground">
-                            ${billingCycle === 'monthly' ? plan.priceMonthly : plan.priceYearly}
+                            Personalizado
                         </span>
-                        /{billingCycle === 'monthly' ? 'mes' : 'año'}
-                    </>
+                    ) : (
+                        <>
+                            <span className="text-3xl font-bold text-foreground">
+                                ${billingCycle === 'monthly' ? plan.priceMonthly : plan.priceYearly}
+                            </span>
+                            /{billingCycle === 'monthly' ? 'mes' : 'año'}
+                        </>
+                    )}
+                </CardDescription>
+                </CardHeader>
+                <CardContent className="flex-grow">
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                    {plan.features.map((feature, index) => (
+                    <li key={index} className="flex items-center">
+                        <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
+                        {feature}
+                    </li>
+                    ))}
+                </ul>
+                </CardContent>
+                <CardFooter>
+                {plan.priceMonthly === 0 && plan.priceYearly === 0 ? (
+                    <Button asChild className="w-full" variant="outline">
+                    <a 
+                        href={`https://wa.me/528118627025?text=${encodeURIComponent('quiero plan personalizado de qyvoo')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <MessageSquare className="mr-2 h-4 w-4" />
+                        Contactar a Venta
+                    </a>
+                    </Button>
+                ) : (
+                    <Button 
+                    className="w-full" 
+                    onClick={() => handleSubscribe(plan)}
+                    disabled={isProcessing[plan.id] || plan.isComingSoon}
+                    >
+                    {isProcessing[plan.id] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 
+                    plan.isComingSoon ? <Clock className="mr-2 h-4 w-4" /> : 
+                    <CreditCard className="mr-2 h-4 w-4" />}
+                    {plan.isComingSoon ? "Próximamente" : "Suscribirse"}
+                    </Button>
                 )}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex-grow">
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                {plan.features.map((feature, index) => (
-                  <li key={index} className="flex items-center">
-                    <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-            <CardFooter>
-              {plan.priceMonthly === 0 && plan.priceYearly === 0 ? (
-                 <Button asChild className="w-full" variant="outline">
-                   <a 
-                     href={`https://wa.me/528118627025?text=${encodeURIComponent('quiero plan personalizado de qyvoo')}`}
-                     target="_blank"
-                     rel="noopener noreferrer"
-                   >
-                     <MessageSquare className="mr-2 h-4 w-4" />
-                     Contactar a Venta
-                   </a>
-                 </Button>
-              ) : (
-                <Button 
-                  className="w-full" 
-                  onClick={() => handleSubscribe(plan)}
-                  disabled={isProcessing[plan.id] || isDisabled}
-                >
-                  {isProcessing[plan.id] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 
-                   plan.isComingSoon ? <Clock className="mr-2 h-4 w-4" /> :
-                   isCurrentPlan ? <CheckCircle className="mr-2 h-4 w-4" /> : 
-                   <CreditCard className="mr-2 h-4 w-4" />}
-                  {isCurrentPlan ? "Tu Plan Actual" : plan.isComingSoon ? "Próximamente" : "Suscribirse"}
-                </Button>
-              )}
-            </CardFooter>
-          </Card>
-        )})}
-      </div>
+                </CardFooter>
+            </Card>
+            ))}
+        </div>
+        </>
+      )}
     </div>
   );
 }

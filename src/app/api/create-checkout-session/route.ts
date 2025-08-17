@@ -1,7 +1,7 @@
 
 import { stripe } from '@/lib/stripe';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { NextResponse } from 'next/server';
 import type Stripe from 'stripe';
 
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   }
   
   try {
-    const { userId, priceId, planId } = await req.json();
+    const { userId, priceId, planId, isAddon = false } = await req.json();
 
     if (!userId || !priceId || !planId) {
       return new NextResponse('Missing required parameters', { status: 400 });
@@ -31,21 +31,41 @@ export async function POST(req: Request) {
     const userData = userDocSnap.data();
     let stripeCustomerId = userData.stripeCustomerId;
 
+    // --- Create Stripe Customer if they don't have one ---
     if (!stripeCustomerId) {
-      // Create a new Stripe customer
       const customer = await stripe.customers.create({
         email: userData.email,
         name: userData.fullName,
-        metadata: {
-          firebaseUID: userId,
-        },
+        metadata: { firebaseUID: userId },
       });
       stripeCustomerId = customer.id;
-      // Save the new Stripe customer ID to Firestore
       await setDoc(userDocRef, { stripeCustomerId }, { merge: true });
     }
-    
-    // --- 2. Fetch Plan Data to check for trial ---
+
+    // --- 2. Check for an existing subscription ---
+    const subscriptionsRef = collection(db, 'users', userId, 'subscriptions');
+    const q = query(subscriptionsRef, where('status', 'in', ['trialing', 'active']), limit(1));
+    const subscriptionSnapshot = await getDocs(q);
+    const existingSubscription = !subscriptionSnapshot.empty ? subscriptionSnapshot.docs[0].data() : null;
+
+    // --- 3. Handle Add-on purchase to existing subscription ---
+    if (isAddon && existingSubscription) {
+        const subscription = await stripe.subscriptions.retrieve(existingSubscription.id);
+
+        await stripe.subscriptionItems.create({
+            subscription: subscription.id,
+            price: priceId,
+            quantity: 1,
+            // Proration is enabled by default. Stripe will create an immediate invoice for the new item.
+        });
+
+        // Since this doesn't use a checkout session, we return a success message directly.
+        // The webhook will handle the Firestore update.
+        return NextResponse.json({ success: true, message: 'Add-on agregado exitosamente. Refresca la página en un momento.' });
+    }
+
+
+    // --- 4. Handle NEW subscription checkout ---
     const planDocRef = doc(db, 'subscriptions', planId);
     const planDocSnap = await getDoc(planDocRef);
 
@@ -58,7 +78,6 @@ export async function POST(req: Request) {
 
     const origin = req.headers.get('origin') || 'http://localhost:3000';
 
-    // --- 3. Build the session parameters ---
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
       payment_method_types: ['card'],
       line_items: [{
@@ -82,14 +101,12 @@ export async function POST(req: Request) {
       },
     };
     
-    // Add trial period if applicable
     if (isTrial && trialDays) {
         if(sessionParams.subscription_data) {
             sessionParams.subscription_data.trial_period_days = trialDays;
         }
     }
 
-    // --- 4. Create Stripe Checkout session ---
     const session = await stripe.checkout.sessions.create(sessionParams);
 
     return NextResponse.json({ sessionId: session.id });

@@ -10,17 +10,23 @@ const relevantEvents = new Set([
   'checkout.session.completed',
   'customer.subscription.updated',
   'customer.subscription.deleted',
+  'invoice.payment_succeeded', // Listen for this to catch add-on payments
 ]);
 
 // Helper function to create a consistent subscription data object for Firestore
 const toSubscriptionModel = (subscription: Stripe.Subscription, userId: string, planId?: string) => {
+    // Determine the primary planId. If there are multiple items, we might need a more complex logic.
+    // For now, we prioritize the planId from metadata, then the first subscription item.
+    const primaryItem = subscription.items.data[0];
+    const resolvedPlanId = planId || subscription.metadata.planId || primaryItem.metadata.planId;
+
     return {
         id: subscription.id,
         userId: userId,
         status: subscription.status,
-        planId: planId || subscription.metadata.planId, // Use provided planId or from subscription metadata
-        priceId: subscription.items.data[0].price.id,
-        // Robust handling of the end date.
+        planId: resolvedPlanId,
+        // Store all price IDs to handle multiple items like add-ons
+        priceIds: subscription.items.data.map(item => item.price.id),
         current_period_end: subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null,
         created: subscription.created ? new Date(subscription.created * 1000) : null,
         cancel_at_period_end: subscription.cancel_at_period_end,
@@ -74,14 +80,12 @@ export async function POST(req: Request) {
         
         const subscription = await stripe.subscriptions.retrieve(session.subscription.toString());
         
-        // Use the helper to create the data object
         const subscriptionData = toSubscriptionModel(subscription, session.metadata.firebaseUID, session.metadata.planId);
         
         const subscriptionRef = doc(db, 'users', session.metadata.firebaseUID, 'subscriptions', subscription.id);
         console.log(`Attempting to write subscription data to Firestore at path: ${subscriptionRef.path}`);
         await setDoc(subscriptionRef, subscriptionData);
 
-        // Also update the main user doc with the stripe customer ID if it's not there
         const userRef = doc(db, 'users', session.metadata.firebaseUID);
         await setDoc(userRef, { stripeCustomerId: subscription.customer.toString() }, { merge: true });
 
@@ -94,7 +98,6 @@ export async function POST(req: Request) {
         console.log(`Processing ${event.type}...`);
         const subscription = event.data.object as Stripe.Subscription;
         
-        // Get user ID from subscription metadata (more reliable)
         const userId = subscription.metadata.firebaseUID;
         
         if (!userId) {
@@ -102,7 +105,6 @@ export async function POST(req: Request) {
           throw new Error('User ID not found in subscription metadata.');
         }
         
-        // Use the helper to create the data object, it will get planId from metadata
         const subscriptionData = toSubscriptionModel(subscription, userId);
         
         const subscriptionRef = doc(db, 'users', userId, 'subscriptions', subscription.id);
@@ -112,6 +114,26 @@ export async function POST(req: Request) {
         console.log(`Subscription ${subscription.id} for user ${userId} updated/deleted.`);
         break;
       }
+       case 'invoice.payment_succeeded': {
+        console.log('Processing invoice.payment_succeeded...');
+        const invoice = event.data.object as Stripe.Invoice;
+
+        // An add-on was added, so we need to update the subscription document in Firestore
+        // to reflect the new state (e.g., new price, new items).
+        if (invoice.subscription) {
+            const subscription = await stripe.subscriptions.retrieve(invoice.subscription.toString());
+            const userId = subscription.metadata.firebaseUID;
+            
+            if (userId) {
+                const subscriptionData = toSubscriptionModel(subscription, userId);
+                const subscriptionRef = doc(db, 'users', userId, 'subscriptions', subscription.id);
+                await setDoc(subscriptionRef, subscriptionData, { merge: true });
+                console.log(`Subscription ${subscription.id} updated due to add-on payment.`);
+            }
+        }
+        break;
+      }
+
       default:
         console.warn(`Unhandled relevant event type: ${event.type}`);
     }
