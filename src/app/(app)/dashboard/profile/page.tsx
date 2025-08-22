@@ -468,7 +468,7 @@ export default function ProfilePage() {
         </div>
       </form>
       
-      {user.role !== 'agent' && (
+      {user.role === 'owner' && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center text-2xl">
