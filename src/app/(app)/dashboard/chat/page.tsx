@@ -155,7 +155,7 @@ export default function ChatPage() {
   const searchParams = useSearchParams();
   const router = useRouter(); 
   const isMobile = useIsMobile();
-  const dataFetchUserId = user?.role === 'agent' ? user?.ownerId : user?.uid;
+  const dataFetchUserId = user?.ownerId || user?.uid;
 
   const [whatsAppInstance, setWhatsAppInstance] = useState<WhatsAppInstance | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);

@@ -87,8 +87,10 @@ export default function ConfigurationPage() {
   const [demoPhoneNumber, setDemoPhoneNumber] = useState('');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   
+  const dataFetchUserId = user?.ownerId || user?.uid;
+  
   const handleSaveInstanceSettings = async () => {
-      if (!user || !whatsAppInstance) {
+      if (!dataFetchUserId || !whatsAppInstance) {
         toast({ variant: "destructive", title: "Error", description: "No se puede guardar la configuración sin una instancia o usuario autenticado." });
         return;
       }
@@ -102,7 +104,7 @@ export default function ConfigurationPage() {
       };
     
       try {
-        await setDoc(doc(db, 'instances', user.uid), updatedInstance, { merge: true });
+        await setDoc(doc(db, 'instances', dataFetchUserId), updatedInstance, { merge: true });
         setWhatsAppInstance(updatedInstance); // Update local state
         toast({ title: "Configuración Actualizada", description: "La configuración de la instancia ha sido guardada." });
         // Update local form state from the newly saved instance state
@@ -133,7 +135,7 @@ export default function ConfigurationPage() {
   }, []);
 
   const fetchAndUpdateInstanceInfo = useCallback(async (instanceToRefresh: WhatsAppInstance, showToast = true) => {
-    if (!user) {
+    if (!dataFetchUserId) {
       if (showToast) toast({ variant: "destructive", title: "Error", description: "Debes estar autenticado." });
       return false;
     }
@@ -174,7 +176,7 @@ export default function ConfigurationPage() {
       const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceName: instanceToRefresh.name, userId: user.uid }),
+        body: JSON.stringify({ instanceName: instanceToRefresh.name, userId: dataFetchUserId }),
       });
 
       const responseDataArray = await response.json();
@@ -189,7 +191,7 @@ export default function ConfigurationPage() {
         const errorDetail = responseDataArray[0]?.data?.[0]?.message || responseDataArray[0]?.data?.message || responseDataArray[0]?.error || "Formato de datos de instancia incorrecto o no exitoso.";
         
         if (errorDetail.toLowerCase().includes('instance not found') || errorDetail.toLowerCase().includes('not found')) {
-          await deleteDoc(doc(db, 'instances', user.uid));
+          await deleteDoc(doc(db, 'instances', dataFetchUserId));
           setWhatsAppInstance(null);
           if (showToast) toast({ title: "Instancia no encontrada", description: "La instancia fue eliminada de Qyvoo y de tu configuración." });
           setIsLoading(false);
@@ -210,7 +212,7 @@ export default function ConfigurationPage() {
       
       const fullyUpdatedInstance = { ...instanceToRefresh, ...updatedInstanceData };
       
-      await setDoc(doc(db, 'instances', user.uid), fullyUpdatedInstance, { merge: true });
+      await setDoc(doc(db, 'instances', dataFetchUserId), fullyUpdatedInstance, { merge: true });
       setWhatsAppInstance(fullyUpdatedInstance);
       // Update local settings state after fetch
       setChatbotEnabled(fullyUpdatedInstance.chatbotEnabled ?? true);
@@ -225,14 +227,14 @@ export default function ConfigurationPage() {
       setIsLoading(false);
       return false;
     }
-  }, [user, toast, mapWebhookStatus]);
+  }, [dataFetchUserId, toast, mapWebhookStatus]);
 
   useEffect(() => {
     const loadInstance = async () => {
-      if (user) {
+      if (dataFetchUserId) {
         setIsPageLoading(true);
         try {
-          const instanceDocRef = doc(db, 'instances', user.uid);
+          const instanceDocRef = doc(db, 'instances', dataFetchUserId);
           const instanceDocSnap = await getDoc(instanceDocRef);
 
           if (instanceDocSnap.exists()) {
@@ -259,7 +261,7 @@ export default function ConfigurationPage() {
       }
     };
     loadInstance();
-  }, [user, toast, fetchAndUpdateInstanceInfo]);
+  }, [dataFetchUserId, toast, fetchAndUpdateInstanceInfo]);
 
 
   const form = useForm<AddInstanceFormData>({
@@ -281,7 +283,7 @@ export default function ConfigurationPage() {
 
 
   async function onSubmitAddInstance(values: AddInstanceFormData) {
-    if (!user) {
+    if (!dataFetchUserId || !user) {
       toast({ variant: "destructive", title: "Error", description: "Debes estar autenticado." });
       return;
     }
@@ -322,7 +324,7 @@ export default function ConfigurationPage() {
       const requestBody: any = {
         instanceName: values.instanceName,
         phoneNumber: values.phoneNumber, 
-        userId: user.uid, 
+        userId: dataFetchUserId, 
       };
       const response = await fetch(webhookUrl, {
         method: 'POST',
@@ -362,14 +364,14 @@ export default function ConfigurationPage() {
         qrCodeUrl: qrCodeFromCreate || null,
         connectionWebhookUrl: webhookData.data.connectionWebhookUrl || instanceData.connectionWebhookUrl || null,
         _count: { Message: 0, Contact: 0, Chat: 0 }, 
-        userId: user.uid,
+        userId: dataFetchUserId,
         userEmail: user.email,
         chatbotEnabled: true, // Default to true
         demo: false, // Default to false
         demoPhoneNumber: '', // Default to empty
       };
       
-      await setDoc(doc(db, 'instances', user.uid), newInstance);
+      await setDoc(doc(db, 'instances', dataFetchUserId), newInstance);
       setWhatsAppInstance(newInstance);
       
       if (qrCodeFromCreate) {
@@ -388,7 +390,7 @@ export default function ConfigurationPage() {
   }
 
   const handleDeleteInstanceClick = () => {
-    if (!user || !whatsAppInstance) {
+    if (!dataFetchUserId || !whatsAppInstance) {
       toast({ variant: "destructive", title: "Error", description: "No hay instancia para eliminar o no estás autenticado." });
       return;
     }
@@ -398,7 +400,7 @@ export default function ConfigurationPage() {
   };
 
   const confirmDeleteInstance = async () => {
-    if (!user || !whatsAppInstance) return; 
+    if (!dataFetchUserId || !whatsAppInstance) return; 
 
     setIsLoading(true);
     setIsDeleteDialogOpen(false);
@@ -439,7 +441,7 @@ export default function ConfigurationPage() {
       const response = await fetch(webhookUrl, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceName: whatsAppInstance.name, userId: user.uid }) 
+        body: JSON.stringify({ instanceName: whatsAppInstance.name, userId: dataFetchUserId }) 
       });
       console.log("Webhook response status:", response.status);
 
@@ -463,8 +465,8 @@ export default function ConfigurationPage() {
         console.log("Webhook delete_instance successful or instance not found (which is OK for deletion).");
       }
 
-      console.log("Deleting instance from Firestore for user:", user.uid);
-      await deleteDoc(doc(db, 'instances', user.uid));
+      console.log("Deleting instance from Firestore for user:", dataFetchUserId);
+      await deleteDoc(doc(db, 'instances', dataFetchUserId));
       setWhatsAppInstance(null);
       toast({ title: "Instancia Eliminada", description: "La instancia de Qyvoo ha sido eliminada de tu configuración." });
 
@@ -479,7 +481,7 @@ export default function ConfigurationPage() {
 
 
   const handleConnectInstance = async () => {
-    if (!user || !whatsAppInstance) return;
+    if (!dataFetchUserId || !whatsAppInstance) return;
     setIsLoading(true);
 
     const useTestWebhook = process.env.NEXT_PUBLIC_USE_TEST_WEBHOOK !== 'false';
@@ -517,7 +519,7 @@ export default function ConfigurationPage() {
       const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceName: whatsAppInstance.name, userId: user.uid }),
+        body: JSON.stringify({ instanceName: whatsAppInstance.name, userId: dataFetchUserId }),
       });
       const responseDataArray = await response.json();
 
@@ -544,7 +546,7 @@ export default function ConfigurationPage() {
       const instanceToUpdate = { ...(whatsAppInstance || {}), ...newInstanceData } as WhatsAppInstance;
       setWhatsAppInstance(instanceToUpdate); 
       if (whatsAppInstance) { 
-         await setDoc(doc(db, 'instances', user.uid), instanceToUpdate , { merge: true }); 
+         await setDoc(doc(db, 'instances', dataFetchUserId) , instanceToUpdate , { merge: true }); 
       }
       
       toast({ title: "Código QR Generado", description: "Escanea el código QR para conectar tu instancia." });

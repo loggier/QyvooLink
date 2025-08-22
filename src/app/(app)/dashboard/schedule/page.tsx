@@ -56,7 +56,7 @@ export default function SchedulePage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
 
-  const dataFetchUserId = user?.role === 'agent' ? user?.ownerId : user?.uid;
+  const dataFetchUserId = user?.ownerId || user?.uid;
 
   const fetchAppointmentsForDay = useCallback(async (date: Date) => {
     if (!user?.organizationId) return;

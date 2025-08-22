@@ -43,8 +43,8 @@ interface NavGroup {
   title: string;
   shortTitle: string;
   icon: React.ElementType;
-  items: (NavItem & { restrictedTo?: ('owner' | 'admin')[] })[];
-  restrictedTo?: ('owner' | 'admin')[];
+  items: (NavItem & { restrictedTo?: ('owner' | 'admin' | 'manager')[] })[];
+  restrictedTo?: ('owner' | 'admin' | 'manager')[];
   adminOnly?: boolean;
 }
 
@@ -65,10 +65,10 @@ const navStructure: (NavItem | NavGroup)[] = [
     title: 'Administración',
     shortTitle: 'Admin',
     icon: Briefcase,
-    restrictedTo: ['owner', 'admin'],
+    restrictedTo: ['owner', 'admin', 'manager'],
     items: [
       { href: '/dashboard/bots', label: 'Mis Bots', icon: Bot },
-      { href: '/dashboard/team', label: 'Equipo', icon: Users2 },
+      { href: '/dashboard/team', label: 'Equipo', icon: Users2, restrictedTo: ['owner', 'admin'] },
       { href: '/dashboard/configuration', label: 'Configuración', icon: Settings },
       { href: '/dashboard/reports', label: 'Reportes', icon: BarChart2 },
     ]
@@ -114,10 +114,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const visibleNavStructure = navStructure.map(item => {
     if (isGroup(item)) {
       if (item.adminOnly && userRole !== 'admin') return null;
-      if (item.restrictedTo && !item.restrictedTo.includes(userRole as 'owner' | 'admin')) return null;
+      if (item.restrictedTo && !item.restrictedTo.includes(userRole as 'owner' | 'admin' | 'manager')) return null;
       
       const visibleItems = item.items.filter(subItem => {
-        if (subItem.restrictedTo && !subItem.restrictedTo.includes(userRole as 'owner' | 'admin')) {
+        if (subItem.restrictedTo && !subItem.restrictedTo.includes(userRole as 'owner' | 'admin' | 'manager')) {
           return false;
         }
         return true;

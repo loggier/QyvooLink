@@ -75,7 +75,7 @@ export default function ContactsPage() {
   const { toast } = useToast();
   const router = useRouter();
 
-  const dataFetchUserId = user?.role === 'agent' ? user?.ownerId : user?.uid;
+  const dataFetchUserId = user?.ownerId || user?.uid;
 
   const [contacts, setContacts] = useState<ContactDetails[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);

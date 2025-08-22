@@ -44,11 +44,13 @@ export default function QuickRepliesPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [replyToDelete, setReplyToDelete] = useState<QuickReply | null>(null);
 
+  const dataFetchUserId = user?.ownerId || user?.uid;
+
   const fetchQuickReplies = useCallback(async () => {
-    if (!user) return;
+    if (!dataFetchUserId) return;
     setIsLoading(true);
     try {
-      const q = query(collection(db, 'quickReplies'), where('userId', '==', user.uid));
+      const q = query(collection(db, 'quickReplies'), where('userId', '==', dataFetchUserId));
       const querySnapshot = await getDocs(q);
       const fetchedReplies: QuickReply[] = [];
       querySnapshot.forEach((docSnap) => {
@@ -63,7 +65,7 @@ export default function QuickRepliesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, toast]);
+  }, [dataFetchUserId, toast]);
 
   useEffect(() => {
     fetchQuickReplies();
@@ -93,7 +95,7 @@ export default function QuickRepliesPage() {
 
   const handleSubmitForm = async (e: FormEvent) => {
     e.preventDefault();
-    if (!user || !currentFormData.tag.trim() || !currentFormData.message.trim()) {
+    if (!dataFetchUserId || !currentFormData.tag.trim() || !currentFormData.message.trim()) {
       toast({ variant: "destructive", title: "Error de Validación", description: "El tag y el mensaje no pueden estar vacíos." });
       return;
     }
@@ -111,7 +113,7 @@ export default function QuickRepliesPage() {
       } else {
         // Add new reply
         await addDoc(collection(db, 'quickReplies'), {
-          userId: user.uid,
+          userId: dataFetchUserId,
           tag: currentFormData.tag,
           message: currentFormData.message,
           createdAt: serverTimestamp(),
