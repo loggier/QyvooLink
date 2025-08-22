@@ -46,11 +46,11 @@ export async function POST(req: Request) {
     const subscriptionsRef = collection(db, 'users', userId, 'subscriptions');
     const q = query(subscriptionsRef, where('status', 'in', ['trialing', 'active']), limit(1));
     const subscriptionSnapshot = await getDocs(q);
-    const existingSubscription = !subscriptionSnapshot.empty ? subscriptionSnapshot.docs[0].data() : null;
+    const existingSubscriptionDoc = !subscriptionSnapshot.empty ? subscriptionSnapshot.docs[0] : null;
 
     // --- 3. Handle Add-on purchase to existing subscription ---
-    if (isAddon && existingSubscription) {
-        const subscription = await stripe.subscriptions.retrieve(existingSubscription.id);
+    if (isAddon && existingSubscriptionDoc) {
+        const subscription = await stripe.subscriptions.retrieve(existingSubscriptionDoc.id);
 
         await stripe.subscriptionItems.create({
             subscription: subscription.id,

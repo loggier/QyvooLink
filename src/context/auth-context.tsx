@@ -5,7 +5,6 @@ import type { User as FirebaseUser } from 'firebase/auth';
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { auth, db, serverTimestamp } from '@/lib/firebase'; // Import serverTimestamp
 import {
-  onAuthStateChanged,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
@@ -50,23 +49,25 @@ interface UserProfile {
   employeeCount?: string;
   timezone?: string;
   workSchedule?: WorkSchedule;
-  role?: 'owner' | 'admin' | 'agent'; // User role within the organization
-  organizationId?: string; // ID of the organization the user belongs to
-  ownerId?: string; // UID of the organization's owner
-  createdAt?: Timestamp; // Registration date
-  lastLogin?: Timestamp; // Last login date
-  isActive?: boolean; // Account status
-  isVip?: boolean; // VIP access flag
+  role?: 'owner' | 'admin' | 'agent' | 'manager'; // Added manager role
+  organizationId?: string; 
+  ownerId?: string; 
+  managedBy?: string; // UID of the owner who manages this user
+  createdAt?: Timestamp; 
+  lastLogin?: Timestamp; 
+  isActive?: boolean; 
+  isVip?: boolean; 
   subscriptionStatus?: 'active' | 'trialing' | 'canceled' | 'inactive';
-  isChatbotGloballyEnabled?: boolean; // Global bot status
-  demo?: boolean; // Demo mode status
-  onboardingCompleted?: boolean; // Onboarding status
+  isChatbotGloballyEnabled?: boolean; 
+  demo?: boolean; 
+  onboardingCompleted?: boolean; 
 }
 
 interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
   registerUser: (data: RegisterFormData, invitationId?: string | null) => Promise<UserCredential | void>;
+  createManagedUser: (data: { fullName: string; company: string; email: string; password: string }) => Promise<void>;
   loginUser: (data: LoginFormData) => Promise<UserCredential | void>;
   logoutUser: () => Promise<void>;
   updateUserPassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -114,9 +115,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         }
 
-        // Fetch organization owner ID if the user is not the owner
-        let ownerId = dbData.role === 'owner' ? firebaseUser.uid : undefined;
-        if (dbData.organizationId && dbData.role !== 'owner') {
+        // Determine ownerId for data fetching
+        let ownerId = dbData.managedBy || (dbData.role === 'owner' ? firebaseUser.uid : undefined);
+        if (!ownerId && dbData.organizationId && dbData.role !== 'owner') {
           const orgDocRef = doc(db, 'organizations', dbData.organizationId);
           const orgDocSnap = await getDoc(orgDocRef);
           if (orgDocSnap.exists()) {
@@ -161,6 +162,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           role: dbData.role || 'agent',
           organizationId: dbData.organizationId,
           ownerId: ownerId,
+          managedBy: dbData.managedBy,
           createdAt: dbData.createdAt,
           lastLogin: dbData.lastLogin,
           isActive: dbData.isActive ?? true,
@@ -334,6 +336,66 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const createManagedUser = async (data: { fullName: string; company: string; email: string; password: string }) => {
+    if (!user || user.role !== 'owner') {
+        throw new Error("Solo los propietarios pueden crear instancias gestionadas.");
+    }
+    // This is a placeholder for a more secure, backend-driven user creation process
+    // In a real-world scenario, this should be an HTTP call to a Cloud Function
+    
+    // 1. Check if user already exists
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('email', '==', data.email));
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+        throw new Error("Un usuario con este correo electrónico ya existe.");
+    }
+
+    // This is highly insecure and for DEMO purposes only.
+    // A Cloud Function should be used to create the user without exposing sensitive operations to the client.
+    try {
+        // Create a new isolated organization for the manager
+        const orgRef = await addDoc(collection(db, 'organizations'), {
+            name: data.company,
+            ownerId: "managed", // Indicates it's not a self-owned org
+            managedBy: user.uid,
+            createdAt: serverTimestamp()
+        });
+        
+        // This part would be in a Cloud Function
+        // const newUserRecord = await admin.auth().createUser({ email: data.email, password: data.password });
+        // For the client, we can't create users directly with password. We'll simulate this.
+        // This will fail on client, but it illustrates the logic.
+        // We'll just create the Firestore document.
+        
+        const newUserProfile = {
+            // Cannot create user with password from client, this needs a backend function
+            // We'll create the doc but the user cannot log in
+            email: data.email,
+            fullName: data.fullName,
+            company: data.company,
+            role: 'manager',
+            organizationId: orgRef.id,
+            managedBy: user.uid,
+            createdAt: serverTimestamp(),
+            lastLogin: null,
+            isActive: true,
+            isVip: false,
+            onboardingCompleted: true, // They are managed, so they skip onboarding
+        };
+        // In a real app, you would get the UID from the created auth user
+        // and use that UID for the doc ID. Here we can't.
+        // This demonstrates the need for a backend function.
+        // For now, we will add the doc, but it won't correspond to a real auth user.
+        await addDoc(usersRef, newUserProfile);
+        // A Cloud Function would then send a welcome email with the temp password.
+
+    } catch (error: any) {
+         console.error("Error creating managed user:", error);
+         throw new Error("No se pudo crear el usuario gestionado. Esto requiere una función de backend segura.");
+    }
+  };
+
 
   const loginUser = async (data: LoginFormData) => {
     setLoading(true);
@@ -427,7 +489,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 
   return (
-    <AuthContext.Provider value={{ user, loading, registerUser, loginUser, logoutUser, updateUserPassword, sendPasswordReset }}>
+    <AuthContext.Provider value={{ user, loading, registerUser, createManagedUser, loginUser, logoutUser, updateUserPassword, sendPasswordReset }}>
       {children}
     </AuthContext.Provider>
   );
