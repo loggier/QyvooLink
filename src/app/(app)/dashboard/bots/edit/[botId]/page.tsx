@@ -32,7 +32,8 @@ export default function EditBotPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   
-  const dataFetchUserId = user?.ownerId || user?.uid;
+  // Corrected data fetching logic for managers
+  const dataFetchUserId = user?.role === 'manager' ? user.uid : user?.ownerId;
 
   const fetchBot = useCallback(async () => {
     if (!dataFetchUserId || !botId) return;
@@ -42,9 +43,9 @@ export default function EditBotPage() {
       const botDocSnap = await getDoc(botDocRef);
       if (botDocSnap.exists()) {
         const botData = { id: botDocSnap.id, ...botDocSnap.data() } as BotData;
-        // Security check: ensure the bot belongs to the user/owner.
+        // Security check: ensure the bot belongs to the user/owner/manager.
         if (botData.userId !== dataFetchUserId) {
-          toast({ variant: 'destructive', title: 'Acceso denegado' });
+          toast({ variant: 'destructive', title: 'Acceso denegado', description: "No tienes permiso para editar este bot." });
           router.push('/dashboard/bots');
           return;
         }

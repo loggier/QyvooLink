@@ -59,7 +59,8 @@ export default function BotsPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [botToDelete, setBotToDelete] = useState<BotData | null>(null);
   
-  const dataFetchUserId = user?.ownerId || user?.uid;
+  // Corrected data fetching logic for managers
+  const dataFetchUserId = user?.role === 'manager' ? user.uid : user?.ownerId;
 
   const fetchBots = useCallback(async () => {
     if (!dataFetchUserId) return;
@@ -71,7 +72,8 @@ export default function BotsPage() {
 
       // --- MIGRATION LOGIC for users with old bot config ---
       const hasBots = querySnapshot.docs.length > 0;
-      if (!hasBots && user?.role !== 'manager') { // Managers shouldn't trigger migration
+      // Managers shouldn't trigger migration for the owner's account
+      if (!hasBots && user?.role !== 'manager') { 
         const qybotDocRef = doc(db, 'qybot', dataFetchUserId);
         const qybotDocSnap = await getDoc(qybotDocRef);
         

@@ -4,6 +4,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
+import { useAuth } from '@/context/auth-context';
 
 /**
  * This page is obsolete and has been replaced by the flow in `/dashboard/bots`.
@@ -11,8 +12,10 @@ import { Loader2 } from 'lucide-react';
  */
 export default function ObsoleteBotConfigPage() {
   const router = useRouter();
+  const { user } = useAuth(); // It's good practice to ensure user context is available if needed for routing logic
 
   useEffect(() => {
+    // Basic redirect is usually sufficient.
     router.replace('/dashboard/bots');
   }, [router]);
 
