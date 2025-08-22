@@ -126,7 +126,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         }
         
-        const dataFetchUserId = ownerId || firebaseUser.uid;
+        const dataFetchUserId = dbData.managedBy || (dbData.role === 'manager' ? firebaseUser.uid : ownerId || firebaseUser.uid);
 
         const instanceDocRef = doc(db, 'instances', dataFetchUserId);
         const subscriptionsRef = collection(db, 'users', dataFetchUserId, 'subscriptions');
@@ -335,8 +335,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!owner || !user || user.role !== 'owner') {
         throw new Error("Solo los propietarios pueden crear instancias gestionadas.");
     }
-    
-    // Check if user already exists in Firestore
+
     const usersRef = collection(db, 'users');
     const q = query(usersRef, where('email', '==', data.email));
     const querySnapshot = await getDocs(q);
@@ -345,33 +344,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
-        // Create the user in Firebase Auth
+        // We cannot directly create a user without signing them in on the client.
+        // The robust way is a Firebase Function.
+        // A client-side workaround is to notify the user of the auth state change.
+        // For this implementation, we will assume this is an acceptable UX.
         const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
         const newFirebaseUser = userCredential.user;
 
-        // Re-authenticate the owner to keep their session active
-        const ownerEmail = owner.email;
-        if (ownerEmail) {
-            // This is a simplified re-auth. In a real-world scenario with secure password handling,
-            // you might need a different approach, but this works for session management.
-            // We assume the owner is recently logged in.
-            await signInWithEmailAndPassword(auth, ownerEmail, ''); // This will fail without the password.
-                                                                     // A better approach is to not sign out the owner.
-                                                                     // createUserWithEmailAndPassword signs in the new user.
-                                                                     // We need to sign back in the owner.
-        }
-        // Actually, let's just re-fetch the owner's state after this operation.
-        // The most important part is creating the Firestore document for the new user.
-
-        // Create a new organization for the managed user
+        // The new user is now signed in. We create their profile.
         const orgRef = await addDoc(collection(db, 'organizations'), {
             name: data.company,
-            ownerId: newFirebaseUser.uid, // The manager is the "owner" of their own org
+            ownerId: newFirebaseUser.uid,
             managedBy: user.uid,
             createdAt: serverTimestamp()
         });
 
-        // Create the user profile in Firestore
         const newUserProfile = {
             uid: newFirebaseUser.uid,
             email: data.email,
@@ -388,22 +375,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         };
         await setDoc(doc(db, 'users', newFirebaseUser.uid), newUserProfile);
 
-        // Sign the owner back in to restore their session.
-        // IMPORTANT: This part is tricky without having the owner's password.
-        // A better flow would be to use a backend function (Firebase Function) to create the user,
-        // which avoids messing with the owner's client-side auth state.
-        // For this context, we will re-sign in the original user. This is a simplification.
-        if (auth.currentUser?.uid !== owner.uid) {
-            // This re-login is problematic without the password.
-            // The onAuthStateChanged should handle the user switch, but it might be jarring.
-            // A more robust solution is out of scope for this interactive model.
-            // We will let onAuthStateChanged handle the user object update.
-        }
-
+        // After creating the managed user, we sign out to allow the owner to log back in.
+        // This is not ideal UX, but it's the simplest secure approach without a backend function.
+        await firebaseSignOut(auth);
+        router.push('/login'); // Redirect owner to login page
+        // A toast message will be shown on the Team page upon successful creation, before this sign-out.
+        
     } catch (error: any) {
          console.error("Error creating managed user:", error);
          if (error.code === 'auth/email-already-in-use') {
              throw new Error("Este correo electrónico ya está registrado en el sistema de autenticación.");
+         }
+         // Sign the owner back in if user creation failed before sign-out
+         if (owner && auth.currentUser?.uid !== owner.uid) {
+            // This is complex without the password. The user will have to manually log back in.
+            await firebaseSignOut(auth);
+            router.push('/login');
          }
          throw new Error("No se pudo crear el usuario gestionado. Revisa la consola para más detalles.");
     }
