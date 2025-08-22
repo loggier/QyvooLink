@@ -87,7 +87,10 @@ export default function ConfigurationPage() {
   const [demoPhoneNumber, setDemoPhoneNumber] = useState('');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   
-  const dataFetchUserId = user?.ownerId || user?.uid;
+  // CRITICAL FIX: Correctly determine the user ID for data fetching.
+  // A 'manager' manages their own instance using their 'uid'.
+  // 'owner', 'admin', 'agent' all operate on the 'ownerId's instance.
+  const dataFetchUserId = user?.role === 'manager' ? user?.uid : user?.ownerId;
   
   const handleSaveInstanceSettings = async () => {
       if (!dataFetchUserId || !whatsAppInstance) {
