@@ -24,7 +24,7 @@ import { db } from '@/lib/firebase';
 import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore'; 
 
 const phoneRegex = new RegExp(
-  /^([+]?[\s0-9]+)?(\d{3}|[(]?[0-9]+[)])?([-]?[\s]?[0-9])+$/
+  /^\d{10,15}$/
 );
 
 const instanceNameRegex = /^[a-zA-Z0-9_.-]+$/;
@@ -33,7 +33,7 @@ const addInstanceSchema = z.object({
   instanceName: z.string()
     .min(3, { message: "El nombre de la instancia debe tener al menos 3 caracteres." })
     .regex(instanceNameRegex, { message: "El nombre solo puede contener letras, números y los caracteres . - _" }),
-  phoneNumber: z.string().regex(phoneRegex, { message: "Número de teléfono inválido." })
+  phoneNumber: z.string().regex(phoneRegex, { message: "Número de teléfono inválido. Solo números, sin espacios ni símbolos." })
 });
 
 type AddInstanceFormData = z.infer<typeof addInstanceSchema>;
@@ -91,8 +91,6 @@ export default function ConfigurationPage() {
   const [demoPhoneNumber, setDemoPhoneNumber] = useState('');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   
-  // A 'manager' manages their own instance using their 'uid'.
-  // 'owner', 'admin', 'agent' all operate on the 'ownerId's instance.
   const dataFetchUserId = user?.role === 'manager' ? user?.uid : user?.ownerId;
   
   const handleSaveInstanceSettings = async () => {
@@ -898,7 +896,12 @@ export default function ConfigurationPage() {
         </>
       )}
 
-      <Dialog open={isQrCodeModalOpen} onOpenChange={setIsQrCodeModalOpen}>
+      <Dialog open={isQrCodeModalOpen} onOpenChange={(isOpen) => {
+        setIsQrCodeModalOpen(isOpen);
+        if (!isOpen && whatsAppInstance) {
+          handleRefreshWrapper();
+        }
+      }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Escanea el Código QR</DialogTitle>
