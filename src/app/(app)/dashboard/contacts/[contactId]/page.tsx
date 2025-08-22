@@ -108,7 +108,7 @@ export default function ContactDetailPage() {
   const router = useRouter();
   const { toast } = useToast();
   
-  const dataFetchUserId = user?.ownerId || user?.uid;
+  const dataFetchUserId = user?.role === 'manager' ? user.uid : user?.ownerId;
 
   const contactId = typeof params.contactId === 'string' ? params.contactId : '';
 

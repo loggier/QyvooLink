@@ -44,7 +44,7 @@ export default function QuickRepliesPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [replyToDelete, setReplyToDelete] = useState<QuickReply | null>(null);
 
-  const dataFetchUserId = user?.ownerId || user?.uid;
+  const dataFetchUserId = user?.role === 'manager' ? user.uid : user?.ownerId;
 
   const fetchQuickReplies = useCallback(async () => {
     if (!dataFetchUserId) return;
