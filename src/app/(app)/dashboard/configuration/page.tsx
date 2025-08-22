@@ -27,8 +27,12 @@ const phoneRegex = new RegExp(
   /^([+]?[\s0-9]+)?(\d{3}|[(]?[0-9]+[)])?([-]?[\s]?[0-9])+$/
 );
 
+const instanceNameRegex = /^[a-zA-Z0-9_.-]+$/;
+
 const addInstanceSchema = z.object({
-  instanceName: z.string().min(3, { message: "El nombre de la instancia debe tener al menos 3 caracteres." }),
+  instanceName: z.string()
+    .min(3, { message: "El nombre de la instancia debe tener al menos 3 caracteres." })
+    .regex(instanceNameRegex, { message: "El nombre solo puede contener letras, números y los caracteres . - _" }),
   phoneNumber: z.string().regex(phoneRegex, { message: "Número de teléfono inválido." })
 });
 
@@ -87,7 +91,6 @@ export default function ConfigurationPage() {
   const [demoPhoneNumber, setDemoPhoneNumber] = useState('');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   
-  // CRITICAL FIX: Correctly determine the user ID for data fetching.
   // A 'manager' manages their own instance using their 'uid'.
   // 'owner', 'admin', 'agent' all operate on the 'ownerId's instance.
   const dataFetchUserId = user?.role === 'manager' ? user?.uid : user?.ownerId;
@@ -635,7 +638,7 @@ export default function ConfigurationPage() {
                           <FormItem>
                             <FormLabel>Nombre de la Instancia</FormLabel>
                             <FormControl>
-                              <Input placeholder="Ej: Mi Negocio Principal" {...field} />
+                              <Input placeholder="Ej: Mi_Negocio_Principal" {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -648,7 +651,7 @@ export default function ConfigurationPage() {
                           <FormItem>
                             <FormLabel>Número de Teléfono (con código de país)</FormLabel>
                             <FormControl>
-                              <Input type="tel" placeholder="+1234567890" {...field} />
+                              <Input type="tel" placeholder="521234567890" {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
