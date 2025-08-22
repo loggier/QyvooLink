@@ -121,14 +121,12 @@ export default function TeamPage() {
 
     setIsLoading(true);
     try {
-      // Fetch team members in the owner's organization
       const usersQuery = query(collection(db, 'users'), where('organizationId', '==', user.organizationId));
       const invitationsQuery = query(
           collection(db, 'invitations'), 
           where('organizationId', '==', user.organizationId),
           where('status', '==', 'pending')
       );
-      // Fetch users managed by the owner
       const managedQuery = query(collection(db, 'users'), where('managedBy', '==', user.uid));
       
       const [usersSnapshot, invitationsSnapshot, managedSnapshot] = await Promise.all([
@@ -241,7 +239,7 @@ export default function TeamPage() {
         await updateDoc(userDocRef, { role: selectedRole });
         toast({ title: "Rol Actualizado", description: `El rol de ${memberToEdit.fullName} ahora es ${selectedRole}.` });
         setIsRoleDialogOpen(false);
-        await fetchData(); // Refresh the list
+        await fetchData();
       } catch (error) {
         console.error("Error updating role:", error);
         toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar el rol del miembro.' });
@@ -285,11 +283,8 @@ export default function TeamPage() {
         const userDocRef = doc(db, 'users', memberToRemove.uid);
         
         if (memberToRemove.role === 'manager') {
-            // Hard delete for managed instances
             await deleteDoc(userDocRef);
-             // TODO: Decrement subscription quantity in Stripe
         } else {
-            // Soft delete for team members
             await updateDoc(userDocRef, {
                 isActive: false,
                 organizationId: null,
@@ -317,7 +312,6 @@ export default function TeamPage() {
     
     setIsProcessing({ invite: true });
     try {
-      // 1. Check if user with this email is already in THIS organization
       const usersRef = collection(db, 'users');
       const userQuery = query(usersRef, where('email', '==', inviteEmail.trim()), where('organizationId', '==', user.organizationId));
       const userSnapshot = await getDocs(userQuery);
@@ -332,7 +326,6 @@ export default function TeamPage() {
         return;
       }
       
-      // 2. Check if there's a PENDING invitation for this email in this organization
       const invitationsRef = collection(db, 'invitations');
       const invQuery = query(invitationsRef, where('inviteeEmail', '==', inviteEmail.trim()), where('organizationId', '==', user.organizationId), where('status', '==', 'pending'));
       const invSnapshot = await getDocs(invQuery);
@@ -347,7 +340,6 @@ export default function TeamPage() {
         return;
       }
       
-      // 3. Create a new invitation document
       const organizationName = user.company || `${user.fullName}'s Team`;
       const newInvitationRef = await addDoc(invitationsRef, {
         organizationId: user.organizationId,
@@ -360,12 +352,11 @@ export default function TeamPage() {
         createdAt: serverTimestamp(),
       });
       
-      // 4. Send the invitation email with the unique tokenized link
       await sendInvitationEmail({
         inviteeEmail: inviteEmail.trim(),
         organizationName: organizationName,
         inviterName: user.fullName || user.email || 'Un miembro del equipo',
-        invitationId: newInvitationRef.id, // Pass the unique ID
+        invitationId: newInvitationRef.id,
       });
 
       toast({
@@ -415,7 +406,7 @@ export default function TeamPage() {
       }
   }
 
-  const availableSlots = addonSlots - managedInstances.length;
+  const availableSlots = user?.isVip ? (user.vipInstanceLimit || 0) - managedInstances.length : addonSlots - managedInstances.length;
 
   return (
     <div className="space-y-6">
@@ -447,15 +438,24 @@ export default function TeamPage() {
                 <CardTitle>Resumen de Instancias Adicionales</CardTitle>
             </CardHeader>
             <CardContent>
-                <p>Has comprado <span className="font-bold text-primary">{addonSlots}</span> espacio(s) para instancias adicionales.</p>
-                <p>Actualmente estás usando <span className="font-bold text-primary">{managedInstances.length}</span> de tus espacios.</p>
-                <p className="font-semibold mt-2">Espacios disponibles: {availableSlots}</p>
-                {availableSlots <= 0 && <p className="text-sm text-muted-foreground mt-1">Para añadir más instancias, ve a tu perfil y gestiona tu suscripción.</p>}
+              {user.isVip ? (
+                <>
+                  <p>Tu cuenta VIP tiene un límite de <span className="font-bold text-primary">{user.vipInstanceLimit || 0}</span> instancia(s).</p>
+                  <p>Actualmente estás usando <span className="font-bold text-primary">{managedInstances.length}</span>.</p>
+                </>
+              ) : (
+                <>
+                  <p>Has comprado <span className="font-bold text-primary">{addonSlots}</span> espacio(s) para instancias adicionales.</p>
+                  <p>Actualmente estás usando <span className="font-bold text-primary">{managedInstances.length}</span> de tus espacios.</p>
+                </>
+              )}
+                <p className="font-semibold mt-2">Espacios disponibles: {availableSlots > 0 ? availableSlots : 0}</p>
+                {availableSlots <= 0 && !user.isVip && <p className="text-sm text-muted-foreground mt-1">Para añadir más instancias, ve a tu perfil y gestiona tu suscripción.</p>}
+                {availableSlots <= 0 && user.isVip && <p className="text-sm text-muted-foreground mt-1">Has alcanzado tu límite de instancias VIP. Contacta al administrador para aumentarlo.</p>}
             </CardContent>
         </Card>
       )}
 
-      {/* Managed Instances Table */}
       {user?.role === 'owner' && (
         <Card>
           <CardHeader>
@@ -569,7 +569,6 @@ export default function TeamPage() {
         </CardContent>
       </Card>
       
-      {/* Pending Invitations Table */}
       {(user?.role === 'owner' || user?.role === 'admin') && invitations.length > 0 && (
           <Card>
               <CardHeader>
@@ -608,7 +607,6 @@ export default function TeamPage() {
           </Card>
       )}
 
-      {/* Role Management Dialog */}
       <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -642,7 +640,6 @@ export default function TeamPage() {
         </DialogContent>
       </Dialog>
       
-      {/* Remove Member Confirmation Dialog */}
       <AlertDialog open={isRemoveDialogOpen} onOpenChange={setIsRemoveDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -663,7 +660,6 @@ export default function TeamPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Invitation Dialog */}
       <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -709,7 +705,6 @@ export default function TeamPage() {
         </DialogContent>
       </Dialog>
       
-      {/* Create Managed Instance Dialog */}
       <Dialog open={isManagerFormOpen} onOpenChange={setIsManagerFormOpen}>
         <DialogContent>
             <DialogHeader>

@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type ChangeEvent } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, getDoc, updateDoc, Timestamp, query, where, collectionGroup, limit } from 'firebase/firestore';
@@ -19,9 +19,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Shield, Wifi, Bot, Users, MessagesSquare, CalendarDays, TrendingUp, ShieldCheck, Clock, XCircle, Star, AlertCircle } from 'lucide-react';
-import { differenceInDays, formatDistanceToNow } from 'date-fns';
+import { Loader2, Shield, Wifi, Bot, Users, MessagesSquare, CalendarDays, TrendingUp, ShieldCheck, Clock, XCircle, Star, AlertCircle, Save } from 'lucide-react';
+import { differenceInDays, formatDistanceToNow } from 'fns';
 import { es } from 'date-fns/locale';
 
 interface SubscriptionDetails {
@@ -40,22 +41,21 @@ interface AdminViewUser {
   createdAt?: Timestamp;
   lastLogin?: Timestamp;
   isActive: boolean;
-  isVip?: boolean; // Added VIP status
+  isVip?: boolean;
+  vipInstanceLimit?: number; // New field for instance limit
   instanceStatus?: 'Conectado' | 'Desconectado' | 'Pendiente' | 'No Configurada';
   botConfigured: boolean;
   instanceName?: string;
-  // --- Deprecated fields due to high read cost. Should be moved to aggregated data. ---
   contactCount: number | 'N/A';
   totalMessages: number | 'N/A';
   botMessages: number | 'N/A';
-  // --- End of deprecated fields ---
   subscription?: SubscriptionDetails | null;
 }
 
 interface DashboardStats {
   totalUsers: number;
   activeInstances: number;
-  totalMessages: number | 'N/A'; // Now can be N/A
+  totalMessages: number | 'N/A';
   configuredBots: number;
   activeSubscriptions: number;
   estimatedMRR: number;
@@ -72,6 +72,8 @@ export default function AdminDashboardPage() {
   const [selectedUserForDateChange, setSelectedUserForDateChange] = useState<AdminViewUser | null>(null);
   const [newRegistrationDate, setNewRegistrationDate] = useState<Date | undefined>(new Date());
   const [isSavingDate, setIsSavingDate] = useState(false);
+  
+  const [isSavingLimit, setIsSavingLimit] = useState<Record<string, boolean>>({});
 
   const fetchAllUsersData = useCallback(async () => {
     if (!user || user.role !== 'admin') {
@@ -81,7 +83,6 @@ export default function AdminDashboardPage() {
 
     setIsLoading(true);
     try {
-      // --- Fetch global data once ---
       const [usersQuerySnapshot, plansSnapshot, allSubscriptionsSnapshot] = await Promise.all([
         getDocs(collection(db, 'users')),
         getDocs(collection(db, 'subscriptions')),
@@ -91,7 +92,6 @@ export default function AdminDashboardPage() {
       const plansMap = new Map<string, any>();
       plansSnapshot.forEach(doc => plansMap.set(doc.id, { ...doc.data(), id: doc.id }));
 
-      // --- Calculate global stats ---
       let estimatedMRR = 0;
       allSubscriptionsSnapshot.forEach(subDoc => {
           const sub = subDoc.data();
@@ -109,7 +109,6 @@ export default function AdminDashboardPage() {
         const userData = userDoc.data();
         const uid = userDoc.id;
 
-        // Fetch user-specific data that is NOT read-intensive
         const [instanceDocSnap, botDocSnap, userSubscriptionsSnapshot] = await Promise.all([
           getDoc(doc(db, 'instances', uid)),
           getDoc(doc(db, 'qybot', uid)),
@@ -146,13 +145,6 @@ export default function AdminDashboardPage() {
             }
         }
         
-        // IMPORTANT: The following stats are extremely expensive to calculate on the fly.
-        // They should be calculated and stored periodically by a backend job (e.g., a scheduled Cloud Function).
-        // For now, we display 'N/A' to prevent massive read costs.
-        const contactCount: number | 'N/A' = 'N/A';
-        const totalMessages: number | 'N/A' = 'N/A';
-        const botMessages: number | 'N/A' = 'N/A';
-
         return {
           uid,
           fullName: userData.fullName || 'N/A',
@@ -161,12 +153,13 @@ export default function AdminDashboardPage() {
           lastLogin: userData.lastLogin,
           isActive: userData.isActive ?? true,
           isVip: userData.isVip ?? false,
+          vipInstanceLimit: userData.vipInstanceLimit || 1, // Default to 1 if VIP
           instanceStatus,
           botConfigured: botDocSnap.exists() && !!botDocSnap.data().promptXml,
           instanceName,
-          contactCount,
-          totalMessages,
-          botMessages,
+          contactCount: 'N/A',
+          totalMessages: 'N/A',
+          botMessages: 'N/A',
           subscription: subscriptionData,
         };
       });
@@ -182,7 +175,7 @@ export default function AdminDashboardPage() {
       setStats({
         totalUsers: filteredUsers.length,
         activeInstances,
-        totalMessages: 'N/A', // Set to N/A to avoid expensive calculation
+        totalMessages: 'N/A',
         configuredBots,
         activeSubscriptions: allSubscriptionsSnapshot.size,
         estimatedMRR: estimatedMRR,
@@ -208,7 +201,6 @@ export default function AdminDashboardPage() {
     const userToUpdate = users.find(u => u.uid === uid);
     if (!userToUpdate) return;
   
-    // Optimistic UI update
     setUsers(prevUsers =>
       prevUsers.map(u =>
         u.uid === uid ? { ...u, [field]: !currentValue } : u
@@ -224,7 +216,6 @@ export default function AdminDashboardPage() {
         description: `El ${fieldName.toLowerCase()} de ${userToUpdate.email} ha sido ${action}.`,
       });
     } catch (error) {
-      // Revert UI on error
       setUsers(prevUsers =>
         prevUsers.map(u =>
           u.uid === uid ? { ...u, [field]: currentValue } : u
@@ -237,6 +228,34 @@ export default function AdminDashboardPage() {
         description: `No se pudo actualizar el ${field.toLowerCase()} del usuario.`,
       });
     }
+  };
+
+  const handleInstanceLimitChange = (uid: string, value: string) => {
+    const limit = parseInt(value, 10);
+    setUsers(prevUsers =>
+      prevUsers.map(u =>
+        u.uid === uid ? { ...u, vipInstanceLimit: isNaN(limit) ? 0 : limit } : u
+      )
+    );
+  };
+  
+  const handleSaveInstanceLimit = async (uid: string) => {
+      const userToUpdate = users.find(u => u.uid === uid);
+      if (!userToUpdate || typeof userToUpdate.vipInstanceLimit !== 'number') return;
+  
+      setIsSavingLimit(prev => ({ ...prev, [uid]: true }));
+      try {
+          await updateDoc(doc(db, 'users', uid), { vipInstanceLimit: userToUpdate.vipInstanceLimit });
+          toast({
+              title: "Límite Actualizado",
+              description: `El límite de instancias para ${userToUpdate.email} ha sido guardado.`
+          });
+      } catch (error) {
+          console.error("Error saving instance limit:", error);
+          toast({ variant: "destructive", title: "Error", description: "No se pudo guardar el límite de instancias." });
+      } finally {
+          setIsSavingLimit(prev => ({ ...prev, [uid]: false }));
+      }
   };
 
 
@@ -273,7 +292,6 @@ export default function AdminDashboardPage() {
   const formatDate = (date?: Date | Timestamp | null) => {
     if (!date) return 'N/A';
     const dateObj = date instanceof Timestamp ? date.toDate() : date;
-    // Add a more robust check for a valid date
     if (!dateObj || isNaN(dateObj.getTime()) || dateObj.getFullYear() < 1971) {
         return 'N/A';
     }
@@ -465,6 +483,21 @@ export default function AdminDashboardPage() {
                             aria-label={`Activar o desactivar el acceso VIP para ${u.email}`}
                            />
                        </div>
+                        {u.isVip && (
+                            <div className="flex items-center justify-end space-x-1 mt-1">
+                                <Input
+                                    type="number"
+                                    className="h-7 w-16 text-xs"
+                                    placeholder="Límite"
+                                    value={u.vipInstanceLimit || ''}
+                                    onChange={(e) => handleInstanceLimitChange(u.uid, e.target.value)}
+                                    min="1"
+                                />
+                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSaveInstanceLimit(u.uid)} disabled={isSavingLimit[u.uid]}>
+                                    {isSavingLimit[u.uid] ? <Loader2 className="h-4 w-4 animate-spin"/> : <Save className="h-4 w-4" />}
+                                </Button>
+                            </div>
+                        )}
                       <Button variant="outline" size="icon" onClick={() => handleOpenDateDialog(u)} title="Cambiar fecha de registro">
                         <CalendarDays className="h-4 w-4" />
                       </Button>

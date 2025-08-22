@@ -50,14 +50,15 @@ interface UserProfile {
   employeeCount?: string;
   timezone?: string;
   workSchedule?: WorkSchedule;
-  role?: 'owner' | 'admin' | 'agent' | 'manager'; // Added manager role
+  role?: 'owner' | 'admin' | 'agent' | 'manager'; 
   organizationId?: string; 
   ownerId?: string; 
-  managedBy?: string; // UID of the owner who manages this user
+  managedBy?: string; 
   createdAt?: Timestamp; 
   lastLogin?: Timestamp; 
   isActive?: boolean; 
   isVip?: boolean; 
+  vipInstanceLimit?: number; // New field for VIP instance limit
   subscriptionStatus?: 'active' | 'trialing' | 'canceled' | 'inactive';
   isChatbotGloballyEnabled?: boolean; 
   demo?: boolean; 
@@ -116,7 +117,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         }
 
-        // Determine ownerId for data fetching
         let ownerId = dbData.managedBy || (dbData.role === 'owner' ? firebaseUser.uid : undefined);
         if (!ownerId && dbData.organizationId && dbData.role !== 'owner') {
           const orgDocRef = doc(db, 'organizations', dbData.organizationId);
@@ -168,6 +168,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           lastLogin: dbData.lastLogin,
           isActive: dbData.isActive ?? true,
           isVip: dbData.isVip ?? false,
+          vipInstanceLimit: dbData.vipInstanceLimit,
           subscriptionStatus: subscriptionStatus,
           isChatbotGloballyEnabled: instanceData.chatbotEnabled ?? true,
           demo: instanceData.demo ?? false,
@@ -189,7 +190,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         let firebaseUser: FirebaseUser | null = null;
         let isExistingUser = false;
 
-        // --- Invitation Flow ---
         if (invitationId) {
             const invDocRef = doc(db, 'invitations', invitationId);
             const invDocSnap = await getDoc(invDocRef);
@@ -200,12 +200,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             
             const invitationData = invDocSnap.data();
             
-            // Check if a user with this email already exists in Firebase Auth
             const q = query(collection(db, 'users'), where('email', '==', data.email));
             const existingUserSnapshot = await getDocs(q);
             
             if (!existingUserSnapshot.empty) {
-                // User already exists, link them to the new organization
                 isExistingUser = true;
                 const existingUserDoc = existingUserSnapshot.docs[0];
                 firebaseUser = { uid: existingUserDoc.id, email: data.email } as FirebaseUser;
@@ -214,17 +212,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     organizationId: invitationData.organizationId,
                     role: invitationData.role,
                     company: invitationData.organizationName,
-                    isActive: true, // Reactivate if they were inactive
+                    isActive: true, 
                 });
             } else {
-                // New user, create them in Firebase Auth
                 const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
                 firebaseUser = userCredential.user;
             }
             
             if (!firebaseUser) throw new Error("No se pudo obtener la información del usuario.");
 
-            // Create or update the user's profile in Firestore
             const userProfileData = {
                 uid: firebaseUser.uid,
                 email: firebaseUser.email,
@@ -248,14 +244,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 acceptedByUid: firebaseUser.uid,
             });
             
-            // If it was an existing user, they might not be logged in. We log them in.
             if (isExistingUser) {
                  await signInWithEmailAndPassword(auth, data.email, data.password);
             }
 
             router.push('/dashboard');
         
-        // --- Standard Registration Flow ---
         } else {
             const usersRef = collection(db, 'users');
             const q = query(usersRef, where('username', '==', data.username));
@@ -291,7 +285,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             };
             await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
             
-            // Send notifications
             try {
                 await sendWelcomeEmail({
                     userEmail: data.email,
@@ -341,10 +334,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!user || user.role !== 'owner') {
         throw new Error("Solo los propietarios pueden crear instancias gestionadas.");
     }
-    // This is a placeholder for a more secure, backend-driven user creation process
-    // In a real-world scenario, this should be an HTTP call to a Cloud Function
     
-    // 1. Check if user already exists
     const usersRef = collection(db, 'users');
     const q = query(usersRef, where('email', '==', data.email));
     const querySnapshot = await getDocs(q);
@@ -352,26 +342,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         throw new Error("Un usuario con este correo electrónico ya existe.");
     }
 
-    // This is highly insecure and for DEMO purposes only.
-    // A Cloud Function should be used to create the user without exposing sensitive operations to the client.
     try {
-        // Create a new isolated organization for the manager
         const orgRef = await addDoc(collection(db, 'organizations'), {
             name: data.company,
-            ownerId: "managed", // Indicates it's not a self-owned org
+            ownerId: "managed", 
             managedBy: user.uid,
             createdAt: serverTimestamp()
         });
         
-        // This part would be in a Cloud Function
-        // const newUserRecord = await admin.auth().createUser({ email: data.email, password: data.password });
-        // For the client, we can't create users directly with password. We'll simulate this.
-        // This will fail on client, but it illustrates the logic.
-        // We'll just create the Firestore document.
-        
         const newUserProfile = {
-            // Cannot create user with password from client, this needs a backend function
-            // We'll create the doc but the user cannot log in
             email: data.email,
             fullName: data.fullName,
             company: data.company,
@@ -382,14 +361,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             lastLogin: null,
             isActive: true,
             isVip: false,
-            onboardingCompleted: true, // They are managed, so they skip onboarding
+            onboardingCompleted: true, 
         };
-        // In a real app, you would get the UID from the created auth user
-        // and use that UID for the doc ID. Here we can't.
-        // This demonstrates the need for a backend function.
-        // For now, we will add the doc, but it won't correspond to a real auth user.
         await addDoc(usersRef, newUserProfile);
-        // A Cloud Function would then send a welcome email with the temp password.
 
     } catch (error: any) {
          console.error("Error creating managed user:", error);
@@ -413,7 +387,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     await firebaseSignOut(auth);
                     throw new Error("Tu cuenta ha sido desactivada por un administrador.");
                 }
-                // Update last login timestamp
                 await updateDoc(userDocRef, {
                     lastLogin: serverTimestamp(),
                 });
