@@ -23,22 +23,15 @@ export default function AuthenticatedAppLayout({ children }: { children: ReactNo
       return;
     }
     
-    // --- Subscription check (only for owners and managers) ---
-    if (user.role === 'owner' || user.role === 'manager') {
+    // --- Subscription check (only for owners) ---
+    if (user.role === 'owner') {
       const hasActiveSubscription = user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing';
       const isVip = user.isVip === true;
       const isAllowed = hasActiveSubscription || isVip;
       
       const allowedPathsWithoutSub = ['/subscribe', '/dashboard/profile'];
-
-      // Managers don't see the subscribe page, so we redirect them to a waiting page if sub is inactive
-      if (user.role === 'manager' && !isAllowed) {
-          // You can create a dedicated page for this state, for now, we redirect to dashboard
-          // where they won't be able to do much.
-          console.log("Manager's subscription is not active. Limited access.");
-      }
       
-      if (user.role === 'owner' && !isAllowed && !allowedPathsWithoutSub.some(p => pathname.startsWith(p))) {
+      if (!isAllowed && !allowedPathsWithoutSub.some(p => pathname.startsWith(p))) {
         router.replace('/subscribe');
         return; 
       }
@@ -51,7 +44,8 @@ export default function AuthenticatedAppLayout({ children }: { children: ReactNo
         '/dashboard/configuration',
         '/dashboard/reports',
         '/dashboard/team',
-        '/dashboard/subscriptions', // Assuming a future page
+        '/admin', // Block all admin routes
+        '/subscribe',
       ];
 
       if (agentRestrictedPaths.some(p => pathname.startsWith(p))) {
@@ -64,6 +58,7 @@ export default function AuthenticatedAppLayout({ children }: { children: ReactNo
        const managerRestrictedPaths = [
          '/dashboard/team', // Managers shouldn't see the team/instances of the owner
          '/subscribe', // Managers don't handle subscriptions
+         '/admin', // Block all admin routes
        ];
        if (managerRestrictedPaths.some(p => pathname.startsWith(p))) {
          router.replace('/dashboard');
@@ -85,11 +80,11 @@ export default function AuthenticatedAppLayout({ children }: { children: ReactNo
   const isRedirecting = () => {
       if (!user) return true; // Will be redirected to login
       if (user.role === 'agent') {
-          const agentRestrictedPaths = ['/dashboard/bots', '/dashboard/configuration', '/dashboard/reports', '/dashboard/team'];
+          const agentRestrictedPaths = ['/dashboard/bots', '/dashboard/configuration', '/dashboard/reports', '/dashboard/team', '/admin', '/subscribe'];
           return agentRestrictedPaths.some(p => pathname.startsWith(p));
       }
       if (user.role === 'manager') {
-          const managerRestrictedPaths = ['/dashboard/team', '/subscribe'];
+          const managerRestrictedPaths = ['/dashboard/team', '/subscribe', '/admin'];
           return managerRestrictedPaths.some(p => pathname.startsWith(p));
       }
       if (user.role === 'owner') {

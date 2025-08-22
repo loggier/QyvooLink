@@ -23,7 +23,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 
-interface ContactDetails {
+export interface ContactDetails {
   id: string; // Firestore document ID
   nombre?: string;
   apellido?: string;

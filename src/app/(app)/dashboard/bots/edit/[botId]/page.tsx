@@ -31,16 +31,19 @@ export default function EditBotPage() {
   const [bot, setBot] = useState<BotData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  
+  const dataFetchUserId = user?.ownerId || user?.uid;
 
   const fetchBot = useCallback(async () => {
-    if (!user || !botId) return;
+    if (!dataFetchUserId || !botId) return;
     setIsLoading(true);
     try {
       const botDocRef = doc(db, 'bots', botId);
       const botDocSnap = await getDoc(botDocRef);
       if (botDocSnap.exists()) {
         const botData = { id: botDocSnap.id, ...botDocSnap.data() } as BotData;
-        if (botData.userId !== user.uid) {
+        // Security check: ensure the bot belongs to the user/owner.
+        if (botData.userId !== dataFetchUserId) {
           toast({ variant: 'destructive', title: 'Acceso denegado' });
           router.push('/dashboard/bots');
           return;
@@ -56,7 +59,7 @@ export default function EditBotPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, botId, toast, router]);
+  }, [dataFetchUserId, botId, toast, router]);
 
   useEffect(() => {
     fetchBot();

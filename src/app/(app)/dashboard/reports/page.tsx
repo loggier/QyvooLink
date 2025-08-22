@@ -59,14 +59,16 @@ export default function ReportsPage() {
   const [messagesByDay, setMessagesByDay] = useState<MessagesByDay[]>([]);
   const [topContacts, setTopContacts] = useState<TopContact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  const dataFetchUserId = user?.ownerId || user?.uid;
 
   const fetchReportData = useCallback(async () => {
-    if (!user) return;
+    if (!dataFetchUserId) return;
     setIsLoading(true);
 
     try {
       // 1. Obtener la instancia del usuario
-      const instanceDocRef = doc(db, 'instances', user.uid);
+      const instanceDocRef = doc(db, 'instances', dataFetchUserId);
       const instanceDocSnap = await getDoc(instanceDocRef);
       if (!instanceDocSnap.exists()) {
         setIsLoading(false);
@@ -127,7 +129,7 @@ export default function ReportsPage() {
       );
 
       // 5. Obtener el total de contactos
-      const contactsQuery = query(collection(db, 'contacts'), where('userId', '==', user.uid));
+      const contactsQuery = query(collection(db, 'contacts'), where('userId', '==', dataFetchUserId));
       const contactsSnapshot = await getDocs(contactsQuery);
 
       setStats({
@@ -142,7 +144,7 @@ export default function ReportsPage() {
       const sortedContacts = Object.entries(messageCountByChatId).sort(([, a], [, b]) => b - a).slice(0, 5);
       const topContactsData: TopContact[] = await Promise.all(
         sortedContacts.map(async ([chatId, messageCount]) => {
-          const contactId = `${user.uid}_${chatId.replace(/@/g, '_')}`;
+          const contactId = `${dataFetchUserId}_${chatId.replace(/@/g, '_')}`;
           const contactDocRef = doc(db, 'contacts', contactId);
           const contactDocSnap = await getDoc(contactDocRef);
           let name = chatId.split('@')[0];
@@ -160,7 +162,7 @@ export default function ReportsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [dataFetchUserId]);
 
   useEffect(() => {
     fetchReportData();

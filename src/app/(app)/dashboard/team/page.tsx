@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, type FormEvent } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, doc, updateDoc, addDoc, serverTimestamp, deleteDoc, onSnapshot, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, addDoc, serverTimestamp, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -65,7 +65,6 @@ export default function TeamPage() {
   const [isProcessing, setIsProcessing] = useState<Record<string, boolean>>({});
   
   const [addonSlots, setAddonSlots] = useState(0);
-  const [addonPlanId, setAddonPlanId] = useState<string | null>(null);
 
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
   const [memberToEdit, setMemberToEdit] = useState<TeamMember | null>(null);
@@ -83,35 +82,30 @@ export default function TeamPage() {
   const [isManagerFormOpen, setIsManagerFormOpen] = useState(false);
   const [managerForm, setManagerForm] = useState({ fullName: '', company: '', email: '', password: '' });
 
-  const fetchAddonPlan = useCallback(async () => {
-    const plansQuery = query(collection(db, 'subscriptions'), where('isAddon', '==', true), limit(1));
-    const plansSnapshot = await getDocs(plansQuery);
-    if (!plansSnapshot.empty) {
-        setAddonPlanId(plansSnapshot.docs[0].id);
-    }
-  }, []);
-
   useEffect(() => {
-    if (user?.role === 'owner') {
-      fetchAddonPlan();
-    }
-  }, [user?.role, fetchAddonPlan]);
-
-  useEffect(() => {
-    if (!user || !addonPlanId) return;
+    if (!user || user.role !== 'owner') return;
+  
     const subscriptionsRef = collection(db, 'users', user.uid, 'subscriptions');
-    const q = query(subscriptionsRef, where('status', 'in', ['trialing', 'active']), limit(1));
+    const q = query(subscriptionsRef, where('status', 'in', ['trialing', 'active']));
+  
     const unsubscribe = onSnapshot(q, (snapshot) => {
-        if (!snapshot.empty) {
-            const subData = snapshot.docs[0].data();
-            const count = subData.items?.filter((item: any) => item.price?.product === addonPlanId).reduce((acc: number, item: any) => acc + item.quantity, 0) || 0;
-            setAddonSlots(count);
-        } else {
-            setAddonSlots(0);
-        }
+      let totalAddonQuantity = 0;
+      if (!snapshot.empty) {
+        snapshot.forEach(subDoc => {
+          const subData = subDoc.data();
+          // Assuming addon price IDs are stored somewhere or identifiable
+          // This logic might need to be more robust based on your Stripe setup
+          const addonItem = subData.items?.find((item: any) => item.price?.lookup_key === 'additional_instance');
+          if (addonItem) {
+            totalAddonQuantity += addonItem.quantity || 0;
+          }
+        });
+      }
+      setAddonSlots(totalAddonQuantity);
     });
+  
     return () => unsubscribe();
-  }, [user, addonPlanId]);
+  }, [user]);
 
   const fetchData = useCallback(async () => {
     if (!user || !user.organizationId) {
@@ -204,8 +198,11 @@ export default function TeamPage() {
     if (!user) return;
     setIsProcessing({ createManager: true });
     try {
-        await createManagedUser(managerForm);
-        toast({ title: "Instancia Creada", description: "El nuevo usuario manager ha sido creado exitosamente." });
+        await createManagedUser(managerForm.email, managerForm.password, {
+            fullName: managerForm.fullName,
+            company: managerForm.company
+        });
+        toast({ title: "Instancia Creada", description: "El nuevo usuario manager ha sido creado exitosamente. Tu sesión no ha sido afectada." });
         setIsManagerFormOpen(false);
         setManagerForm({ fullName: '', company: '', email: '', password: '' });
         await fetchData();

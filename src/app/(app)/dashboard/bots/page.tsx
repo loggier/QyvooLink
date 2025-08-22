@@ -58,26 +58,28 @@ export default function BotsPage() {
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [botToDelete, setBotToDelete] = useState<BotData | null>(null);
+  
+  const dataFetchUserId = user?.ownerId || user?.uid;
 
   const fetchBots = useCallback(async () => {
-    if (!user) return;
+    if (!dataFetchUserId) return;
     setIsLoading(true);
     try {
       const botsCollectionRef = collection(db, 'bots');
-      const q = query(botsCollectionRef, where('userId', '==', user.uid), orderBy('createdAt', 'desc'));
+      const q = query(botsCollectionRef, where('userId', '==', dataFetchUserId), orderBy('createdAt', 'desc'));
       const querySnapshot = await getDocs(q);
 
       // --- MIGRATION LOGIC for users with old bot config ---
       const hasBots = querySnapshot.docs.length > 0;
-      if (!hasBots) {
-        const qybotDocRef = doc(db, 'qybot', user.uid);
+      if (!hasBots && user?.role !== 'manager') { // Managers shouldn't trigger migration
+        const qybotDocRef = doc(db, 'qybot', dataFetchUserId);
         const qybotDocSnap = await getDoc(qybotDocRef);
         
         // Check for a legacy field ('agentRole') and ensure a modern field ('activeBotId') is NOT present to prevent re-migration
         if (qybotDocSnap.exists() && qybotDocSnap.data().agentRole && !qybotDocSnap.data().activeBotId) {
           toast({ title: "Actualizando tu bot...", description: "Hemos encontrado tu configuración anterior y la estamos actualizando al nuevo formato multi-bot." });
           
-          await migrateAndActivateLegacyBot(user.uid, qybotDocSnap.data());
+          await migrateAndActivateLegacyBot(dataFetchUserId, qybotDocSnap.data());
 
           // Re-run the fetch to display the newly migrated bot
           const updatedQuerySnapshot = await getDocs(q);
@@ -97,14 +99,14 @@ export default function BotsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, toast]);
+  }, [dataFetchUserId, toast, user?.role]);
 
   useEffect(() => {
     fetchBots();
   }, [fetchBots]);
 
   const handleToggleBotStatus = async (botToToggle: BotData, shouldBeActive: boolean) => {
-    if (!user) return;
+    if (!dataFetchUserId) return;
     setIsProcessing({ [botToToggle.id]: true });
 
     if (shouldBeActive) {
@@ -129,7 +131,7 @@ export default function BotsPage() {
         batch.update(botRef, { isActive: false });
 
         // Check if this was the active bot in the main config
-        const qybotConfigRef = doc(db, 'qybot', user.uid);
+        const qybotConfigRef = doc(db, 'qybot', dataFetchUserId);
         const qybotDocSnap = await getDoc(qybotConfigRef);
 
         if (qybotDocSnap.exists() && qybotDocSnap.data().activeBotId === botToToggle.id) {
@@ -155,7 +157,7 @@ export default function BotsPage() {
 
   const handleCreateBot = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !newBotName.trim()) {
+    if (!dataFetchUserId || !newBotName.trim()) {
         toast({ variant: "destructive", title: "Error", description: "El nombre del bot es obligatorio." });
         return;
     }
@@ -163,7 +165,7 @@ export default function BotsPage() {
     
     try {
         const newBotData = {
-            userId: user.uid,
+            userId: dataFetchUserId,
             name: newBotName,
             category: newBotCategory,
             isActive: false, // Bots are created inactive by default
