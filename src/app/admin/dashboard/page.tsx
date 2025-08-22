@@ -22,7 +22,7 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Shield, Wifi, Bot, Users, MessagesSquare, CalendarDays, TrendingUp, ShieldCheck, Clock, XCircle, Star, AlertCircle, Save } from 'lucide-react';
-import { differenceInDays, formatDistanceToNow } from 'fns';
+import { differenceInDays, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 interface SubscriptionDetails {
