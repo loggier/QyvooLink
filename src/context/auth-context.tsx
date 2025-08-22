@@ -395,10 +395,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return userCredential;
     } catch (error: any) {
       console.error("Error de inicio de sesión:", error.code, error.message);
-      let errorMessage = "El correo electrónico o la contraseña son incorrectos. Por favor, inténtalo de nuevo.";
+      let errorMessage = "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.";
 
       if (error.message.includes("Tu cuenta ha sido desactivada")) {
           errorMessage = error.message;
+      } else if (error.code === 'auth/invalid-credential') {
+          errorMessage = "El correo electrónico o la contraseña son incorrectos. Por favor, inténtalo de nuevo.";
       } else if (error.code === 'auth/too-many-requests') {
           errorMessage = "El acceso a esta cuenta ha sido temporalmente deshabilitado debido a muchos intentos fallidos de inicio de sesión. Puedes restaurarlo inmediatamente restableciendo tu contraseña o puedes intentarlo de nuevo más tarde.";
       } else if (error.code === 'auth/network-request-failed') {
