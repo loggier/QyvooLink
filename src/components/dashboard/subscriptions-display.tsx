@@ -319,8 +319,9 @@ export default function SubscriptionManager() {
                     >
                     {isProcessing[plan.id] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 
                     plan.isComingSoon ? <Clock className="mr-2 h-4 w-4" /> : 
+                    plan.isTrial ? <Sparkles className="mr-2 h-4 w-4" /> :
                     <CreditCard className="mr-2 h-4 w-4" />}
-                    {plan.isComingSoon ? "Próximamente" : "Suscribirse"}
+                    {plan.isComingSoon ? "Próximamente" : plan.isTrial ? `Empezar Prueba de ${plan.trialDays} Días` : "Suscribirse"}
                     </Button>
                 )}
                 </CardFooter>

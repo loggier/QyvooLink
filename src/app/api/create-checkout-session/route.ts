@@ -101,7 +101,7 @@ export async function POST(req: Request) {
       },
     };
     
-    if (isTrial && trialDays) {
+    if (isTrial && trialDays && !existingSubscriptionDoc) {
         if(sessionParams.subscription_data) {
             sessionParams.subscription_data.trial_period_days = trialDays;
         }
