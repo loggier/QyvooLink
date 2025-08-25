@@ -39,10 +39,22 @@ export async function POST(req: Request) {
     const managerDocSnap = await managerDocRef.get();
 
     if (!managerDocSnap.exists) {
-      return NextResponse.json({ error: 'El usuario a eliminar no fue encontrado.' }, { status: 404 });
+      // If the document doesn't exist, maybe it was already deleted.
+      // We can try to delete the auth user anyway to be sure.
+      try {
+        await adminAuth.deleteUser(managerUid);
+        console.log(`Successfully deleted orphaned auth user: ${managerUid}`);
+        return NextResponse.json({ success: true, message: 'La instancia (huérfana) ha sido eliminada.' });
+      } catch(authError: any) {
+         if (authError.code === 'auth/user-not-found') {
+            return NextResponse.json({ error: 'El usuario a eliminar no fue encontrado.' }, { status: 404 });
+         }
+         throw authError;
+      }
     }
 
     const managerData = managerDocSnap.data();
+    // CORRECTED LOGIC: Check if the manager's managedBy field matches the UID of the person making the request.
     if (managerData?.managedBy !== ownerUid) {
       return NextResponse.json({ error: 'Permiso denegado: No tienes permiso para eliminar este usuario.' }, { status: 403 });
     }
