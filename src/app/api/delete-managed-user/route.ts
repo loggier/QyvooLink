@@ -47,27 +47,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Permiso denegado: No tienes permiso para eliminar este usuario.' }, { status: 403 });
     }
     
-    // 4. Delete the user from Firebase Authentication FIRST
-    try {
-        await adminAuth.deleteUser(managerUid);
-        console.log(`Successfully deleted user from Auth: ${managerUid}`);
-    } catch (error: any) {
-        // If user is already deleted from Auth, we can ignore the error and proceed to delete from Firestore
-        if (error.code === 'auth/user-not-found') {
-            console.warn(`User ${managerUid} not found in Firebase Auth. Might have been already deleted. Proceeding to delete from Firestore.`);
-        } else {
-            throw error; // Re-throw other auth errors
-        }
-    }
+    // 4. TEMPORARILY DISABLED: Delete the user from Firebase Authentication
+    // try {
+    //     await adminAuth.deleteUser(managerUid);
+    //     console.log(`Successfully deleted user from Auth: ${managerUid}`);
+    // } catch (error: any) {
+    //     if (error.code === 'auth/user-not-found') {
+    //         console.warn(`User ${managerUid} not found in Firebase Auth. Proceeding to delete from Firestore.`);
+    //     } else {
+    //         throw error; // Re-throw other auth errors
+    //     }
+    // }
 
     // 5. Delete the user's document from Firestore
     await managerDocRef.delete();
     console.log(`Successfully deleted user document from Firestore: ${managerUid}`);
     
-    // Potentially delete other user-related data (e.g., their instance, contacts) in a real-world scenario
-    // For now, we only delete the user document.
-
-    return NextResponse.json({ success: true, message: 'La instancia y el usuario han sido eliminados correctamente.' });
+    return NextResponse.json({ success: true, message: 'La instancia (solo documento de Firestore) ha sido eliminada.' });
 
   } catch (error: any) {
     console.error('Error in /api/delete-managed-user:', error);
