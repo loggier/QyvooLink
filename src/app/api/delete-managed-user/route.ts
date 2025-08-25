@@ -1,0 +1,77 @@
+
+'use server';
+
+import { NextResponse } from 'next/server';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
+import { initializeAdminApp } from '@/lib/firebase-admin';
+
+// Initialize Firebase Admin SDK
+const adminApp = initializeAdminApp();
+const adminAuth = getAuth(adminApp);
+const adminDb = getFirestore(adminApp);
+
+export async function POST(req: Request) {
+  try {
+    // 1. Authenticate the request from the owner
+    const idToken = req.headers.get('Authorization')?.split('Bearer ')[1];
+    if (!idToken) {
+      return NextResponse.json({ error: 'No autorizado: Token no proporcionado.' }, { status: 401 });
+    }
+    
+    let ownerUid: string;
+    try {
+      const decodedToken = await adminAuth.verifyIdToken(idToken);
+      ownerUid = decodedToken.uid;
+    } catch (error) {
+      console.error('Error verifying ID token:', error);
+      return NextResponse.json({ error: 'No autorizado: Token inválido.' }, { status: 401 });
+    }
+
+    // 2. Get the manager's UID from the request body
+    const { managerUid } = await req.json();
+    if (!managerUid) {
+      return NextResponse.json({ error: 'Falta el UID del manager.' }, { status: 400 });
+    }
+
+    // 3. Verify that the user being deleted is actually managed by the owner
+    const managerDocRef = adminDb.collection('users').doc(managerUid);
+    const managerDocSnap = await managerDocRef.get();
+
+    if (!managerDocSnap.exists) {
+      return NextResponse.json({ error: 'El usuario a eliminar no fue encontrado.' }, { status: 404 });
+    }
+
+    const managerData = managerDocSnap.data();
+    if (managerData?.managedBy !== ownerUid) {
+      return NextResponse.json({ error: 'Permiso denegado: No tienes permiso para eliminar este usuario.' }, { status: 403 });
+    }
+    
+    // 4. Delete the user from Firebase Authentication
+    try {
+        await adminAuth.deleteUser(managerUid);
+        console.log(`Successfully deleted user from Auth: ${managerUid}`);
+    } catch (error: any) {
+        // If user is already deleted from Auth, we can ignore the error and proceed to delete from Firestore
+        if (error.code === 'auth/user-not-found') {
+            console.warn(`User ${managerUid} not found in Firebase Auth. Might have been already deleted. Proceeding to delete from Firestore.`);
+        } else {
+            throw error; // Re-throw other auth errors
+        }
+    }
+
+    // 5. Delete the user's document from Firestore
+    await managerDocRef.delete();
+    console.log(`Successfully deleted user document from Firestore: ${managerUid}`);
+    
+    // Potentially delete other user-related data (e.g., their instance, contacts) in a real-world scenario
+    // For now, we only delete the user document.
+
+    return NextResponse.json({ success: true, message: 'La instancia y el usuario han sido eliminados correctamente.' });
+
+  } catch (error: any) {
+    console.error('Error in /api/delete-managed-user:', error);
+    return NextResponse.json({ error: 'Ocurrió un error interno en el servidor.', details: error.message }, { status: 500 });
+  }
+}
+

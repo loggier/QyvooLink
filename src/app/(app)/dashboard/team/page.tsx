@@ -274,14 +274,29 @@ export default function TeamPage() {
   }
 
   const confirmRemoveMember = async () => {
-    if (!memberToRemove) return;
+    if (!memberToRemove || !user) return;
     setIsProcessing({ [memberToRemove.uid]: true });
+
     try {
-        const userDocRef = doc(db, 'users', memberToRemove.uid);
-        
         if (memberToRemove.role === 'manager') {
-            await deleteDoc(userDocRef);
+            // New flow for managers: Call the secure API endpoint
+            const idToken = await user.getIdToken();
+            const response = await fetch('/api/delete-managed-user', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`,
+                },
+                body: JSON.stringify({ managerUid: memberToRemove.uid }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'No se pudo eliminar la instancia.');
+            }
         } else {
+            // Original flow for regular team members
+            const userDocRef = doc(db, 'users', memberToRemove.uid);
             await updateDoc(userDocRef, {
                 isActive: false,
                 organizationId: null,
@@ -292,9 +307,9 @@ export default function TeamPage() {
         toast({ title: "Miembro Eliminado", description: `${memberToRemove.fullName} ha sido eliminado.`});
         setIsRemoveDialogOpen(false);
         await fetchData();
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error removing member:", error);
-        toast({ variant: 'destructive', title: 'Error', description: 'No se pudo eliminar al miembro.' });
+        toast({ variant: 'destructive', title: 'Error al eliminar', description: error.message });
     } finally {
         setIsProcessing({});
     }
@@ -310,6 +325,7 @@ export default function TeamPage() {
     setIsProcessing({ invite: true });
     try {
       const usersRef = collection(db, 'users');
+      // Fix: Only check for existing users within the current organization.
       const userQuery = query(usersRef, where('email', '==', inviteEmail.trim()), where('organizationId', '==', user.organizationId));
       const userSnapshot = await getDocs(userQuery);
 
