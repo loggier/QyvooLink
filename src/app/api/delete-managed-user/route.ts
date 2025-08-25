@@ -47,7 +47,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Permiso denegado: No tienes permiso para eliminar este usuario.' }, { status: 403 });
     }
     
-    // 4. Delete the user from Firebase Authentication
+    // 4. Delete the user from Firebase Authentication FIRST
     try {
         await adminAuth.deleteUser(managerUid);
         console.log(`Successfully deleted user from Auth: ${managerUid}`);
@@ -74,4 +74,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Ocurrió un error interno en el servidor.', details: error.message }, { status: 500 });
   }
 }
-
