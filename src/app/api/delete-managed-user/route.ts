@@ -6,13 +6,13 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { initializeAdminApp } from '@/lib/firebase-admin';
 
-// Initialize Firebase Admin SDK
-const adminApp = initializeAdminApp();
-const adminAuth = getAuth(adminApp);
-const adminDb = getFirestore(adminApp);
-
 export async function POST(req: Request) {
   try {
+    // Initialize Firebase Admin SDK inside the request handler
+    const adminApp = initializeAdminApp();
+    const adminAuth = getAuth(adminApp);
+    const adminDb = getFirestore(adminApp);
+
     // 1. Authenticate the request from the owner
     const idToken = req.headers.get('Authorization')?.split('Bearer ')[1];
     if (!idToken) {
@@ -47,23 +47,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Permiso denegado: No tienes permiso para eliminar este usuario.' }, { status: 403 });
     }
     
-    // 4. TEMPORARILY DISABLED: Delete the user from Firebase Authentication
-    // try {
-    //     await adminAuth.deleteUser(managerUid);
-    //     console.log(`Successfully deleted user from Auth: ${managerUid}`);
-    // } catch (error: any) {
-    //     if (error.code === 'auth/user-not-found') {
-    //         console.warn(`User ${managerUid} not found in Firebase Auth. Proceeding to delete from Firestore.`);
-    //     } else {
-    //         throw error; // Re-throw other auth errors
-    //     }
-    // }
+    // 4. Delete the user from Firebase Authentication
+    try {
+        await adminAuth.deleteUser(managerUid);
+        console.log(`Successfully deleted user from Auth: ${managerUid}`);
+    } catch (error: any) {
+        if (error.code === 'auth/user-not-found') {
+            console.warn(`User ${managerUid} not found in Firebase Auth. Proceeding to delete from Firestore.`);
+        } else {
+            throw error; // Re-throw other auth errors
+        }
+    }
 
     // 5. Delete the user's document from Firestore
     await managerDocRef.delete();
     console.log(`Successfully deleted user document from Firestore: ${managerUid}`);
     
-    return NextResponse.json({ success: true, message: 'La instancia (solo documento de Firestore) ha sido eliminada.' });
+    return NextResponse.json({ success: true, message: 'La instancia ha sido eliminada permanentemente.' });
 
   } catch (error: any) {
     console.error('Error in /api/delete-managed-user:', error);
