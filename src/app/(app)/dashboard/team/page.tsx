@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, type FormEvent } from 'react';
 import { useAuth } from '@/context/auth-context';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { collection, query, where, getDocs, doc, updateDoc, addDoc, serverTimestamp, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -280,7 +280,11 @@ export default function TeamPage() {
     try {
         if (memberToRemove.role === 'manager') {
             // New flow for managers: Call the secure API endpoint
-            const idToken = await user.getIdToken();
+            const currentUser = auth.currentUser;
+            if (!currentUser) {
+                throw new Error("Usuario no autenticado.");
+            }
+            const idToken = await currentUser.getIdToken();
             const response = await fetch('/api/delete-managed-user', {
                 method: 'POST',
                 headers: {
