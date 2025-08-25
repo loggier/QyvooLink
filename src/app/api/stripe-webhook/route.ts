@@ -31,6 +31,12 @@ const toSubscriptionModel = (subscription: Stripe.Subscription, userId: string, 
         created: subscription.created ? new Date(subscription.created * 1000) : null,
         cancel_at_period_end: subscription.cancel_at_period_end,
         stripeCustomerId: subscription.customer.toString(),
+        // Store all items for more detailed logic, e.g., counting add-ons
+        items: subscription.items.data.map(item => ({
+            id: item.id,
+            priceId: item.price.id,
+            quantity: item.quantity,
+        })),
     };
 };
 
@@ -118,8 +124,8 @@ export async function POST(req: Request) {
         console.log('Processing invoice.payment_succeeded...');
         const invoice = event.data.object as Stripe.Invoice;
 
-        // An add-on was added, so we need to update the subscription document in Firestore
-        // to reflect the new state (e.g., new price, new items).
+        // An add-on was added, or a regular payment was made. We need to update the subscription document in Firestore
+        // to reflect the new state (e.g., new period end, new items).
         if (invoice.subscription) {
             const subscription = await stripe.subscriptions.retrieve(invoice.subscription.toString());
             const userId = subscription.metadata.firebaseUID;
@@ -128,7 +134,7 @@ export async function POST(req: Request) {
                 const subscriptionData = toSubscriptionModel(subscription, userId);
                 const subscriptionRef = doc(db, 'users', userId, 'subscriptions', subscription.id);
                 await setDoc(subscriptionRef, subscriptionData, { merge: true });
-                console.log(`Subscription ${subscription.id} updated due to add-on payment.`);
+                console.log(`Subscription ${subscription.id} updated due to payment.`);
             }
         }
         break;

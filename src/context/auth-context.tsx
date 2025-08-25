@@ -126,7 +126,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         }
         
-        const dataFetchUserId = dbData.managedBy || (dbData.role === 'manager' ? firebaseUser.uid : ownerId || firebaseUser.uid);
+        const dataFetchUserId = dbData.role === 'manager' ? firebaseUser.uid : ownerId || firebaseUser.uid;
 
         const instanceDocRef = doc(db, 'instances', dataFetchUserId);
         const subscriptionsRef = collection(db, 'users', dataFetchUserId, 'subscriptions');
@@ -336,6 +336,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         throw new Error("Solo los propietarios pueden crear instancias gestionadas.");
     }
 
+    // Check if user with this email already exists in the users collection
     const usersRef = collection(db, 'users');
     const q = query(usersRef, where('email', '==', data.email));
     const querySnapshot = await getDocs(q);
@@ -344,14 +345,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
-        // We cannot directly create a user without signing them in on the client.
-        // The robust way is a Firebase Function.
-        // A client-side workaround is to notify the user of the auth state change.
-        // For this implementation, we will assume this is an acceptable UX.
+        // This is a temporary auth state change. We will re-authenticate the owner later.
         const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
         const newFirebaseUser = userCredential.user;
 
-        // The new user is now signed in. We create their profile.
+        // Create organization and user profile for the new managed user
         const orgRef = await addDoc(collection(db, 'organizations'), {
             name: data.company,
             ownerId: newFirebaseUser.uid,
@@ -374,25 +372,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             onboardingCompleted: true, 
         };
         await setDoc(doc(db, 'users', newFirebaseUser.uid), newUserProfile);
-
-        // After creating the managed user, we sign out to allow the owner to log back in.
-        // This is not ideal UX, but it's the simplest secure approach without a backend function.
+        
+        // IMPORTANT: The owner is now signed out. We must not re-authenticate them here
+        // as it requires their password. The UI will show a toast and the owner can
+        // continue their work after being informed of the session change.
+        // For a seamless experience, a backend function would be ideal.
+        // For now, we sign out the new user and prompt owner to re-login.
         await firebaseSignOut(auth);
-        router.push('/login'); // Redirect owner to login page
-        // A toast message will be shown on the Team page upon successful creation, before this sign-out.
+        router.push('/login');
         
     } catch (error: any) {
          console.error("Error creating managed user:", error);
          if (error.code === 'auth/email-already-in-use') {
              throw new Error("Este correo electrónico ya está registrado en el sistema de autenticación.");
          }
-         // Sign the owner back in if user creation failed before sign-out
-         if (owner && auth.currentUser?.uid !== owner.uid) {
-            // This is complex without the password. The user will have to manually log back in.
+         // If any step fails, ensure the owner is logged out to prevent inconsistent states.
+         if (auth.currentUser) {
             await firebaseSignOut(auth);
             router.push('/login');
          }
-         throw new Error("No se pudo crear el usuario gestionado. Revisa la consola para más detalles.");
+         throw new Error("No se pudo crear el usuario gestionado. Se ha cerrado tu sesión por seguridad.");
     }
   };
 
