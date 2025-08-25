@@ -281,8 +281,8 @@ export default function TeamPage() {
         if (memberToRemove.role === 'manager') {
             // New flow for managers: Call the secure API endpoint
             const currentUser = auth.currentUser;
-            if (!currentUser) {
-                throw new Error("Usuario no autenticado.");
+            if (!currentUser || currentUser.uid !== user.ownerId) {
+                throw new Error("Acción no autorizada. Solo el propietario puede eliminar instancias.");
             }
             const idToken = await currentUser.getIdToken();
             const response = await fetch('/api/delete-managed-user', {
