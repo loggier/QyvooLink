@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, type FormEvent } from 'react';
@@ -281,7 +280,7 @@ export default function TeamPage() {
         if (memberToRemove.role === 'manager') {
             // New flow for managers: Call the secure API endpoint
             const currentUser = auth.currentUser;
-            if (!currentUser || currentUser.uid !== user.ownerId) {
+            if (!currentUser || currentUser.uid !== user.uid) {
                 throw new Error("Acción no autorizada. Solo el propietario puede eliminar instancias.");
             }
             const idToken = await currentUser.getIdToken();
@@ -330,10 +329,17 @@ export default function TeamPage() {
     try {
       const usersRef = collection(db, 'users');
       // Fix: Only check for existing users within the current organization.
-      const userQuery = query(usersRef, where('email', '==', inviteEmail.trim()), where('organizationId', '==', user.organizationId));
+      const userQuery = query(usersRef, where('email', '==', inviteEmail.trim()));
       const userSnapshot = await getDocs(userQuery);
+      
+      let userInThisOrg = false;
+      userSnapshot.forEach(doc => {
+          if (doc.data().organizationId === user.organizationId) {
+              userInThisOrg = true;
+          }
+      });
 
-      if (!userSnapshot.empty) {
+      if (userInThisOrg) {
         toast({
           variant: 'destructive',
           title: 'Usuario existente',

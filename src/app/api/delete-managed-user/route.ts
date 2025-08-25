@@ -8,12 +8,12 @@ import { initializeAdminApp } from '@/lib/firebase-admin';
 
 export async function POST(req: Request) {
   try {
-    // Initialize Firebase Admin SDK inside the request handler
+    // 1. Initialize Firebase Admin SDK inside the request handler
     const adminApp = initializeAdminApp();
     const adminAuth = getAuth(adminApp);
     const adminDb = getFirestore(adminApp);
 
-    // 1. Authenticate the request from the owner
+    // 2. Authenticate the request from the owner
     const idToken = req.headers.get('Authorization')?.split('Bearer ')[1];
     if (!idToken) {
       return NextResponse.json({ error: 'No autorizado: Token no proporcionado.' }, { status: 401 });
@@ -28,17 +28,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No autorizado: Token inválido.' }, { status: 401 });
     }
 
-    // 2. Get the manager's UID from the request body
+    // 3. Get the manager's UID from the request body
     const { managerUid } = await req.json();
     if (!managerUid) {
       return NextResponse.json({ error: 'Falta el UID del manager.' }, { status: 400 });
     }
 
-    // 3. Verify that the user being deleted is actually managed by the owner
+    // 4. Verify that the user being deleted is actually managed by the owner
     const managerDocRef = adminDb.collection('users').doc(managerUid);
     const managerDocSnap = await managerDocRef.get();
 
-    if (!managerDocSnap.exists) {
+    if (!managerDocSnap.exists()) {
       // If the document doesn't exist, maybe it was already deleted.
       // We can try to delete the auth user anyway to be sure.
       try {
@@ -49,6 +49,7 @@ export async function POST(req: Request) {
          if (authError.code === 'auth/user-not-found') {
             return NextResponse.json({ error: 'El usuario a eliminar no fue encontrado.' }, { status: 404 });
          }
+         // Re-throw other auth errors to be caught by the main catch block
          throw authError;
       }
     }
@@ -59,7 +60,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Permiso denegado: No tienes permiso para eliminar este usuario.' }, { status: 403 });
     }
     
-    // 4. Delete the user from Firebase Authentication
+    // 5. Delete the user from Firebase Authentication
     try {
         await adminAuth.deleteUser(managerUid);
         console.log(`Successfully deleted user from Auth: ${managerUid}`);
@@ -71,7 +72,7 @@ export async function POST(req: Request) {
         }
     }
 
-    // 5. Delete the user's document from Firestore
+    // 6. Delete the user's document from Firestore
     await managerDocRef.delete();
     console.log(`Successfully deleted user document from Firestore: ${managerUid}`);
     
