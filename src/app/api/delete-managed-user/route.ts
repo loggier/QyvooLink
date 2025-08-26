@@ -2,91 +2,68 @@
 'use server';
 
 import { NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { initializeAdminApp } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { initializeAdminApp } from '@/lib/firebase-admin';
-
-// This is a placeholder auth object for type inference, the real one is initialized inside POST
-const authForTypes = getAuth();
-type DecodedIdToken = Awaited<ReturnType<typeof authForTypes.verifyIdToken>>;
-
-
-async function verifyOwnerPermissions(adminAuth: ReturnType<typeof getAuth>, token: string | undefined | null): Promise<DecodedIdToken> {
-    if (!token) {
-      throw new Error('No autorizado: Token no proporcionado.');
-    }
-    try {
-        return await adminAuth.verifyIdToken(token);
-    } catch (error) {
-        console.error('Error verifying ID token:', error);
-        throw new Error('No autorizado: Token inválido.');
-    }
-}
-
 
 export async function POST(req: Request) {
   try {
-    // Initialize Admin SDK on each request to ensure env vars are loaded
+    // 1. Inicializar Firebase Admin SDK en cada llamada
     const adminApp = initializeAdminApp();
     const adminAuth = getAuth(adminApp);
     const adminDb = getFirestore(adminApp);
 
+    // 2. Obtener los datos de la petición
     const idToken = req.headers.get('Authorization')?.split('Bearer ')[1];
-    const decodedToken = await verifyOwnerPermissions(adminAuth, idToken);
-    const ownerUid = decodedToken.uid;
+    if (!idToken) {
+      return NextResponse.json({ error: 'Token de autorización no proporcionado.' }, { status: 401 });
+    }
 
     const { managerUid } = await req.json();
     if (!managerUid) {
-      return NextResponse.json({ error: 'Falta el UID del manager.' }, { status: 400 });
+      return NextResponse.json({ error: 'Falta el UID del manager a eliminar.' }, { status: 400 });
     }
 
+    // 3. Verificar el token del usuario que realiza la acción (el owner)
+    const decodedToken = await adminAuth.verifyIdToken(idToken);
+    const ownerUid = decodedToken.uid;
+
+    // 4. Obtener los documentos del owner y del manager a eliminar
+    const ownerDocRef = adminDb.collection('users').doc(ownerUid);
     const managerDocRef = adminDb.collection('users').doc(managerUid);
-    const managerDocSnap = await managerDocRef.get();
-    
-    if (managerDocSnap.exists()) {
-        const managerData = managerDocSnap.data();
-        if (!managerData) {
-            return NextResponse.json({ error: 'No se encontraron datos del manager.' }, { status: 404 });
-        }
-        
-        // Security Check 1: Ensure they belong to the same organization
-        const ownerDocSnap = await adminDb.collection('users').doc(ownerUid).get();
-        if (!ownerDocSnap.exists() || ownerDocSnap.data()?.organizationId !== managerData.organizationId) {
-             return NextResponse.json({ error: 'Permiso denegado: No perteneces a la misma organización.' }, { status: 403 });
-        }
-        
-        // Security Check 2: Ensure the requester is the owner of this instance
-        if (managerData.managedBy !== ownerUid) {
-             return NextResponse.json({ error: 'Permiso denegado: No eres el propietario de esta instancia.' }, { status: 403 });
-        }
-        
-        // Proceed with deletion from Firestore
-        await managerDocRef.delete();
-        console.log(`Successfully deleted user document from Firestore: ${managerUid}`);
-    } else {
-        console.warn(`Firestore document for manager ${managerUid} not found. It might have been deleted already.`);
+
+    const [ownerDocSnap, managerDocSnap] = await Promise.all([
+      ownerDocRef.get(),
+      managerDocRef.get(),
+    ]);
+
+    // 5. Realizar las validaciones de seguridad
+    if (!ownerDocSnap.exists() || ownerDocSnap.data()?.role !== 'owner') {
+      return NextResponse.json({ error: 'Permiso denegado: El solicitante no es un propietario.' }, { status: 403 });
+    }
+
+    if (!managerDocSnap.exists()) {
+      // Si el documento ya no existe, consideramos la operación como exitosa.
+      console.log(`El documento para el manager ${managerUid} ya no existe en Firestore. Se considera eliminado.`);
+      return NextResponse.json({ success: true, message: 'El usuario ya había sido eliminado de la base de datos.' });
     }
     
-    // Deletion from Auth - Temporarily disabled as per user request
-    /*
-    try {
-        await adminAuth.deleteUser(managerUid);
-        console.log(`Successfully deleted user from Auth: ${managerUid}`);
-    } catch (error: any) {
-        if (error.code === 'auth/user-not-found') {
-            console.warn(`User ${managerUid} not found in Firebase Auth. Assuming already deleted.`);
-        } else {
-            console.error(`Error deleting user from Auth: ${managerUid}`, error);
-            // We will not re-throw the error, allowing Firestore deletion to be the primary success factor
-        }
+    const ownerOrgId = ownerDocSnap.data()?.organizationId;
+    const managerData = managerDocSnap.data();
+
+    if (ownerOrgId !== managerData?.organizationId) {
+      return NextResponse.json({ error: 'Permiso denegado: El manager no pertenece a la organización del propietario.' }, { status: 403 });
     }
-    */
-    
-    return NextResponse.json({ success: true, message: 'La instancia ha sido eliminada de la base de datos.' });
+
+    // 6. Eliminar el documento del manager de Firestore
+    await managerDocRef.delete();
+    console.log(`Documento del usuario ${managerUid} eliminado de Firestore por el owner ${ownerUid}.`);
+
+    return NextResponse.json({ success: true, message: 'Instancia eliminada de la base de datos correctamente.' });
 
   } catch (error: any) {
-    console.error('Error in /api/delete-managed-user:', error);
+    console.error('Error crítico en /api/delete-managed-user:', error);
+    // Devuelve un error JSON estructurado en caso de fallo
     return NextResponse.json({ error: 'Ocurrió un error interno en el servidor.', details: error.message }, { status: 500 });
   }
 }
