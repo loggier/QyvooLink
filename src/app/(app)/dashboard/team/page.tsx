@@ -127,26 +127,23 @@ export default function TeamPage() {
           getDocs(invitationsQuery),
       ]);
 
-      const fetchedMembers: TeamMember[] = [];
-      const fetchedManaged: TeamMember[] = [];
-
+      const allUsers: TeamMember[] = [];
       usersSnapshot.forEach((doc) => {
-        const data = doc.data();
-        const member = {
-          uid: doc.id,
-          fullName: data.fullName,
-          email: data.email,
-          role: data.role || 'agent',
-          isActive: data.isActive ?? true,
-          company: data.company,
-        };
-        if (data.role === 'manager') {
-            fetchedManaged.push(member);
-        } else {
-            fetchedMembers.push(member);
-        }
+          const data = doc.data();
+          allUsers.push({
+            uid: doc.id,
+            fullName: data.fullName,
+            email: data.email,
+            role: data.role || 'agent',
+            isActive: data.isActive ?? true,
+            company: data.company,
+            managedBy: data.managedBy,
+          });
       });
-      
+
+      const fetchedMembers = allUsers.filter(u => u.role !== 'manager');
+      const fetchedManaged = allUsers.filter(u => u.role === 'manager');
+
       fetchedMembers.sort((a, b) => {
           if (a.role === 'owner') return -1;
           if (b.role === 'owner') return 1;
@@ -154,6 +151,7 @@ export default function TeamPage() {
           if (a.role === 'agent' && b.role === 'admin') return 1;
           return (a.fullName || '').localeCompare(b.fullName || '');
       });
+
       setMembers(fetchedMembers);
       setManagedInstances(fetchedManaged);
 

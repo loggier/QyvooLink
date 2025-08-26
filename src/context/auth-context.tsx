@@ -130,9 +130,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             ownerId = orgDocSnap.data().ownerId;
           }
         }
-
-        // CORRECTED: A manager's data should be fetched relative to their owner's context.
-        const dataFetchUserId = dbData.managedBy || firebaseUser.uid;
+        
+        const dataFetchUserId = dbData.managedBy || (dbData.role === 'owner' ? firebaseUser.uid : ownerId);
         
         const instanceDocRef = doc(db, 'instances', dataFetchUserId);
         const subscriptionsRef = collection(db, 'users', dataFetchUserId, 'subscriptions');
@@ -363,7 +362,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               fullName: profile.fullName,
               company: profile.company,
               role: 'manager',
-              organizationId: user.organizationId, // CORRECTED: Assign owner's organizationId
+              organizationId: user.organizationId,
               managedBy: user.uid,
               createdAt: serverTimestamp(),
               lastLogin: null,

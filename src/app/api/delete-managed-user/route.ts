@@ -33,23 +33,27 @@ export async function POST(req: Request) {
 
     const managerDocRef = adminDb.collection('users').doc(managerUid);
     const managerDocSnap = await managerDocRef.get();
-    const ownerDocRef = adminDb.collection('users').doc(ownerUid);
-    const ownerDocSnap = await ownerDocRef.get();
-
-    if (!ownerDocSnap.exists() || ownerDocSnap.data()?.role !== 'owner') {
-        return NextResponse.json({ error: 'Permiso denegado: Solo los propietarios pueden eliminar instancias.' }, { status: 403 });
-    }
-
+    
+    // Security Check: Ensure the requester is the owner of the manager's organization
     if (managerDocSnap.exists()) {
         const managerData = managerDocSnap.data();
-        if (managerData?.managedBy !== ownerUid) {
-          return NextResponse.json({ error: 'Permiso denegado: No tienes permiso para eliminar este usuario.' }, { status: 403 });
+        if (!managerData) {
+             return NextResponse.json({ error: 'No se encontraron datos del manager.' }, { status: 404 });
         }
-        if (managerData?.organizationId !== ownerDocSnap.data()?.organizationId) {
-          return NextResponse.json({ error: 'Permiso denegado: Inconsistencia de organización.' }, { status: 403 });
+        
+        const ownerDocRef = adminDb.collection('users').doc(ownerUid);
+        const ownerDocSnap = await ownerDocRef.get();
+
+        if (!ownerDocSnap.exists() || ownerDocSnap.data()?.organizationId !== managerData.organizationId) {
+             return NextResponse.json({ error: 'Permiso denegado: No perteneces a la misma organización.' }, { status: 403 });
+        }
+        
+        if (managerData.managedBy !== ownerUid) {
+             return NextResponse.json({ error: 'Permiso denegado: No eres el propietario de esta instancia.' }, { status: 403 });
         }
     }
     
+    // Proceed with deletion
     try {
         await adminAuth.deleteUser(managerUid);
         console.log(`Successfully deleted user from Auth: ${managerUid}`);
@@ -57,6 +61,7 @@ export async function POST(req: Request) {
         if (error.code === 'auth/user-not-found') {
             console.warn(`User ${managerUid} not found in Firebase Auth. Proceeding to delete from Firestore.`);
         } else {
+            console.error(`Error deleting user from Auth: ${managerUid}`, error);
             throw error; // Re-throw other auth errors
         }
     }
