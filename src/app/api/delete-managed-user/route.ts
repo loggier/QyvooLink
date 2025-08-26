@@ -8,7 +8,6 @@ import { initializeAdminApp } from '@/lib/firebase-admin';
 
 export async function POST(req: Request) {
   try {
-    // Initialize Admin SDK within the function scope
     const adminApp = initializeAdminApp();
     const adminAuth = getAuth(adminApp);
     const adminDb = getFirestore(adminApp);
@@ -34,30 +33,34 @@ export async function POST(req: Request) {
 
     const managerDocRef = adminDb.collection('users').doc(managerUid);
     const managerDocSnap = await managerDocRef.get();
+    const ownerDocRef = adminDb.collection('users').doc(ownerUid);
+    const ownerDocSnap = await ownerDocRef.get();
+
+    if (!ownerDocSnap.exists() || ownerDocSnap.data()?.role !== 'owner') {
+        return NextResponse.json({ error: 'Permiso denegado: Solo los propietarios pueden eliminar instancias.' }, { status: 403 });
+    }
 
     if (managerDocSnap.exists()) {
         const managerData = managerDocSnap.data();
         if (managerData?.managedBy !== ownerUid) {
           return NextResponse.json({ error: 'Permiso denegado: No tienes permiso para eliminar este usuario.' }, { status: 403 });
         }
-    } else {
-        console.warn(`Manager document ${managerUid} not found in Firestore. Will attempt to delete from Auth if exists.`);
+        if (managerData?.organizationId !== ownerDocSnap.data()?.organizationId) {
+          return NextResponse.json({ error: 'Permiso denegado: Inconsistencia de organización.' }, { status: 403 });
+        }
     }
     
-    // First, try to delete from Auth. This is the most critical part.
     try {
         await adminAuth.deleteUser(managerUid);
         console.log(`Successfully deleted user from Auth: ${managerUid}`);
     } catch (error: any) {
         if (error.code === 'auth/user-not-found') {
-            console.warn(`User ${managerUid} not found in Firebase Auth. This is OK if the Firestore doc was also missing.`);
+            console.warn(`User ${managerUid} not found in Firebase Auth. Proceeding to delete from Firestore.`);
         } else {
-            // Re-throw other auth errors
-            throw error;
+            throw error; // Re-throw other auth errors
         }
     }
     
-    // Then, delete from Firestore if it exists.
     if (managerDocSnap.exists()) {
         await managerDocRef.delete();
         console.log(`Successfully deleted user document from Firestore: ${managerUid}`);

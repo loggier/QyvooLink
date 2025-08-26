@@ -131,7 +131,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         }
 
-        const dataFetchUserId = dbData.role === 'manager' ? ownerId : firebaseUser.uid;
+        // CORRECTED: A manager's data should be fetched relative to their owner's context.
+        const dataFetchUserId = dbData.managedBy || firebaseUser.uid;
         
         const instanceDocRef = doc(db, 'instances', dataFetchUserId);
         const subscriptionsRef = collection(db, 'users', dataFetchUserId, 'subscriptions');
@@ -337,7 +338,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const createManagedUser = async (email: string, password: string, profile: { fullName: string; company: string; }) => {
       const owner = auth.currentUser;
-      if (!owner || !user || user.role !== 'owner') {
+      if (!owner || !user || user.role !== 'owner' || !user.organizationId) {
           throw new Error("Solo los propietarios pueden crear instancias gestionadas.");
       }
   
@@ -356,22 +357,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const tempUserCredential = await createUserWithEmailAndPassword(auth, email, password);
           const newFirebaseUser = tempUserCredential.user;
   
-          // Create organization and user profile for the new managed user
-          const orgRef = await addDoc(collection(db, 'organizations'), {
-              name: profile.company,
-              ownerId: newFirebaseUser.uid,
-              managedBy: user.uid,
-              createdAt: serverTimestamp()
-          });
-  
           const newUserProfile = {
               uid: newFirebaseUser.uid,
               email: email,
               fullName: profile.fullName,
               company: profile.company,
               role: 'manager',
-              organizationId: orgRef.id,
-              managedBy: user.uid, // <-- CRITICAL: Save the owner's UID
+              organizationId: user.organizationId, // CORRECTED: Assign owner's organizationId
+              managedBy: user.uid,
               createdAt: serverTimestamp(),
               lastLogin: null,
               isActive: true,

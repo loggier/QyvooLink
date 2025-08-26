@@ -121,24 +121,30 @@ export default function TeamPage() {
           where('organizationId', '==', user.organizationId),
           where('status', '==', 'pending')
       );
-      const managedQuery = query(collection(db, 'users'), where('managedBy', '==', user.uid));
       
-      const [usersSnapshot, invitationsSnapshot, managedSnapshot] = await Promise.all([
+      const [usersSnapshot, invitationsSnapshot] = await Promise.all([
           getDocs(usersQuery),
           getDocs(invitationsQuery),
-          getDocs(managedQuery)
       ]);
 
       const fetchedMembers: TeamMember[] = [];
+      const fetchedManaged: TeamMember[] = [];
+
       usersSnapshot.forEach((doc) => {
         const data = doc.data();
-        fetchedMembers.push({
+        const member = {
           uid: doc.id,
           fullName: data.fullName,
           email: data.email,
           role: data.role || 'agent',
           isActive: data.isActive ?? true,
-        });
+          company: data.company,
+        };
+        if (data.role === 'manager') {
+            fetchedManaged.push(member);
+        } else {
+            fetchedMembers.push(member);
+        }
       });
       
       fetchedMembers.sort((a, b) => {
@@ -149,19 +155,6 @@ export default function TeamPage() {
           return (a.fullName || '').localeCompare(b.fullName || '');
       });
       setMembers(fetchedMembers);
-      
-      const fetchedManaged: TeamMember[] = [];
-      managedSnapshot.forEach((doc) => {
-          const data = doc.data();
-          fetchedManaged.push({
-            uid: doc.id,
-            fullName: data.fullName,
-            email: data.email,
-            company: data.company,
-            role: 'manager',
-            isActive: data.isActive ?? true,
-          });
-      });
       setManagedInstances(fetchedManaged);
 
       const fetchedInvitations: Invitation[] = [];
@@ -276,14 +269,14 @@ export default function TeamPage() {
   const confirmRemoveMember = async () => {
     if (!memberToRemove || !user) return;
     setIsProcessing({ [memberToRemove.uid]: true });
-
+  
     try {
       if (memberToRemove.role === 'manager') {
         const currentUser = auth.currentUser;
         if (!currentUser) {
           throw new Error("Acción no autorizada. Debes estar autenticado.");
         }
-
+  
         const idToken = await currentUser.getIdToken();
         const response = await fetch('/api/delete-managed-user', {
           method: 'POST',
@@ -293,7 +286,7 @@ export default function TeamPage() {
           },
           body: JSON.stringify({ managerUid: memberToRemove.uid }),
         });
-
+  
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.error || 'No se pudo eliminar la instancia.');
