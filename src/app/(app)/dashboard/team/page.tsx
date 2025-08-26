@@ -287,7 +287,16 @@ export default function TeamPage() {
   
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.error || 'No se pudo eliminar la instancia.');
+          console.error("Error from API:", errorData);
+          toast({
+            variant: "destructive",
+            title: "Error de la API",
+            description: `Error: ${errorData.error || 'Desconocido'}. Detalles: ${errorData.details || 'No disponibles'}. Revisa la consola para más información.`,
+            duration: 9000,
+          });
+          setIsProcessing({});
+          setIsRemoveDialogOpen(false);
+          return;
         }
       } else {
         // Original flow for regular team members
