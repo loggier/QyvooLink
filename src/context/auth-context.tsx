@@ -117,20 +117,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         }
 
-        let ownerId = dbData.role === 'owner' ? firebaseUser.uid : dbData.ownerId;
-        // CRITICAL FIX: If the user is managed, their ownerId is the 'managedBy' field.
-        if (dbData.managedBy) {
-            ownerId = dbData.managedBy;
-        } else if (!ownerId && dbData.organizationId && dbData.role !== 'owner') {
-          // Fallback for regular team members (admin/agent)
+        // --- CORRECTED LOGIC for ownerId ---
+        let ownerId = dbData.managedBy || (dbData.role === 'owner' ? firebaseUser.uid : dbData.ownerId);
+        
+        // Final check if ownerId is still missing for a team member
+        if (!ownerId && dbData.organizationId && dbData.role !== 'owner' && !dbData.managedBy) {
           const orgDocRef = doc(db, 'organizations', dbData.organizationId);
           const orgDocSnap = await getDoc(orgDocRef);
           if (orgDocSnap.exists()) {
             ownerId = orgDocSnap.data().ownerId;
           }
         }
-        
-        const dataFetchUserId = dbData.role === 'manager' ? firebaseUser.uid : ownerId || firebaseUser.uid;
+
+        const dataFetchUserId = dbData.role === 'manager' ? ownerId : firebaseUser.uid;
 
         const instanceDocRef = doc(db, 'instances', dataFetchUserId);
         const subscriptionsRef = collection(db, 'users', dataFetchUserId, 'subscriptions');

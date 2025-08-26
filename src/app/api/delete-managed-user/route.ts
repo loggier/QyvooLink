@@ -43,24 +43,26 @@ export async function POST(req: Request) {
         if (managerData?.managedBy !== ownerUid) {
           return NextResponse.json({ error: 'Permiso denegado: No tienes permiso para eliminar este usuario.' }, { status: 403 });
         }
+    } else {
+        console.warn(`Manager document ${managerUid} not found in Firestore. Proceeding to delete from Auth if exists.`);
     }
     
-    // 5. Delete the user from Firebase Authentication
+    // 5. Delete the user's document from Firestore if it exists
+    if (managerDocSnap.exists()) {
+        await managerDocRef.delete();
+        console.log(`Successfully deleted user document from Firestore: ${managerUid}`);
+    }
+
+    // 6. Delete the user from Firebase Authentication
     try {
         await adminAuth.deleteUser(managerUid);
         console.log(`Successfully deleted user from Auth: ${managerUid}`);
     } catch (error: any) {
         if (error.code === 'auth/user-not-found') {
-            console.warn(`User ${managerUid} not found in Firebase Auth. Proceeding to delete from Firestore if it exists.`);
+            console.warn(`User ${managerUid} not found in Firebase Auth. This is OK if the Firestore doc was also missing.`);
         } else {
             throw error; // Re-throw other auth errors to be caught by the main catch block
         }
-    }
-
-    // 6. Delete the user's document from Firestore if it exists
-    if (managerDocSnap.exists()) {
-        await managerDocRef.delete();
-        console.log(`Successfully deleted user document from Firestore: ${managerUid}`);
     }
     
     return NextResponse.json({ success: true, message: 'La instancia ha sido eliminada permanentemente.' });
