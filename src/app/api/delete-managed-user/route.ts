@@ -8,12 +8,10 @@ import { getFirestore } from 'firebase-admin/firestore';
 
 export async function POST(req: Request) {
   try {
-    // 1. Inicializar Firebase Admin SDK en cada llamada
     const adminApp = initializeAdminApp();
     const adminAuth = getAuth(adminApp);
     const adminDb = getFirestore(adminApp);
 
-    // 2. Obtener los datos de la petición
     const idToken = req.headers.get('Authorization')?.split('Bearer ')[1];
     if (!idToken) {
       return NextResponse.json({ error: 'Token de autorización no proporcionado.' }, { status: 401 });
@@ -24,11 +22,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Falta el UID del manager a eliminar.' }, { status: 400 });
     }
 
-    // 3. Verificar el token del usuario que realiza la acción (el owner)
     const decodedToken = await adminAuth.verifyIdToken(idToken);
     const ownerUid = decodedToken.uid;
 
-    // 4. Obtener los documentos del owner y del manager a eliminar
     const ownerDocRef = adminDb.collection('users').doc(ownerUid);
     const managerDocRef = adminDb.collection('users').doc(managerUid);
 
@@ -37,33 +33,40 @@ export async function POST(req: Request) {
       managerDocRef.get(),
     ]);
 
-    // 5. Realizar las validaciones de seguridad
     if (!ownerDocSnap.exists() || ownerDocSnap.data()?.role !== 'owner') {
       return NextResponse.json({ error: 'Permiso denegado: El solicitante no es un propietario.' }, { status: 403 });
     }
 
-    if (!managerDocSnap.exists()) {
-      // Si el documento ya no existe, consideramos la operación como exitosa.
-      console.log(`El documento para el manager ${managerUid} ya no existe en Firestore. Se considera eliminado.`);
-      return NextResponse.json({ success: true, message: 'El usuario ya había sido eliminado de la base de datos.' });
+    // --- Start of Robust Deletion Logic ---
+    if (managerDocSnap.exists()) {
+        const managerData = managerDocSnap.data();
+        if (managerData?.managedBy !== ownerUid) {
+            return NextResponse.json({ error: 'Permiso denegado: El solicitante no es el propietario de esta instancia.' }, { status: 403 });
+        }
+        
+        // Delete Firestore document first
+        await managerDocRef.delete();
+        console.log(`Documento del usuario ${managerUid} eliminado de Firestore.`);
     }
-    
-    const ownerOrgId = ownerDocSnap.data()?.organizationId;
-    const managerData = managerDocSnap.data();
 
-    if (ownerOrgId !== managerData?.organizationId) {
-      return NextResponse.json({ error: 'Permiso denegado: El manager no pertenece a la organización del propietario.' }, { status: 403 });
-    }
-
-    // 6. Eliminar el documento del manager de Firestore
-    await managerDocRef.delete();
-    console.log(`Documento del usuario ${managerUid} eliminado de Firestore por el owner ${ownerUid}.`);
+    // As requested, we comment out the auth user deletion for now to isolate the issue.
+    // try {
+    //     await adminAuth.deleteUser(managerUid);
+    //     console.log(`Usuario ${managerUid} eliminado de Firebase Authentication.`);
+    // } catch (authError: any) {
+    //     if (authError.code === 'auth/user-not-found') {
+    //         console.log(`El usuario ${managerUid} no se encontró en Authentication, probablemente ya fue eliminado.`);
+    //     } else {
+    //         // Re-throw other auth errors
+    //         throw authError;
+    //     }
+    // }
+    // --- End of Robust Deletion Logic ---
 
     return NextResponse.json({ success: true, message: 'Instancia eliminada de la base de datos correctamente.' });
 
   } catch (error: any) {
     console.error('Error crítico en /api/delete-managed-user:', error);
-    // Devuelve un error JSON estructurado en caso de fallo
     return NextResponse.json({ error: 'Ocurrió un error interno en el servidor.', details: error.message }, { status: 500 });
   }
 }

@@ -45,6 +45,7 @@ export interface TeamMember {
   isActive: boolean;
   company?: string;
   managedBy?: string;
+  organizationId?: string;
 }
 
 interface Invitation {
@@ -53,6 +54,29 @@ interface Invitation {
     role: 'admin' | 'agent';
     createdAt: any;
 }
+
+// --- Server Action for Deletion ---
+async function removeTeamMemberAction(memberToRemoveUid: string, memberRole: string): Promise<{ success: boolean; error?: string }> {
+  'use server';
+  try {
+    if (memberRole === 'manager') {
+      // For managers, just delete the user document.
+      // The auth user will be handled separately if needed.
+      await deleteDoc(doc(db, "users", memberToRemoveUid));
+    } else {
+      // For regular team members, deactivate and disassociate.
+      await updateDoc(doc(db, "users", memberToRemoveUid), {
+        isActive: false,
+        organizationId: null,
+      });
+    }
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error in removeTeamMemberAction:", error);
+    return { success: false, error: error.message || "No se pudo eliminar al miembro del equipo." };
+  }
+}
+
 
 export default function TeamPage() {
   const { user, createManagedUser } = useAuth();
@@ -138,11 +162,12 @@ export default function TeamPage() {
             isActive: data.isActive ?? true,
             company: data.company,
             managedBy: data.managedBy,
+            organizationId: data.organizationId
           });
       });
 
       const fetchedMembers = allUsers.filter(u => u.role !== 'manager');
-      const fetchedManaged = allUsers.filter(u => u.role === 'manager');
+      const fetchedManaged = allUsers.filter(u => u.role === 'manager' && u.managedBy === user.uid);
 
       fetchedMembers.sort((a, b) => {
           if (a.role === 'owner') return -1;
@@ -265,49 +290,19 @@ export default function TeamPage() {
   }
 
   const confirmRemoveMember = async () => {
-    if (!memberToRemove || !user) return;
+    if (!memberToRemove || !user || user.role !== 'owner') {
+      toast({ variant: 'destructive', title: 'Error', description: 'Acción no permitida.' });
+      return;
+    }
     setIsProcessing({ [memberToRemove.uid]: true });
   
     try {
-      if (memberToRemove.role === 'manager') {
-        const currentUser = auth.currentUser;
-        if (!currentUser) {
-          throw new Error("Acción no autorizada. Debes estar autenticado.");
+        const result = await removeTeamMemberAction(memberToRemove.uid, memberToRemove.role);
+
+        if (!result.success) {
+            throw new Error(result.error);
         }
-  
-        const idToken = await currentUser.getIdToken();
-        const response = await fetch('/api/delete-managed-user', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${idToken}`,
-          },
-          body: JSON.stringify({ managerUid: memberToRemove.uid }),
-        });
-  
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error("Error from API:", errorData);
-          toast({
-            variant: "destructive",
-            title: "Error de la API",
-            description: `Error: ${errorData.error || 'Desconocido'}. Detalles: ${errorData.details || 'No disponibles'}. Revisa la consola para más información.`,
-            duration: 9000,
-          });
-          setIsProcessing({});
-          setIsRemoveDialogOpen(false);
-          return;
-        }
-      } else {
-        // Original flow for regular team members
-        const userDocRef = doc(db, 'users', memberToRemove.uid);
-        await updateDoc(userDocRef, {
-          isActive: false,
-          organizationId: null,
-          role: null,
-        });
-      }
-      
+
       toast({ title: "Miembro Eliminado", description: `${memberToRemove.fullName} ha sido eliminado.`});
       setIsRemoveDialogOpen(false);
       await fetchData();
