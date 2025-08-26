@@ -27,7 +27,7 @@ export function initializeAdminApp() {
   const credentials = {
     projectId: projectId,
     clientEmail: clientEmail,
-    // Replace newline characters with actual newlines
+    // Replace newline characters with actual newlines - CRITICAL FIX
     privateKey: privateKey.replace(/\\n/g, '\n'),
   };
 
