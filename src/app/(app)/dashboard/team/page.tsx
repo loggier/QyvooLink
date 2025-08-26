@@ -55,29 +55,6 @@ interface Invitation {
     createdAt: any;
 }
 
-// --- Server Action for Deletion ---
-async function removeTeamMemberAction(memberToRemoveUid: string, memberRole: string): Promise<{ success: boolean; error?: string }> {
-  'use server';
-  try {
-    if (memberRole === 'manager') {
-      // For managers, just delete the user document.
-      // The auth user will be handled separately if needed.
-      await deleteDoc(doc(db, "users", memberToRemoveUid));
-    } else {
-      // For regular team members, deactivate and disassociate.
-      await updateDoc(doc(db, "users", memberToRemoveUid), {
-        isActive: false,
-        organizationId: null,
-      });
-    }
-    return { success: true };
-  } catch (error: any) {
-    console.error("Error in removeTeamMemberAction:", error);
-    return { success: false, error: error.message || "No se pudo eliminar al miembro del equipo." };
-  }
-}
-
-
 export default function TeamPage() {
   const { user, createManagedUser } = useAuth();
   const { toast } = useToast();
@@ -139,6 +116,7 @@ export default function TeamPage() {
 
     setIsLoading(true);
     try {
+      // Single query for all users in the organization
       const usersQuery = query(collection(db, 'users'), where('organizationId', '==', user.organizationId));
       const invitationsQuery = query(
           collection(db, 'invitations'), 
@@ -166,8 +144,9 @@ export default function TeamPage() {
           });
       });
 
+      // Filter the single list into two separate lists for the UI
       const fetchedMembers = allUsers.filter(u => u.role !== 'manager');
-      const fetchedManaged = allUsers.filter(u => u.role === 'manager' && u.managedBy === user.uid);
+      const fetchedManaged = allUsers.filter(u => u.role === 'manager');
 
       fetchedMembers.sort((a, b) => {
           if (a.role === 'owner') return -1;
@@ -294,18 +273,52 @@ export default function TeamPage() {
       toast({ variant: 'destructive', title: 'Error', description: 'Acción no permitida.' });
       return;
     }
+    
     setIsProcessing({ [memberToRemove.uid]: true });
   
     try {
-        const result = await removeTeamMemberAction(memberToRemove.uid, memberToRemove.role);
-
-        if (!result.success) {
-            throw new Error(result.error);
+      // Differentiate between a managed instance (manager) and a regular team member
+      if (memberToRemove.role === 'manager') {
+        const idToken = await auth.currentUser?.getIdToken();
+        if (!idToken) {
+          throw new Error("No se pudo obtener el token de autenticación.");
         }
+        
+        const response = await fetch('/api/delete-managed-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({ managerUid: memberToRemove.uid }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          // FOR DEBUGGING: Display the full error from the API
+          console.error('API Error:', errorData);
+          toast({
+            variant: 'destructive',
+            title: 'Error de API',
+            description: `Error: ${errorData.error}. Detalles: ${JSON.stringify(errorData.details || {})}`,
+            duration: 10000,
+          });
+          // throw new Error(errorData.error || 'No se pudo eliminar la instancia.');
+          return; // Stop execution on error
+        }
+
+      } else {
+        // Original flow for regular team members (deactivation)
+        await updateDoc(doc(db, "users", memberToRemove.uid), {
+            isActive: false,
+            organizationId: null,
+        });
+      }
 
       toast({ title: "Miembro Eliminado", description: `${memberToRemove.fullName} ha sido eliminado.`});
       setIsRemoveDialogOpen(false);
       await fetchData();
+
     } catch (error: any) {
       console.error("Error removing member:", error);
       toast({ variant: 'destructive', title: 'Error al eliminar', description: error.message });

@@ -34,22 +34,23 @@ export async function POST(req: Request) {
     ]);
 
     if (!ownerDocSnap.exists() || ownerDocSnap.data()?.role !== 'owner') {
-      return NextResponse.json({ error: 'Permiso denegado: El solicitante no es un propietario.' }, { status: 403 });
+      return NextResponse.json({ error: 'Permiso denigado: El solicitante no es un propietario.' }, { status: 403 });
     }
 
-    // --- Start of Robust Deletion Logic ---
     if (managerDocSnap.exists()) {
         const managerData = managerDocSnap.data();
         if (managerData?.managedBy !== ownerUid) {
             return NextResponse.json({ error: 'Permiso denegado: El solicitante no es el propietario de esta instancia.' }, { status: 403 });
         }
         
-        // Delete Firestore document first
+        // As requested, only delete from Firestore for now.
         await managerDocRef.delete();
         console.log(`Documento del usuario ${managerUid} eliminado de Firestore.`);
+    } else {
+        console.log(`El documento del usuario ${managerUid} no fue encontrado en Firestore, puede que ya haya sido eliminado.`);
     }
 
-    // As requested, we comment out the auth user deletion for now to isolate the issue.
+    // --- Firebase Auth user deletion is temporarily disabled as per request ---
     // try {
     //     await adminAuth.deleteUser(managerUid);
     //     console.log(`Usuario ${managerUid} eliminado de Firebase Authentication.`);
@@ -57,12 +58,10 @@ export async function POST(req: Request) {
     //     if (authError.code === 'auth/user-not-found') {
     //         console.log(`El usuario ${managerUid} no se encontró en Authentication, probablemente ya fue eliminado.`);
     //     } else {
-    //         // Re-throw other auth errors
-    //         throw authError;
+    //         throw authError; // Re-throw other auth errors to be caught below
     //     }
     // }
-    // --- End of Robust Deletion Logic ---
-
+    
     return NextResponse.json({ success: true, message: 'Instancia eliminada de la base de datos correctamente.' });
 
   } catch (error: any) {
