@@ -8,6 +8,7 @@ import { initializeAdminApp } from '@/lib/firebase-admin';
 
 export async function POST(req: Request) {
   try {
+    // Initialize Admin SDK within the function scope
     const adminApp = initializeAdminApp();
     const adminAuth = getAuth(adminApp);
     const adminDb = getFirestore(adminApp);
@@ -43,6 +44,7 @@ export async function POST(req: Request) {
         console.warn(`Manager document ${managerUid} not found in Firestore. Will attempt to delete from Auth if exists.`);
     }
     
+    // First, try to delete from Auth. This is the most critical part.
     try {
         await adminAuth.deleteUser(managerUid);
         console.log(`Successfully deleted user from Auth: ${managerUid}`);
@@ -50,10 +52,12 @@ export async function POST(req: Request) {
         if (error.code === 'auth/user-not-found') {
             console.warn(`User ${managerUid} not found in Firebase Auth. This is OK if the Firestore doc was also missing.`);
         } else {
+            // Re-throw other auth errors
             throw error;
         }
     }
     
+    // Then, delete from Firestore if it exists.
     if (managerDocSnap.exists()) {
         await managerDocRef.delete();
         console.log(`Successfully deleted user document from Firestore: ${managerUid}`);
