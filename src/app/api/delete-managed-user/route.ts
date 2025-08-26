@@ -38,26 +38,11 @@ export async function POST(req: Request) {
     const managerDocRef = adminDb.collection('users').doc(managerUid);
     const managerDocSnap = await managerDocRef.get();
 
-    if (!managerDocSnap.exists()) {
-      // If the document doesn't exist, maybe it was already deleted.
-      // We can try to delete the auth user anyway to be sure.
-      try {
-        await adminAuth.deleteUser(managerUid);
-        console.log(`Successfully deleted orphaned auth user: ${managerUid}`);
-        return NextResponse.json({ success: true, message: 'La instancia (huérfana) ha sido eliminada.' });
-      } catch(authError: any) {
-         if (authError.code === 'auth/user-not-found') {
-            return NextResponse.json({ error: 'El usuario a eliminar no fue encontrado.' }, { status: 404 });
-         }
-         // Re-throw other auth errors to be caught by the main catch block
-         throw authError;
-      }
-    }
-
-    const managerData = managerDocSnap.data();
-    // CORRECTED LOGIC: Check if the manager's managedBy field matches the UID of the person making the request.
-    if (managerData?.managedBy !== ownerUid) {
-      return NextResponse.json({ error: 'Permiso denegado: No tienes permiso para eliminar este usuario.' }, { status: 403 });
+    if (managerDocSnap.exists()) {
+        const managerData = managerDocSnap.data();
+        if (managerData?.managedBy !== ownerUid) {
+          return NextResponse.json({ error: 'Permiso denegado: No tienes permiso para eliminar este usuario.' }, { status: 403 });
+        }
     }
     
     // 5. Delete the user from Firebase Authentication
@@ -66,15 +51,17 @@ export async function POST(req: Request) {
         console.log(`Successfully deleted user from Auth: ${managerUid}`);
     } catch (error: any) {
         if (error.code === 'auth/user-not-found') {
-            console.warn(`User ${managerUid} not found in Firebase Auth. Proceeding to delete from Firestore.`);
+            console.warn(`User ${managerUid} not found in Firebase Auth. Proceeding to delete from Firestore if it exists.`);
         } else {
-            throw error; // Re-throw other auth errors
+            throw error; // Re-throw other auth errors to be caught by the main catch block
         }
     }
 
-    // 6. Delete the user's document from Firestore
-    await managerDocRef.delete();
-    console.log(`Successfully deleted user document from Firestore: ${managerUid}`);
+    // 6. Delete the user's document from Firestore if it exists
+    if (managerDocSnap.exists()) {
+        await managerDocRef.delete();
+        console.log(`Successfully deleted user document from Firestore: ${managerUid}`);
+    }
     
     return NextResponse.json({ success: true, message: 'La instancia ha sido eliminada permanentemente.' });
 

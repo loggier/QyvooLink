@@ -275,46 +275,47 @@ export default function TeamPage() {
   const confirmRemoveMember = async () => {
     if (!memberToRemove || !user) return;
     setIsProcessing({ [memberToRemove.uid]: true });
-
+  
     try {
-        if (memberToRemove.role === 'manager') {
-            // New flow for managers: Call the secure API endpoint
-            const currentUser = auth.currentUser;
-            if (!currentUser || currentUser.uid !== user.uid) {
-                throw new Error("Acción no autorizada. Solo el propietario puede eliminar instancias.");
-            }
-            const idToken = await currentUser.getIdToken();
-            const response = await fetch('/api/delete-managed-user', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${idToken}`,
-                },
-                body: JSON.stringify({ managerUid: memberToRemove.uid }),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'No se pudo eliminar la instancia.');
-            }
-        } else {
-            // Original flow for regular team members
-            const userDocRef = doc(db, 'users', memberToRemove.uid);
-            await updateDoc(userDocRef, {
-                isActive: false,
-                organizationId: null,
-                role: null,
-            });
+      if (memberToRemove.role === 'manager') {
+        // New flow for managers: Call the secure API endpoint
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+            throw new Error("Acción no autorizada. Debes estar autenticado.");
         }
         
-        toast({ title: "Miembro Eliminado", description: `${memberToRemove.fullName} ha sido eliminado.`});
-        setIsRemoveDialogOpen(false);
-        await fetchData();
+        const idToken = await currentUser.getIdToken();
+        const response = await fetch('/api/delete-managed-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({ managerUid: memberToRemove.uid }),
+        });
+  
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'No se pudo eliminar la instancia.');
+        }
+      } else {
+        // Original flow for regular team members
+        const userDocRef = doc(db, 'users', memberToRemove.uid);
+        await updateDoc(userDocRef, {
+          isActive: false,
+          organizationId: null,
+          role: null,
+        });
+      }
+      
+      toast({ title: "Miembro Eliminado", description: `${memberToRemove.fullName} ha sido eliminado.`});
+      setIsRemoveDialogOpen(false);
+      await fetchData();
     } catch (error: any) {
-        console.error("Error removing member:", error);
-        toast({ variant: 'destructive', title: 'Error al eliminar', description: error.message });
+      console.error("Error removing member:", error);
+      toast({ variant: 'destructive', title: 'Error al eliminar', description: error.message });
     } finally {
-        setIsProcessing({});
+      setIsProcessing({});
     }
   };
 
@@ -328,7 +329,6 @@ export default function TeamPage() {
     setIsProcessing({ invite: true });
     try {
       const usersRef = collection(db, 'users');
-      // Fix: Only check for existing users within the current organization.
       const userQuery = query(usersRef, where('email', '==', inviteEmail.trim()));
       const userSnapshot = await getDocs(userQuery);
       
