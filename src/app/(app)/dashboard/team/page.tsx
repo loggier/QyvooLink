@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, type FormEvent } from 'react';
 import { useAuth } from '@/context/auth-context';
-import { db, auth } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, doc, updateDoc, addDoc, serverTimestamp, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,6 +36,7 @@ import { sendInvitationEmail } from '@/lib/email';
 import { Switch } from '@/components/ui/switch';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { removeTeamMemberAction } from './actions';
 
 export interface TeamMember {
   uid: string;
@@ -269,7 +270,7 @@ export default function TeamPage() {
   }
 
   const confirmRemoveMember = async () => {
-    if (!memberToRemove || !user || user.role !== 'owner') {
+    if (!memberToRemove || !user) {
       toast({ variant: 'destructive', title: 'Error', description: 'Acción no permitida.' });
       return;
     }
@@ -277,45 +278,14 @@ export default function TeamPage() {
     setIsProcessing({ [memberToRemove.uid]: true });
   
     try {
-      // Differentiate between a managed instance (manager) and a regular team member
-      if (memberToRemove.role === 'manager') {
-        const idToken = await auth.currentUser?.getIdToken();
-        if (!idToken) {
-          throw new Error("No se pudo obtener el token de autenticación.");
-        }
-        
-        const response = await fetch('/api/delete-managed-user', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${idToken}`,
-          },
-          body: JSON.stringify({ managerUid: memberToRemove.uid }),
-        });
+      const result = await removeTeamMemberAction(memberToRemove.uid);
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          // FOR DEBUGGING: Display the full error from the API
-          console.error('API Error:', errorData);
-          toast({
-            variant: 'destructive',
-            title: 'Error de API',
-            description: `Error: ${errorData.error}. Detalles: ${JSON.stringify(errorData.details || {})}`,
-            duration: 10000,
-          });
-          // throw new Error(errorData.error || 'No se pudo eliminar la instancia.');
-          return; // Stop execution on error
-        }
-
+      if (result.success) {
+         toast({ title: "Miembro Eliminado", description: `${memberToRemove.fullName} ha sido eliminado.`});
       } else {
-        // Original flow for regular team members (deactivation)
-        await updateDoc(doc(db, "users", memberToRemove.uid), {
-            isActive: false,
-            organizationId: null,
-        });
+         toast({ variant: 'destructive', title: 'Error al eliminar', description: result.error });
       }
-
-      toast({ title: "Miembro Eliminado", description: `${memberToRemove.fullName} ha sido eliminado.`});
+      
       setIsRemoveDialogOpen(false);
       await fetchData();
 
