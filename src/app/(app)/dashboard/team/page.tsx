@@ -276,15 +276,14 @@ export default function TeamPage() {
   const confirmRemoveMember = async () => {
     if (!memberToRemove || !user) return;
     setIsProcessing({ [memberToRemove.uid]: true });
-  
+
     try {
       if (memberToRemove.role === 'manager') {
-        // New flow for managers: Call the secure API endpoint
         const currentUser = auth.currentUser;
         if (!currentUser) {
-            throw new Error("Acción no autorizada. Debes estar autenticado.");
+          throw new Error("Acción no autorizada. Debes estar autenticado.");
         }
-        
+
         const idToken = await currentUser.getIdToken();
         const response = await fetch('/api/delete-managed-user', {
           method: 'POST',
@@ -294,7 +293,7 @@ export default function TeamPage() {
           },
           body: JSON.stringify({ managerUid: memberToRemove.uid }),
         });
-  
+
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.error || 'No se pudo eliminar la instancia.');

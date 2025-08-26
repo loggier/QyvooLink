@@ -117,8 +117,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         }
 
-        // --- CORRECTED LOGIC for ownerId ---
-        let ownerId = dbData.managedBy || (dbData.role === 'owner' ? firebaseUser.uid : dbData.ownerId);
+        let ownerId = dbData.role === 'owner' ? firebaseUser.uid : dbData.ownerId;
+        if (dbData.managedBy) {
+          ownerId = dbData.managedBy;
+        }
         
         // Final check if ownerId is still missing for a team member
         if (!ownerId && dbData.organizationId && dbData.role !== 'owner' && !dbData.managedBy) {
@@ -130,7 +132,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
 
         const dataFetchUserId = dbData.role === 'manager' ? ownerId : firebaseUser.uid;
-
+        
         const instanceDocRef = doc(db, 'instances', dataFetchUserId);
         const subscriptionsRef = collection(db, 'users', dataFetchUserId, 'subscriptions');
         const q = query(subscriptionsRef, where('status', 'in', ['trialing', 'active']));
@@ -165,7 +167,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           workSchedule: dbData.workSchedule,
           role: dbData.role || 'agent',
           organizationId: dbData.organizationId,
-          ownerId: ownerId, // Correctly assigned ownerId
+          ownerId: ownerId, 
           managedBy: dbData.managedBy,
           createdAt: dbData.createdAt,
           lastLogin: dbData.lastLogin,
@@ -340,7 +342,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
   
       try {
-          // Check if user with this email already exists in the users collection
           const usersRef = collection(db, 'users');
           const q = query(usersRef, where('email', '==', email));
           const querySnapshot = await getDocs(q);
@@ -370,7 +371,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               company: profile.company,
               role: 'manager',
               organizationId: orgRef.id,
-              managedBy: user.uid,
+              managedBy: user.uid, // <-- CRITICAL: Save the owner's UID
               createdAt: serverTimestamp(),
               lastLogin: null,
               isActive: true,

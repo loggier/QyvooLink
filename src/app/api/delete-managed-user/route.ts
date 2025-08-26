@@ -8,12 +8,10 @@ import { initializeAdminApp } from '@/lib/firebase-admin';
 
 export async function POST(req: Request) {
   try {
-    // 1. Initialize Firebase Admin SDK inside the request handler
     const adminApp = initializeAdminApp();
     const adminAuth = getAuth(adminApp);
     const adminDb = getFirestore(adminApp);
 
-    // 2. Authenticate the request from the owner
     const idToken = req.headers.get('Authorization')?.split('Bearer ')[1];
     if (!idToken) {
       return NextResponse.json({ error: 'No autorizado: Token no proporcionado.' }, { status: 401 });
@@ -28,13 +26,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No autorizado: Token inválido.' }, { status: 401 });
     }
 
-    // 3. Get the manager's UID from the request body
     const { managerUid } = await req.json();
     if (!managerUid) {
       return NextResponse.json({ error: 'Falta el UID del manager.' }, { status: 400 });
     }
 
-    // 4. Verify that the user being deleted is actually managed by the owner
     const managerDocRef = adminDb.collection('users').doc(managerUid);
     const managerDocSnap = await managerDocRef.get();
 
@@ -44,16 +40,9 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: 'Permiso denegado: No tienes permiso para eliminar este usuario.' }, { status: 403 });
         }
     } else {
-        console.warn(`Manager document ${managerUid} not found in Firestore. Proceeding to delete from Auth if exists.`);
+        console.warn(`Manager document ${managerUid} not found in Firestore. Will attempt to delete from Auth if exists.`);
     }
     
-    // 5. Delete the user's document from Firestore if it exists
-    if (managerDocSnap.exists()) {
-        await managerDocRef.delete();
-        console.log(`Successfully deleted user document from Firestore: ${managerUid}`);
-    }
-
-    // 6. Delete the user from Firebase Authentication
     try {
         await adminAuth.deleteUser(managerUid);
         console.log(`Successfully deleted user from Auth: ${managerUid}`);
@@ -61,8 +50,13 @@ export async function POST(req: Request) {
         if (error.code === 'auth/user-not-found') {
             console.warn(`User ${managerUid} not found in Firebase Auth. This is OK if the Firestore doc was also missing.`);
         } else {
-            throw error; // Re-throw other auth errors to be caught by the main catch block
+            throw error;
         }
+    }
+    
+    if (managerDocSnap.exists()) {
+        await managerDocRef.delete();
+        console.log(`Successfully deleted user document from Firestore: ${managerUid}`);
     }
     
     return NextResponse.json({ success: true, message: 'La instancia ha sido eliminada permanentemente.' });
