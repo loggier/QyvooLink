@@ -29,7 +29,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { AppFooter } from '@/components/layout/footer';
 import OnboardingGuide from '@/components/dashboard/onboarding-guide';
 import {
-  Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare, Bot, Contact2, Zap, Shield, CreditCard, HelpCircle, PanelLeft, Users2, Briefcase, Folder, Calendar,
+  Home, Settings, BarChart2, LogOut, UserCircle, MessageSquare, Bot, Contact2, Zap, Shield, CreditCard, HelpCircle, PanelLeft, Users2, Briefcase, Folder, Calendar, LogIn, X,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
@@ -96,6 +96,33 @@ const getInitials = (name?: string) => {
 
 const isGroup = (item: NavItem | NavGroup): item is NavGroup => 'title' in item;
 
+function ImpersonationBar() {
+  const { impersonation, stopImpersonation } = useAuth();
+  if (!impersonation.active) {
+    return null;
+  }
+  return (
+    <div className="bg-yellow-400 text-yellow-900 text-center text-sm py-2 px-4 flex items-center justify-center gap-4">
+      <div className="flex items-center gap-2">
+        <LogIn className="h-4 w-4" />
+        <span>
+          Estás viendo como <strong>{impersonation.impersonatedUserEmail}</strong>.
+        </span>
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-auto px-2 py-1 text-yellow-900 hover:bg-yellow-500 hover:text-yellow-900"
+        onClick={stopImpersonation}
+      >
+        <X className="h-4 w-4 mr-1"/>
+        Volver al Admin
+      </Button>
+    </div>
+  );
+}
+
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { user, logoutUser } = useAuth();
@@ -156,6 +183,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <>
       <OnboardingGuide isOpen={isGuideOpen} setIsOpen={setIsGuideOpen} startFromBeginning={true} />
       <div className="flex flex-col min-h-screen bg-background">
+        <ImpersonationBar />
         <header className="sticky top-0 z-50 w-full border-b bg-card/95 backdrop-blur-sm">
           <div className="container mx-auto flex h-16 items-center justify-between px-4">
             <div className="flex items-center gap-6">

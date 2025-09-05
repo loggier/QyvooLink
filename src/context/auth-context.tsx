@@ -65,34 +65,80 @@ interface UserProfile {
   onboardingCompleted?: boolean; 
 }
 
+interface ImpersonationState {
+    active: boolean;
+    impersonatedUserUid?: string;
+    impersonatedUserEmail?: string;
+    originalAdminUid?: string;
+}
+
 interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
+  impersonation: ImpersonationState;
   registerUser: (data: RegisterFormData, invitationId?: string | null) => Promise<UserCredential | void>;
   createManagedUser: (email: string, password: string, profile: { fullName: string; company: string; }) => Promise<void>;
   loginUser: (data: LoginFormData) => Promise<UserCredential | void>;
   logoutUser: () => Promise<void>;
   updateUserPassword: (currentPassword: string, newPassword: string) => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
+  impersonateUser: (targetUid: string, adminUid: string) => void;
+  stopImpersonation: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const IMPERSONATION_KEY = 'impersonation-session';
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [impersonation, setImpersonation] = useState<ImpersonationState>({ active: false });
   const router = useRouter();
+  
+  const stopImpersonation = () => {
+    sessionStorage.removeItem(IMPERSONATION_KEY);
+    setImpersonation({ active: false });
+    // This will trigger the main useEffect to re-fetch the original admin user data
+    window.location.href = '/admin/dashboard';
+  };
+  
+  const impersonateUser = (targetUid: string, adminUid: string) => {
+      const session = { impersonatedUserUid: targetUid, originalAdminUid: adminUid };
+      sessionStorage.setItem(IMPERSONATION_KEY, JSON.stringify(session));
+      setImpersonation({ active: true, ...session });
+      // Redirect to the user's dashboard, which will then use the impersonated UID
+      window.location.href = '/dashboard';
+  };
 
   useEffect(() => {
+    // Check for impersonation session on initial load
+    const savedImpersonation = sessionStorage.getItem(IMPERSONATION_KEY);
+    if (savedImpersonation) {
+        setImpersonation({ active: true, ...JSON.parse(savedImpersonation) });
+    }
+    
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      const impersonationSession = JSON.parse(sessionStorage.getItem(IMPERSONATION_KEY) || '{}');
+      const isImpersonating = impersonationSession.active && firebaseUser?.uid === impersonationSession.originalAdminUid;
+      
+      const targetUid = isImpersonating ? impersonationSession.impersonatedUserUid : firebaseUser?.uid;
+
       if (firebaseUser) {
-        const userDocRef = doc(db, 'users', firebaseUser.uid);
+        // If not impersonating, ensure firebaseUser is the one we fetch data for
+        if (!targetUid) {
+          setUser(null);
+          setLoading(false);
+          return;
+        }
+
+        const userDocRef = doc(db, 'users', targetUid);
         const userDocSnap = await getDoc(userDocRef);
         
         let dbData: any = {};
         if (userDocSnap.exists()) {
           dbData = userDocSnap.data();
-          if (dbData.isActive === false) {
+          if (dbData.isActive === false && !isImpersonating) {
              await firebaseSignOut(auth);
              setUser(null);
              setLoading(false);
@@ -101,10 +147,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
 
           if (!dbData.organizationId) {
-            console.log(`Migrating user ${firebaseUser.uid} to an organization...`);
+            console.log(`Migrating user ${targetUid} to an organization...`);
             const orgRef = await addDoc(collection(db, 'organizations'), {
               name: dbData.company || `${dbData.fullName}'s Team`,
-              ownerId: firebaseUser.uid,
+              ownerId: targetUid,
               createdAt: serverTimestamp(),
             });
             await updateDoc(userDocRef, { 
@@ -113,16 +159,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             });
             dbData.organizationId = orgRef.id;
             dbData.role = 'owner';
-            console.log(`User ${firebaseUser.uid} migrated to new organization ${orgRef.id}`);
+            console.log(`User ${targetUid} migrated to new organization ${orgRef.id}`);
           }
+        } else if (!isImpersonating) {
+            setUser(null);
+            setLoading(false);
+            return;
         }
 
-        let ownerId = dbData.role === 'owner' ? firebaseUser.uid : dbData.ownerId;
+        let ownerId = dbData.role === 'owner' ? targetUid : dbData.ownerId;
         if (dbData.managedBy) {
           ownerId = dbData.managedBy;
         }
         
-        // Final check if ownerId is still missing for a team member
         if (!ownerId && dbData.organizationId && dbData.role !== 'owner' && !dbData.managedBy) {
           const orgDocRef = doc(db, 'organizations', dbData.organizationId);
           const orgDocSnap = await getDoc(orgDocRef);
@@ -131,7 +180,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         }
         
-        const dataFetchUserId = dbData.managedBy || (dbData.role === 'owner' ? firebaseUser.uid : ownerId);
+        const dataFetchUserId = dbData.managedBy || (dbData.role === 'owner' ? targetUid : ownerId);
         
         const instanceDocRef = doc(db, 'instances', dataFetchUserId);
         const subscriptionsRef = collection(db, 'users', dataFetchUserId, 'subscriptions');
@@ -152,9 +201,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             subscriptionStatus = subscriptionSnap.docs[0].data().status as UserProfile['subscriptionStatus'];
         }
 
-        setUser({ 
-          uid: firebaseUser.uid, 
-          email: firebaseUser.email,
+        const userProfile = { 
+          uid: targetUid, 
+          email: dbData.email || (isImpersonating ? 'impersonated@qyvoo.com' : firebaseUser.email),
           fullName: dbData.fullName,
           company: dbData.company,
           phone: dbData.phone,
@@ -178,16 +227,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           isChatbotGloballyEnabled: instanceData.chatbotEnabled ?? true,
           demo: instanceData.demo ?? false,
           onboardingCompleted: dbData.onboardingCompleted ?? false,
-         } as UserProfile);
+         } as UserProfile;
+
+         setUser(userProfile);
+         if (isImpersonating) {
+             setImpersonation(prev => ({ ...prev, impersonatedUserEmail: userProfile.email || 'N/A'}));
+         }
 
       } else {
+        sessionStorage.removeItem(IMPERSONATION_KEY);
+        setImpersonation({ active: false });
         setUser(null);
       }
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, [router, impersonation.active]); // Rerun when impersonation state changes
 
   const registerUser = async (data: RegisterFormData, invitationId?: string | null) => {
     setLoading(true);
@@ -490,7 +546,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 
   return (
-    <AuthContext.Provider value={{ user, loading, registerUser, createManagedUser, loginUser, logoutUser, updateUserPassword, sendPasswordReset }}>
+    <AuthContext.Provider value={{ user, loading, registerUser, createManagedUser, loginUser, logoutUser, updateUserPassword, sendPasswordReset, impersonation, impersonateUser, stopImpersonation }}>
       {children}
     </AuthContext.Provider>
   );

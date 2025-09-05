@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Shield, Wifi, Bot, Users, MessagesSquare, CalendarDays, TrendingUp, ShieldCheck, Clock, XCircle, Star, AlertCircle, Save } from 'lucide-react';
+import { Loader2, Shield, Wifi, Bot, Users, MessagesSquare, CalendarDays, TrendingUp, ShieldCheck, Clock, XCircle, Star, AlertCircle, Save, LogIn } from 'lucide-react';
 import { differenceInDays, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -50,6 +50,9 @@ interface AdminViewUser {
   totalMessages: number | 'N/A';
   botMessages: number | 'N/A';
   subscription?: SubscriptionDetails | null;
+  role?: 'owner' | 'admin' | 'agent' | 'manager';
+  organizationId?: string;
+  ownerId?: string;
 }
 
 interface DashboardStats {
@@ -62,7 +65,7 @@ interface DashboardStats {
 }
 
 export default function AdminDashboardPage() {
-  const { user } = useAuth();
+  const { user, impersonateUser } = useAuth();
   const { toast } = useToast();
   const [users, setUsers] = useState<AdminViewUser[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -161,6 +164,9 @@ export default function AdminDashboardPage() {
           totalMessages: 'N/A',
           botMessages: 'N/A',
           subscription: subscriptionData,
+          role: userData.role,
+          organizationId: userData.organizationId,
+          ownerId: userData.ownerId,
         };
       });
       
@@ -323,6 +329,11 @@ export default function AdminDashboardPage() {
         return <Badge variant="outline">No Configurada</Badge>;
     }
   };
+  
+  const handleLoginAs = (userToImpersonate: AdminViewUser) => {
+      if (!user) return;
+      impersonateUser(userToImpersonate.uid, user.uid);
+  };
 
   if (isLoading) {
     return (
@@ -467,6 +478,14 @@ export default function AdminDashboardPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right space-y-2">
+                        <div className="flex items-center justify-end gap-2">
+                           <Button variant="outline" size="sm" onClick={() => handleLoginAs(u)} title="Iniciar sesión como este usuario">
+                                <LogIn className="h-4 w-4" />
+                           </Button>
+                           <Button variant="outline" size="icon" onClick={() => handleOpenDateDialog(u)} title="Cambiar fecha de registro">
+                                <CalendarDays className="h-4 w-4" />
+                           </Button>
+                        </div>
                        <div className="flex items-center justify-end space-x-2">
                          <span className="text-xs text-muted-foreground">Activo</span>
                          <Switch
@@ -498,9 +517,6 @@ export default function AdminDashboardPage() {
                                 </Button>
                             </div>
                         )}
-                      <Button variant="outline" size="icon" onClick={() => handleOpenDateDialog(u)} title="Cambiar fecha de registro">
-                        <CalendarDays className="h-4 w-4" />
-                      </Button>
                     </TableCell>
                   </TableRow>
                 ))
